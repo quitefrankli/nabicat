@@ -1,22 +1,47 @@
 import tkinter
 import yaml
-from pathlib import Path
+import datetime
 
+from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass
 from tkinter import ttk, Frame, Label, Button, Entry, Scrollbar, Canvas, Checkbutton
 from typing import *
 
 
 class Goal:
-    def __init__(self, name: str, state: bool):
+    @dataclass
+    class Metadata:
+        creation_date: datetime
+        completion_date: datetime
+
+        def to_dict(self) -> dict:
+            return {
+                'creation_date': int(self.creation_date.timestamp()) if self.creation_date else 0,
+                'completion_date': int(self.completion_date.timestamp()) if self.completion_date else 0
+            }
+        
+    def __init__(self, name: str, state: bool, metadata: Metadata = None):
         self.name = name
         self._completed = tkinter.BooleanVar(value=state)
+        if metadata:
+            self.metadata = metadata
+        else:
+            self.metadata = self.Metadata(datetime.now(), None)
 
     def get_tkinter_var(self) -> tkinter.BooleanVar:
         return self._completed
 
     def completed(self) -> bool:
         return self._completed.get()
-
+    
+    @staticmethod
+    def construct_metadata(data: dict) -> Metadata:
+        def foo(key: str):
+            return datetime.fromtimestamp(data[key]) if data[key] else None
+        
+        return Goal.Metadata(foo('creation_date'), foo('completion_date'))
+    
 class App(Frame):
     WIDTH = 500
     HEIGHT = 500
@@ -81,14 +106,21 @@ class App(Frame):
                                                          variable=goal.get_tkinter_var(),
                                                          onvalue=True,
                                                          offvalue=False,
-                                                         command=lambda: self.save_goals()))
+                                                         command=lambda idx=i: self.on_goal_state_change(idx)))
             self.canvas.create_window(self.GOALS_CANVAS_WIDTH-DELETE_BUTTON_OFFSET,
                                       i*self.GOAL_ENTRY_HEIGHT,
                                       anchor=tkinter.NW,
                                       window=Button(self.canvas,
                                                     text='delete',
                                                     command=lambda idx=i: self.delete_goal(idx)))
-        
+
+    def on_goal_state_change(self, idx: int) -> None:
+        if self.goals[idx]._completed:
+            self.goals[idx].metadata.completion_date = datetime.now()
+        else:
+            self.goals[idx].metadata.completion_date = None
+        self.save_goals()
+
     def delete_goal(self, idx: int) -> None:
         self.goals.pop(idx)
         self.save_goals()
@@ -98,14 +130,18 @@ class App(Frame):
         try:
             with open(self.SAVE_FILE, 'r') as file:
                 goals = yaml.safe_load(file)
-                return [Goal(goal['name'], goal['state']) for goal in goals]
+                return [
+                    Goal(goal['name'], 
+                         goal['state'],
+                         Goal.construct_metadata(goal['metadata'])) for goal in goals]
         except FileNotFoundError:
             return []
     
     def save_goals(self) -> None:
         goals = [{
             'name': goal.name,
-            'state': goal.completed()
+            'state': goal.completed(),
+            'metadata': goal.metadata.to_dict()
         } for goal in self.goals]
         with open(self.SAVE_FILE, 'w') as file:
             yaml.dump(goals, file)
