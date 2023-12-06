@@ -12,7 +12,7 @@ SAVE_DIRECTORY = Path.home() if os.name == 'nt' else '/tmp'
 
 class Backend:
     SAVE_FILE = f"{SAVE_DIRECTORY}/.todoist2_goals.yaml"
-    BACKUP_PREFIX = f"{SAVE_DIRECTORY}/.todoist2_backup"
+    BACKUP_DIR = f"{SAVE_DIRECTORY}/.todoist2_backup"
 
     def __init__(self) -> None:
         self.goals: List[Goal] = self.load_goals()
@@ -26,13 +26,8 @@ class Backend:
         self.save_goals()
 
     def _goals_to_obj(self):
-        goals = [{
-            'name': goal.name,
-            'state': goal.state,
-            'metadata': goal.metadata.to_dict()
-        } for goal in self.goals]
         data = {
-            'goals': goals,
+            'goals': [goal.to_dict() for goal in self.goals],
             'edited': int(self.get_datetime_str())
         }
         return data
@@ -46,16 +41,12 @@ class Backend:
         try:
             with open(self.SAVE_FILE, 'r') as file:
                 data = yaml.safe_load(file)
-                goals = data['goals']
-                return [
-                    Goal(goal['name'], 
-                         goal['state'],
-                         Goal.construct_metadata(goal['metadata'])) for goal in goals]
+                return [Goal.from_dict(goal) for goal in data['goals']]
         except FileNotFoundError:
             return []
         
     def backup_goals(self) -> None:
-        self.save_goals(f"{self.BACKUP_PREFIX}/{self.get_datetime_str()}.yaml")
+        self.save_goals(f"{self.BACKUP_DIR}/{self.get_datetime_str()}.yaml")
 
     def get_datetime_str(self) -> str:
         return datetime.now().strftime("%Y%m%d%H%M%S")

@@ -9,31 +9,43 @@ from server import Backend
 backend = Backend()
 
 class Client:
-	URL = 'https://en8k6sia65.execute-api.ap-southeast-2.amazonaws.com/default/helloworld'
+	URL = 'https://bavdvowkx7.execute-api.ap-southeast-2.amazonaws.com/prod/todoist2'
+	HEADERS = {'x-api-key': 'jM6bHWXdes1Ih1XecNkD519IJr60dcAK2hL7k30O'}
 
 	def __init__(self) -> None:
 		pass
 
 	def fetch_goals(self) -> List[Goal]:
-		payload = {
-			'request': 'fetch_goals'
-		}
-		response = requests.get(self.URL, json=payload, verify=True)
-		goals_str_obj = json.loads(response.text)['goals']
-		self.goals = [
-			Goal(goal['name'], 
-				 goal['state'],
-				 Goal.construct_metadata(goal['metadata'])) for goal in goals_str_obj]
+		response = requests.get(self.URL, json={'request': 'fetch_goals'}, headers=self.HEADERS, verify=True)
+		if response.status_code != 200:
+			raise RuntimeError(f"Error in fetch_goals: {response.text}")
+		self.goals = [Goal.from_dict(goal) for goal in json.loads(response.text)['goals']]
 		return self.goals
 	
 	def add_goal(self, goal: Goal) -> None:
-		backend.add_goal(goal)
+		self.goals.append(goal)
+		request = {
+			'request': 'add_goal',
+			'goal': goal.to_dict()
+		}
+		response = requests.get(self.URL, json=request, headers=self.HEADERS, verify=True)
+		if response.status_code != 200:
+			raise RuntimeError(f"Error in add_goals: {response.text}")
 
 	def delete_goal(self, idx: int) -> None:
-		backend.delete_goal(idx)
-
+		self.goals.pop(idx)
+		request = {'request': 'delete_goal', 'goal_id': idx}
+		response = requests.get(self.URL, json=request, headers=self.HEADERS, verify=True)
+		if response.status_code != 200:
+			raise RuntimeError(f"Error in delete_goal: {response.text}")
+		
 	def toggle_goal_state(self, idx: int) -> None:
-		requests.get(self.URL, json={'request': 'toggle_goal_state', 'goal_id': idx}, verify=True)
-
+		request = {'request': 'toggle_goal_state', 'goal_id': idx}
+		response = requests.get(self.URL, json=request, headers=self.HEADERS, verify=True)
+		if response.status_code != 200:
+			raise RuntimeError(f"Error in toggle_goal_state: {response.text}")
+		
 	def backup_goals(self) -> None:
-		backend.backup_goals()
+		response = requests.get(self.URL, json={'request': 'backup_goals'}, headers=self.HEADERS, verify=True)
+		if response.status_code != 200:
+			raise RuntimeError(f"Error in backup_goals: {response.text}")
