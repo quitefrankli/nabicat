@@ -2,7 +2,9 @@ import requests
 import json
 import boto3
 import os
+import datetime
 
+from datetime import datetime
 from typing import *
 from goal import Goal
 from server import Backend
@@ -71,6 +73,9 @@ class ClientV2:
     def fetch_goals(self) -> List[Goal]:
         return self.backend.get_goals()
     
+    def fetch_goal(self, goal_id: int) -> Goal:
+        return self.backend.get_goal(goal_id)
+    
     def add_goal(self, goal: Goal) -> None:
         self.backend.add_goal(goal)
         self.need_saving = True
@@ -83,6 +88,11 @@ class ClientV2:
         self.backend.toggle_goal_state(idx)
         self.need_saving = True
         
+    def toggle_goal_daily(self, goal_id: int) -> None:
+        goal = self.fetch_goal(goal_id)
+        goal.toggle_daily()
+        self.need_saving = True
+
     def backup_goals(self) -> str:
         backup = self.backend.backup_goals()
         s3_obj_name = f".todoist2_backup/{os.path.basename(backup)}"
@@ -91,5 +101,6 @@ class ClientV2:
 
     def save_goals(self) -> None:
         if self.need_saving:
+            self.backend.save_goals()
             save_file_name = os.path.basename(Backend.SAVE_FILE)
             self.s3_client.upload_file(Backend.SAVE_FILE, self.BUCKET_NAME, save_file_name)

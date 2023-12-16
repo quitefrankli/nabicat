@@ -72,5 +72,8 @@ class Backend:
     def get_goals(self) -> List[Goal]:
         return list(self.goals.values())
     
+    def get_goal(self, goal_id: int) -> Goal:
+        return self.goals[goal_id]
+    
     def get_goals_json(self) -> str:
         return json.dumps(self._goals_to_obj())

@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import *
 
 
 class Goal:
+    NULL_DATE = datetime(year=2000, month=1, day=1)
+
     @dataclass
     class Metadata:
         creation_date: datetime
@@ -24,19 +27,26 @@ class Goal:
                  id: int,
                  name: str, 
                  state: bool, 
-                 metadata: Metadata = None, 
-                 backlogged: bool = False):
+                 backlogged: bool = False,
+                 daily: datetime = NULL_DATE,
+                 metadata: Metadata = None):
         self.id = id
         self.name = name
         self.state = state
-        self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
         self.backlogged = backlogged
+        self.daily = daily
+        self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
     
     @classmethod
     def from_dict(cls, data: dict):
+        def safe_get(key: str, alt: Any) -> Any:
+            return data[key] if key in data else alt
+        daily = datetime.fromtimestamp(data['daily']) if 'daily' in data else cls.NULL_DATE
         return cls(data['id'],
                    data['name'], 
                    data['state'], 
+                   safe_get('backlogged', False),
+                   daily,
                    cls.Metadata.from_dict(data['metadata']))
 
     def to_dict(self) -> dict:
@@ -44,5 +54,11 @@ class Goal:
             'id': self.id,
             'name': self.name,
             'state': self.state,
+            'backlogged': self.backlogged,
+            'daily': int(self.daily.timestamp()),
             'metadata': self.metadata.to_dict()
         }
+    
+    def toggle_daily(self) -> None:
+        now = datetime.now()
+        self.daily = Goal.NULL_DATE if self.daily.date() == now.date() else now
