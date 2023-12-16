@@ -98,7 +98,7 @@ class DailyGoals(Frame):
         top.title("Goal Details")
         goal = self.client.fetch_goal(goal_id)
         Label(top, text=f"Goal Name: {goal.name}").pack()
-        description = ScrolledText(top, wrap=tkinter.WORD, width=20, height=6)
+        description = ScrolledText(top, wrap=tkinter.WORD, width=40, height=6)
         description.pack()
         description.insert(tkinter.INSERT, goal.description)
         description.focus()

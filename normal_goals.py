@@ -122,7 +122,7 @@ class NormalGoals(Frame):
         top.title("Goal Details")
         goal = self.client.fetch_goal(goal_id)
         Label(top, text=f"Goal Name: {goal.name}").pack()
-        description = ScrolledText(top, wrap=tkinter.WORD, width=20, height=6)
+        description = ScrolledText(top, wrap=tkinter.WORD, width=40, height=6)
         description.pack()
         description.insert(tkinter.INSERT, goal.description)
         description.focus()
@@ -132,7 +132,6 @@ class NormalGoals(Frame):
                 self.client.need_saving = True
                 goal.description = new_description
             top.destroy()
-        top.bind('<Return>', lambda _: close_window())
         top.bind('<Escape>', lambda _: top.destroy())
         Button(top, text="Ok", command=close_window).pack()
         is_daily = goal.daily.date() == datetime.now().date()
