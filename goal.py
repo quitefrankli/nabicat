@@ -29,12 +29,14 @@ class Goal:
                  state: bool, 
                  backlogged: bool = False,
                  daily: datetime = NULL_DATE,
+                 description: str = '',
                  metadata: Metadata = None):
         self.id = id
         self.name = name
         self.state = state
         self.backlogged = backlogged
         self.daily = daily
+        self.description = description
         self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
     
     @classmethod
@@ -47,6 +49,7 @@ class Goal:
                    data['state'], 
                    safe_get('backlogged', False),
                    daily,
+                   safe_get('description', ''),
                    cls.Metadata.from_dict(data['metadata']))
 
     def to_dict(self) -> dict:
@@ -56,6 +59,7 @@ class Goal:
             'state': self.state,
             'backlogged': self.backlogged,
             'daily': int(self.daily.timestamp()),
+            'description': self.description,
             'metadata': self.metadata.to_dict()
         }
     
