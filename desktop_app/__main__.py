@@ -1,6 +1,15 @@
+import click
+
 from .desktop_app import DesktopApp
 
 
-app = DesktopApp()
-app.run()
+@click.command()
+@click.option("--debug/--no-debug", default=False)
+def main(debug: bool):
+	click.echo("Running desktop app")
+	app = DesktopApp(debug=debug)
+	app.run()
+
+if __name__ == "__main__":
+	main()
 

@@ -7,7 +7,7 @@ from playsound import playsound
 from desktop_app import graphics
 from desktop_app.goal import Goal
 from desktop_app.client import ClientV2
-from desktop_app.app_windows.normal_goals import NormalGoals
+from desktop_app.app_windows.goals_summary import GoalsSummary
 from desktop_app.app_windows.daily_goals import DailyGoals
 
 
@@ -21,18 +21,19 @@ class DesktopApp(Frame):
     MAX_GOALS = 80
     GOAL_ENTRY_FONT = 'Helvetica 9'
 
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         super().__init__(None)
-        self.client = ClientV2()
+        self.client = ClientV2(debug=debug)
 
-        self.master.title("Todoist2")
+        debug_warning = f"{'(DEBUG MODE CHANGES NOT PUSHED) ' if debug else ''}"
+        self.master.title(f"{debug_warning}Todoist2")
         X = int((self.master.winfo_screenwidth() - self.WIDTH)/2)
         Y = int((self.master.winfo_screenheight() - self.HEIGHT)/2)
         self.master.geometry(f"{self.WIDTH}x{self.HEIGHT}+{X}+{Y}")
-        Label(self, text="Goals", font='Helvetica 18 bold').pack()
+        Label(self, text=f"{debug_warning}Goals", font='Helvetica 18 bold').pack()
 
         self.goals_frame = Frame(self)
-        self.normal_goals = NormalGoals(self.goals_frame, self.client, self.refresh_goals_canvas)
+        self.normal_goals = GoalsSummary(self.goals_frame, self.client, self.refresh_goals_canvas)
         self.normal_goals.pack(side=tkinter.LEFT)
 
         self.daily_goals = DailyGoals(self.goals_frame, self.client, self.refresh_goals_canvas)
@@ -73,7 +74,7 @@ class DesktopApp(Frame):
         new_goal_entry.pack()
         def close_window():
             if goal_name.get():
-                self.client.add_goal(Goal(-1, goal_name.get(), False))
+                self.client.add_goal(Goal(id=-1, name=goal_name.get(), state=False))
                 self.refresh_goals_canvas()
             top.destroy()
         top.bind('<Return>', lambda _: close_window())
@@ -87,10 +88,3 @@ class DesktopApp(Frame):
     def run(self) -> None:
         self.mainloop()
         self.client.save_goals()
-
-def main() -> None:
-    app = DesktopApp()
-    app.run()
-
-if __name__ == '__main__':
-    main()

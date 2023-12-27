@@ -9,7 +9,7 @@ class Goal:
     @dataclass
     class Metadata:
         creation_date: datetime
-        completion_date: datetime
+        completion_date: Optional[datetime]
 
         @classmethod
         def from_dict(cls, data: dict):
@@ -27,18 +27,22 @@ class Goal:
                  id: int,
                  name: str, 
                  state: bool, 
+                 parent: int = -1,
                  backlogged: bool = False,
                  daily: datetime = NULL_DATE,
                  description: str = '',
-                 metadata: Metadata = None):
+                 metadata: Optional[Metadata] = None):
         self.id = id
         self.name = name
         self.state = state
+        self.parent = parent
         self.backlogged = backlogged
         self.daily = daily
         self.description = description
         self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
     
+        self.children: List[int] = []
+
     @classmethod
     def from_dict(cls, data: dict):
         def safe_get(key: str, alt: Any) -> Any:
@@ -47,6 +51,7 @@ class Goal:
         return cls(data['id'],
                    data['name'], 
                    data['state'], 
+                   safe_get('parent', -1),
                    safe_get('backlogged', False),
                    daily,
                    safe_get('description', ''),
@@ -57,6 +62,8 @@ class Goal:
             'id': self.id,
             'name': self.name,
             'state': self.state,
+            'parent': self.parent,
+            # 'children': self.children, note that this is intentionally omitted
             'backlogged': self.backlogged,
             'daily': int(self.daily.timestamp()),
             'description': self.description,

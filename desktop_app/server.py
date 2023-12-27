@@ -1,5 +1,4 @@
 import yaml
-import datetime
 import os
 import json
 
@@ -19,6 +18,12 @@ class Backend:
     def __init__(self) -> None:
         self.goals: Dict[int, Goal] = self.load_goals()
         self._global_goal_id = max(self.goals.values(), key=lambda goal: goal.id).id
+        
+        # setup parenting
+        for goal in self.goals.values():
+            if goal.parent != -1:
+                parent = self.get_goal(goal.parent)
+                parent.children.append(goal.id)
 
     def generate_next_goal_id(self) -> int:
         self._global_goal_id += 1
@@ -70,7 +75,55 @@ class Backend:
         else:
             goal.metadata.completion_date = None
         self.save_goals()
+
+    def unparent_goal(self, goal_id: int) -> None:
+        goal = self.get_goal(goal_id)
+        if goal.parent != -1:
+            parent = self.get_goal(goal.parent)
+            parent.children = list(filter(lambda id: id != goal_id, parent.children))
+            goal.parent = -1
+            self.save_goals()
+
+    def remove_goal_from_hierarchy(self, goal_id: int) -> None:
+        goal = self.get_goal(goal_id)
+        if goal.parent != -1:
+            parent = self.get_goal(goal.parent)
+            parent.children = list(filter(lambda id: id != goal_id, parent.children))
+            goal.parent = -1
+
+        for child_id in goal.children:
+            child = self.get_goal(child_id)
+            child.parent = -1
+        self.save_goals()
+
+    def setup_parent(self, child_id: int, parent_id: int) -> None:
+        if parent_id == child_id:
+            return None
+
+        child = self.get_goal(child_id)
+        parent = self.get_goal(parent_id)
+        if child_id in parent.children: # already tied to parent
+            return None
+        
+        # edge case where parent is a child of child
+        if parent.parent == child_id:
+            return None
+
+        # first remove the goal from its current parent
+        if child.parent != -1:
+            curr_goal_parent = self.get_goal(child.parent)
+            curr_goal_parent.children = list(filter(lambda id: id != child_id, curr_goal_parent.children))
+
+        # then add it to the new parent
+        parent.children.append(child_id)
+        child.parent = parent.id
+        self.save_goals()
     
+    def delete_goal(self, goal_id: int) -> None:
+        self.remove_goal_from_hierarchy(goal_id)
+        del self.goals[goal_id]
+        self.save_goals()
+
     def get_goals(self) -> List[Goal]:
         return list(self.goals.values())
     
