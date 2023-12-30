@@ -31,6 +31,7 @@ class Goal:
                  backlogged: bool = False,
                  daily: datetime = NULL_DATE,
                  description: str = '',
+                 collapsed: bool = False,
                  metadata: Optional[Metadata] = None):
         self.id = id
         self.name = name
@@ -39,10 +40,10 @@ class Goal:
         self.backlogged = backlogged
         self.daily = daily
         self.description = description
+        self.collapsed = collapsed
         self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
-    
+
         self.children: List[int] = []
-        self.collapsed = False
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -56,6 +57,7 @@ class Goal:
                    safe_get('backlogged', False),
                    daily,
                    safe_get('description', ''),
+                   safe_get('collapsed', False),
                    cls.Metadata.from_dict(data['metadata']))
 
     def to_dict(self) -> dict:
@@ -68,6 +70,7 @@ class Goal:
             'backlogged': self.backlogged,
             'daily': int(self.daily.timestamp()),
             'description': self.description,
+            'collapsed': self.collapsed,
             'metadata': self.metadata.to_dict()
         }
     
