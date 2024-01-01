@@ -150,6 +150,7 @@ class GoalWidget(Frame):
             if not self.goal.children:
                 return
             self.goal.collapsed = not self.goal.collapsed
+            self.client.need_saving = True
             self.goals_window.refresh_goals_canvas()
         
         collapse_button = Button(label_frame, 
