@@ -13,14 +13,39 @@ from .goals_window import GoalsWindow
 
 
 class SummaryGoals(GoalsWindow):
-    def __init__(self, master: Any, client: ClientV2, refresh_all: Callable):
-        super().__init__(master, 'Goals Summary', client, refresh_all)
-
     class DetailsWindow(GoalDetailsWindow):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.remove_from_daily_button.pack_forget()
             self.remove_from_backlog_button.pack_forget()
+            
+            self.create_child_goal_button = Button(self.custom_buttons_frame,
+                                                   text='Create Child Goal',
+                                                   command=self.create_child_goal)
+            self.create_child_goal_button.pack(padx=1, side=tkinter.LEFT)
+
+        def create_child_goal(self):
+            top = tkinter.Toplevel(self)
+            top.geometry(f"200x200+{self.winfo_rootx()}+{self.winfo_rooty()}")
+            top.title("New Child Goal")
+            goal_name = tkinter.StringVar()
+            Label(top, text='Enter New Goal').pack()
+            new_goal_entry = Entry(top, textvariable=goal_name)
+            new_goal_entry.focus()
+            new_goal_entry.pack()
+            def close_window():
+                if goal_name.get():
+                    new_goal_id = self.client.add_goal(Goal(id=-1, name=goal_name.get(), state=False))
+                    self.goals_window.setup_parent(new_goal_id, self.goal.id)
+                    playsound('data/fx2.wav', block=False)
+                    self.refresh_all()
+                top.destroy()
+            top.bind('<Return>', lambda _: close_window())
+            top.bind('<Escape>', lambda _: top.destroy())
+            Button(top, text="Ok", command=close_window).pack()
+
+    def __init__(self, master: Any, client: ClientV2, refresh_all: Callable):
+        super().__init__(master, 'Goals Summary', client, refresh_all)
 
     def refresh_goals_canvas(self) -> None:
         # first cleanup the canvas if there are existing goal windows
@@ -39,7 +64,7 @@ class SummaryGoals(GoalsWindow):
             if goal.backlogged:
                 continue
             has_children = goal.children
-			# shows goals that are recently completed
+            # shows goals that are recently completed
             days_since_completion = 0 if not goal.state else (now - goal.metadata.completion_date).days
             if not has_children and days_since_completion > 3:
                 continue

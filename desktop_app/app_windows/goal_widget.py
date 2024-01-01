@@ -45,7 +45,12 @@ class GoalDetailsWindow(tkinter.Toplevel):
             self.refresh_all()    
         self.destroy()
 
-    def __init__(self, master: tkinter.Misc, client: ClientV2, goal_id: int, refresh_all: Callable) -> None:
+    def __init__(self, 
+                 master: tkinter.Misc, 
+                 client: ClientV2, 
+                 goal_id: int, 
+                 goals_window: GoalsWindow,
+                 refresh_all: Callable) -> None:
         super().__init__(master)
         self.need_refresh = False
         self.need_saving = False
@@ -53,6 +58,7 @@ class GoalDetailsWindow(tkinter.Toplevel):
         self.goal = self.client.fetch_goal(goal_id)
         self.is_daily = self.goal.daily.date() == datetime.now().date()
         self.is_backlogged = self.goal.backlogged
+        self.goals_window = goals_window
         self.refresh_all = refresh_all
 
         self.geometry(
@@ -69,38 +75,41 @@ class GoalDetailsWindow(tkinter.Toplevel):
         self.description.pack()
         self.description.insert(tkinter.INSERT, self.goal.description)
         self.description.focus()
+        
+        self.custom_buttons_frame = Frame(self)
+        self.custom_buttons_frame.pack(padx=10, pady=3)
 
         self.make_daily_button = Button(
-            self, 
+            self.custom_buttons_frame, 
             text="Make Daily", 
             command=self.toggle_daily)
-        self.make_daily_button.pack(padx=(10, 0), side=tkinter.LEFT)
+        self.make_daily_button.pack(padx=1, side=tkinter.LEFT)
         self.backglog_button = Button(
-            self,
+            self.custom_buttons_frame,
             text="Backlog",
             command=self.toggle_backlog)
         self.backglog_button.pack(padx=1, side=tkinter.LEFT)
         self.unparent_button = Button(
-            self, 
+            self.custom_buttons_frame, 
             text="Unparent", 
             command=self.unparent)
         self.unparent_button.pack(padx=1, side=tkinter.LEFT)
         self.remove_from_daily_button = Button(
-            self,
+            self.custom_buttons_frame,
             text="Remove from Daily",
             command=self.toggle_daily)
-        self.remove_from_daily_button.pack(padx=(10, 0), side=tkinter.LEFT)
+        self.remove_from_daily_button.pack(padx=1, side=tkinter.LEFT)
         self.remove_from_backlog_button = Button(
-            self,
+            self.custom_buttons_frame,
             text="Remove from Backlog",
             command=self.toggle_backlog)
-        self.remove_from_backlog_button.pack(padx=(10, 0), side=tkinter.LEFT)
+        self.remove_from_backlog_button.pack(padx=1, side=tkinter.LEFT)
         
         self.bind('<Escape>', lambda _: self.destroy())
         button = Button(self, 
                         text="Ok", 
                         command=self.close_window)
-        button.pack(padx=(0, 10), side=tkinter.RIGHT)
+        button.pack(pady=5, side=tkinter.TOP)
 
 class GoalWidget(Frame):
     WIDTH = 500
@@ -187,6 +196,7 @@ class GoalWidget(Frame):
             self.details_window = self.details_window_cls(self, 
                                                           self.client, 
                                                           self.goal.id, 
+                                                          self.goals_window,
                                                           self.goals_window.refresh_all_goal_windows)
         elif not self.disable_dragging:
             self.lift()

@@ -29,11 +29,13 @@ class Backend:
         self._global_goal_id += 1
         return self._global_goal_id
 
-    def add_goal(self, goal: Goal) -> None:
+    def add_goal(self, goal: Goal) -> int:
         assert(goal.id == -1)
         goal.id = self.generate_next_goal_id()
         self.goals[goal.id] = goal
         self.save_goals()
+        
+        return goal.id
 
     def delete_goal(self, goal_id: int) -> None:
         del self.goals[goal_id]

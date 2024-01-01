@@ -1,10 +1,6 @@
-import requests
-import json
 import boto3
 import os
-import datetime
 
-from datetime import datetime
 from typing import *
 
 from desktop_app.goal import Goal
@@ -37,9 +33,11 @@ class ClientV2:
     def fetch_goal(self, goal_id: int) -> Goal:
         return self.backend.get_goal(goal_id)
     
-    def add_goal(self, goal: Goal) -> None:
-        self.backend.add_goal(goal)
+    def add_goal(self, goal: Goal) -> int:
+        goal_id = self.backend.add_goal(goal)
         self.need_saving = True
+    
+        return goal_id
 
     def delete_goal(self, idx: int) -> None:
         self.backend.delete_goal(idx)
