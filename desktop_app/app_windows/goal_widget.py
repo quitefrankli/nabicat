@@ -4,6 +4,7 @@ from tkinter import Frame, Label, Button, Checkbutton, Message
 from tkinter.scrolledtext import ScrolledText
 from typing import *
 from datetime import datetime, timedelta
+from tkcalendar import Calendar
 
 from playsound import playsound
 from desktop_app.client import ClientV2
@@ -25,10 +26,38 @@ class GoalDetailsWindow(tkinter.Toplevel):
         self.close_window()
 
     def toggle_daily(self) -> None:
-        self.goal.daily = Goal.NULL_DATE if self.is_daily else datetime.now()
-        self.need_saving = True
-        self.need_refresh = True
-        self.close_window()
+        if self.is_daily:
+            self.goal.daily = Goal.NULL_DATE
+            self.need_saving = True
+            self.need_refresh = True
+            self.close_window()
+            return
+
+        top = tkinter.Toplevel(self)
+        cal = Calendar(
+            top, 
+            font="Arial 14", 
+            selectmode='day', 
+            locale='en_AU',
+            cursor="hand1",
+            year=datetime.now().year,
+            month=datetime.now().month,
+            day=datetime.now().day)
+        cal.pack(fill="both", expand=True)
+        def set_date():
+            date = cal.selection_get()
+            self.goal.daily = datetime(date.year, date.month, date.day, hour=9)
+            self.need_saving = True
+            self.need_refresh = True
+            self.close_window()
+        Button(top, text="OK", command=set_date).pack()
+        top.bind('<Escape>', lambda _: top.destroy())
+        # geometry = top.winfo_geometry().split('+')[0]
+        # width = int(geometry.split('x')[0])
+        # height = int(geometry.split('x')[1])
+        width = 300
+        height = 300
+        top.geometry(f"{width}x{height}+{self.master.winfo_rootx()}+{self.master.winfo_rooty()}")
 
     def unparent(self) -> None:
         self.client.unparent_goal(self.goal.id)
@@ -82,7 +111,7 @@ class GoalDetailsWindow(tkinter.Toplevel):
 
         self.make_daily_button = Button(
             self.custom_buttons_frame, 
-            text="Make Daily", 
+            text="Schedule", 
             command=self.toggle_daily)
         self.make_daily_button.pack(padx=1, side=tkinter.LEFT)
         self.backglog_button = Button(
@@ -97,7 +126,7 @@ class GoalDetailsWindow(tkinter.Toplevel):
         self.unparent_button.pack(padx=1, side=tkinter.LEFT)
         self.remove_from_daily_button = Button(
             self.custom_buttons_frame,
-            text="Remove from Daily",
+            text="Unschedule",
             command=self.toggle_daily)
         self.remove_from_daily_button.pack(padx=1, side=tkinter.LEFT)
         self.remove_from_backlog_button = Button(
