@@ -14,6 +14,7 @@ from desktop_app.app_windows.daily_goals import DailyGoals
 from desktop_app.app_windows.backlogged_goals import BackloggedGoals
 from desktop_app.app_windows.completed_goals import CompletedGoals
 from desktop_app.app_windows.failed_goals import FailedGoals
+from desktop_app.app_windows.repeat_goals_window import RepeatGoalsWindow
 
 
 class DesktopApp(Frame):
@@ -47,9 +48,11 @@ class DesktopApp(Frame):
 
         self.backlogged_goals = BackloggedGoals(self.goals_frame, self.client, self.refresh_all_goals_windows)
         self.completed_goals = CompletedGoals(self.goals_frame, self.client, self.refresh_all_goals_windows)
+        self.repeat_goals_window = RepeatGoalsWindow(self.goals_frame, self.client, self.refresh_all_goals_windows)
 
         self.backlogged_goals.toggle_hidden()
         self.completed_goals.toggle_hidden()
+        self.repeat_goals_window.toggle_hidden()
 
         self.pack()
 
@@ -68,6 +71,9 @@ class DesktopApp(Frame):
         self.toggle_completed_button = Button(self,
                text="Toggle Completed",
                command=self.toggle_completed)
+        self.toggle_repeat_goals_window_button = Button(self,
+                text="Toggle Repeat Goals",
+                command=self.toggle_repeat_goals_window)
         self.is_abort = False
         def abort():
             self.is_abort = True
@@ -89,6 +95,8 @@ class DesktopApp(Frame):
             self.backlogged_goals.refresh_goals_canvas()
         elif not self.completed_goals.hidden:
             self.completed_goals.refresh_goals_canvas()
+        elif not self.repeat_goals_window.hidden:
+            self.repeat_goals_window.refresh_goals_canvas()
         else:
             self.summary_goals.refresh_goals_canvas()
             self.daily_goals.refresh_goals_canvas()
@@ -99,16 +107,20 @@ class DesktopApp(Frame):
         self.show_velocity_button.pack_forget()
         self.toggle_backlog_button.pack_forget()
         self.toggle_completed_button.pack_forget()
+        self.toggle_repeat_goals_window_button.pack_forget()
         if not self.backlogged_goals.hidden:
             self.toggle_backlog_button.pack(side=tkinter.LEFT)
         elif not self.completed_goals.hidden:
             self.toggle_completed_button.pack(side=tkinter.LEFT)
+        elif not self.repeat_goals_window.hidden:
+            self.toggle_repeat_goals_window_button.pack(side=tkinter.LEFT)
         else:
             self.new_goals_button.pack(side=tkinter.LEFT)
             self.backup_goals_button.pack(side=tkinter.LEFT)
             self.show_velocity_button.pack(side=tkinter.LEFT)
             self.toggle_backlog_button.pack(side=tkinter.LEFT)
             self.toggle_completed_button.pack(side=tkinter.LEFT)
+            self.toggle_repeat_goals_window_button.pack(side=tkinter.LEFT)
 
     def toggle_completed(self) -> None:
         self.completed_goals.toggle_hidden()
@@ -133,6 +145,19 @@ class DesktopApp(Frame):
             self.summary_goals.pack_forget()
             self.daily_goals.pack_forget()
             self.backlogged_goals.pack(side=tkinter.LEFT)
+        self.refresh_all_buttons()
+        self.refresh_all_goals_windows()
+
+    def toggle_repeat_goals_window(self) -> None:
+        self.repeat_goals_window.toggle_hidden()
+        if self.repeat_goals_window.hidden:
+            self.repeat_goals_window.pack_forget()
+            self.summary_goals.pack(side=tkinter.LEFT)
+            self.daily_goals.pack(side=tkinter.TOP, padx=15)
+        else:
+            self.summary_goals.pack_forget()
+            self.daily_goals.pack_forget()
+            self.repeat_goals_window.pack(side=tkinter.LEFT)
         self.refresh_all_buttons()
         self.refresh_all_goals_windows()
 

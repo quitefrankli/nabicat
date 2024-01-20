@@ -20,7 +20,7 @@ class CompletedGoals(GoalsWindow):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.make_daily_button.pack_forget()
-            self.backglog_button.pack_forget()
+            self.backlog_button.pack_forget()
             self.unparent_button.pack_forget()
             self.remove_from_daily_button.pack_forget()
             self.remove_from_backlog_button.pack_forget()

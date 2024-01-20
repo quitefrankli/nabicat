@@ -33,13 +33,11 @@ class Backend:
         assert(goal.id == -1)
         goal.id = self.generate_next_goal_id()
         self.goals[goal.id] = goal
-        self.save_goals()
         
         return goal.id
 
     def delete_goal(self, goal_id: int) -> None:
         del self.goals[goal_id]
-        self.save_goals()
 
     def _goals_to_obj(self):
         data = {
@@ -84,7 +82,6 @@ class Backend:
             goal.metadata.completion_date = datetime.now()
         else:
             goal.metadata.completion_date = None
-        self.save_goals()
 
     def unparent_goal(self, goal_id: int) -> None:
         goal = self.get_goal(goal_id)
@@ -92,7 +89,6 @@ class Backend:
             parent = self.get_goal(goal.parent)
             parent.children = list(filter(lambda id: id != goal_id, parent.children))
             goal.parent = -1
-            self.save_goals()
 
     def remove_goal_from_hierarchy(self, goal_id: int) -> None:
         goal = self.get_goal(goal_id)
@@ -104,7 +100,6 @@ class Backend:
         for child_id in goal.children:
             child = self.get_goal(child_id)
             child.parent = -1
-        self.save_goals()
 
     def setup_parent(self, child_id: int, parent_id: int) -> None:
         if parent_id == child_id:
@@ -127,12 +122,10 @@ class Backend:
         # then add it to the new parent
         parent.children.append(child_id)
         child.parent = parent.id
-        self.save_goals()
     
     def delete_goal(self, goal_id: int) -> None:
         self.remove_goal_from_hierarchy(goal_id)
         del self.goals[goal_id]
-        self.save_goals()
 
     def get_goals(self) -> List[Goal]:
         return list(self.goals.values())

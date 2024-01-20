@@ -44,13 +44,14 @@ class Goal:
         self.metadata = metadata if metadata else self.Metadata(datetime.now(), None)
 
         self.children: List[int] = []
+        self.repeat: int = 0 # in days
 
     @classmethod
     def from_dict(cls, data: dict):
         def safe_get(key: str, alt: Any) -> Any:
             return data[key] if key in data else alt
         daily = datetime.fromtimestamp(data['daily']) if 'daily' in data else cls.NULL_DATE
-        return cls(data['id'],
+        goal = cls(data['id'],
                    data['name'], 
                    data['state'], 
                    safe_get('parent', -1),
@@ -59,6 +60,9 @@ class Goal:
                    safe_get('description', ''),
                    safe_get('collapsed', False),
                    cls.Metadata.from_dict(data['metadata']))
+        goal.repeat = safe_get('repeat', 0)
+
+        return goal
 
     def to_dict(self) -> dict:
         return {
@@ -71,6 +75,7 @@ class Goal:
             'daily': int(self.daily.timestamp()),
             'description': self.description,
             'collapsed': self.collapsed,
+            'repeat': self.repeat,
             'metadata': self.metadata.to_dict()
         }
     

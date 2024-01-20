@@ -1,9 +1,7 @@
 import tkinter
 
-from tkinter import ttk, Frame, Label, Button, Entry, Scrollbar, Canvas, Checkbutton, messagebox
-from tkinter.scrolledtext import ScrolledText
+from tkinter import Frame, Label, Scrollbar, Canvas
 from typing import *
-from playsound import playsound
 from abc import abstractmethod
 
 from desktop_app.goal import Goal

@@ -114,11 +114,11 @@ class GoalDetailsWindow(tkinter.Toplevel):
             text="Schedule", 
             command=self.toggle_daily)
         self.make_daily_button.pack(padx=1, side=tkinter.LEFT)
-        self.backglog_button = Button(
+        self.backlog_button = Button(
             self.custom_buttons_frame,
             text="Backlog",
             command=self.toggle_backlog)
-        self.backglog_button.pack(padx=1, side=tkinter.LEFT)
+        self.backlog_button.pack(padx=1, side=tkinter.LEFT)
         self.unparent_button = Button(
             self.custom_buttons_frame, 
             text="Unparent", 
@@ -208,16 +208,16 @@ class GoalWidget(Frame):
                 playsound('data/fx1.wav', block=False)
             self.client.toggle_goal_state(goal_id)
             self.goals_window.refresh_all_goal_windows()
-        delete_button = Button(self,
+        self.delete_button = Button(self,
                                text='delete',
                                command=lambda goal_id=self.goal.id: self.goals_window.delete_goal(goal_id))
-        delete_button.pack(side=tkinter.RIGHT)
-        check_button = Checkbutton(self,
+        self.delete_button.pack(side=tkinter.RIGHT)
+        self.check_button = Checkbutton(self,
                                    variable=self._tkinter_state,
                                    onvalue=True,
                                    offvalue=False,
                                    command=lambda goal_id=self.goal.id: toggle_goal_state(goal_id))
-        check_button.pack(side=tkinter.RIGHT)
+        self.check_button.pack(side=tkinter.RIGHT)
     
     def is_double_click(self) -> bool:
         return datetime.now() - self._drag_start < timedelta(milliseconds=200)
