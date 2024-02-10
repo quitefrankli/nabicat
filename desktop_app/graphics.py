@@ -14,9 +14,9 @@ def get_immediate_monday(date: datetime) -> datetime:
     return monday
 
 # returns a tuple containing a list of the number of completions per week and a list of the dates of the end of each week
-def get_completions_per_week(completions: List[datetime]) -> Tuple[List[int], List[int]]:
+def get_completions_per_week(completions: List[datetime]) -> Tuple[List[int], List[datetime]]:
     first_monday = get_immediate_monday(completions[0])
-    last_monday = get_immediate_monday(completions[-1])
+    last_monday = get_immediate_monday(completions[-1]) + timedelta(weeks=1)
 
     weeks = []
     completions_per_week = []
@@ -65,7 +65,7 @@ def plot_velocity(goals: List[Goal]) -> None:
     trace1 = graph_objects.Scatter(x=completion_dates, 
                                    y=df['completions'], 
                                    name='cumulative completions',
-                                   line=dict(color='red'))
+                                   line=dict(color='green'))
     trace2 = graph_objects.Scatter(x=weeks, 
                                    y=completions_per_week, 
                                    name='completion velocity', 

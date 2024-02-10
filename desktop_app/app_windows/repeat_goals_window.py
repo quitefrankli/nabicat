@@ -20,11 +20,12 @@ class RepeatGoalsWindow(GoalsWindow):
         # some time may have passed since the last time the repeat goals window was opened
         # retroactively create any repeat child goals that should have been created
         for goal in self.get_all_parent_repeat_goals():
-            self.spawn_repeat_child_goals(goal)
+            if not goal.paused:
+                self.spawn_repeat_child_goals(goal)
 
     def get_all_parent_repeat_goals(self) -> List[Goal]:
         goals = self.client.fetch_goals()
-        goals = [goal for goal in goals if goal.repeat > 0 and goal.parent == -1]
+        goals = [goal for goal in goals if goal.repeat > 0 and goal.parent == -1 and not goal.state]
         goals.sort(key=lambda goal: goal.metadata.creation_date.timestamp())
         return goals
 
@@ -36,15 +37,21 @@ class RepeatGoalsWindow(GoalsWindow):
             self.client.delete_goal(child_id)
         super().delete_goal(goal_id)
 
-    def spawn_repeat_child_goals(self, goal: Goal) -> None:
-        existing_child_goals = [self.client.fetch_goal(child) for child in goal.children]
+    def spawn_repeat_child_goals(self, goal: Goal, use_today_as_last_date: bool = False) -> None:
+        def get_occurrence_and_date(goal: Goal) -> Tuple[int, datetime]:
+            existing_child_goals = [self.client.fetch_goal(child) for child in goal.children]
+            if existing_child_goals:
+                child_goal_date = existing_child_goals[-1].daily + timedelta(days=goal.repeat)
+                occurrence = int(existing_child_goals[-1].name.split(' ')[-1]) + 1
+                return occurrence, child_goal_date
+            else:
+                return 1, goal.metadata.creation_date
+        
+        occurrence, child_goal_date = get_occurrence_and_date(goal)
+        if use_today_as_last_date:
+            child_goal_date = max(datetime.now(), child_goal_date)
         limit_date = datetime.now() + timedelta(weeks=2)
-        if existing_child_goals:
-            child_goal_date = existing_child_goals[-1].daily + timedelta(days=goal.repeat)
-            occurrence = int(existing_child_goals[-1].name.split(' ')[-1]) + 1
-        else:
-            child_goal_date = goal.metadata.creation_date
-            occurrence = 1
+
         while child_goal_date < limit_date:
             child_goal = Goal(id=-1, 
                               name=f"{goal.name} {occurrence}", 
@@ -107,6 +114,19 @@ class RepeatGoalsWindow(GoalsWindow):
             self.unparent_button.pack_forget()
             self.remove_from_backlog_button.pack_forget()
             self.remove_from_daily_button.pack_forget()
+
+            if self.goal.parent == -1:
+                self.pause_button = Button(self.custom_buttons_frame,
+                                        text='unpause' if self.goal.paused else 'pause',
+                                        command=self.toggle_pause)
+                self.pause_button.pack(side=tkinter.LEFT)
+            
+        def toggle_pause(self):
+            self.goal.paused = not self.goal.paused
+            if not self.goal.paused:
+                self.goals_window.spawn_repeat_child_goals(self.goal, use_today_as_last_date=True)
+            self.client.need_saving = True
+            self.refresh_all()
 
     class RepeatGoalWidget(GoalWidget):
         def __init__(self, *args, **kwargs):
