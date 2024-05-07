@@ -46,6 +46,26 @@ class GoalDetailsWindow(tkinter.Toplevel):
         self.need_refresh = True
         self.close_window()
 
+    def rename_goal(self) -> None:
+        top = tkinter.Toplevel(self)
+        top.geometry(f"200x200+{self.winfo_rootx()}+{self.winfo_rooty()}")
+        top.title("Rename Goal")
+        goal_name = tkinter.StringVar()
+        Label(top, text='Enter New Goal Name').pack()
+        new_goal_entry = tkinter.Entry(top, textvariable=goal_name)
+        new_goal_entry.focus()
+        new_goal_entry.pack()
+        def close_window():
+            if goal_name.get() and goal_name.get() != self.goal.name:
+                self.goal.name = goal_name.get()
+                self.need_saving = True
+                self.refresh_all()
+            top.destroy()
+
+        top.bind('<Return>', lambda _: close_window())
+        top.bind('<Escape>', lambda _: top.destroy())
+        Button(top, text="Ok", command=close_window).pack()
+
     def close_window(self) -> None:
         new_description = self.description.get("1.0", tkinter.END)
         new_description = new_description.rstrip()
@@ -116,6 +136,11 @@ class GoalDetailsWindow(tkinter.Toplevel):
             text="Remove from Backlog",
             command=self.toggle_backlog)
         self.remove_from_backlog_button.pack(padx=1, side=tkinter.LEFT)
+        self.rename_button = Button(
+            self.custom_buttons_frame,
+            text="Rename",
+            command=self.rename_goal)
+        self.rename_button.pack(padx=1, side=tkinter.LEFT)
         
         self.bind('<Escape>', lambda _: self.close_window())
         button = Button(self, 
