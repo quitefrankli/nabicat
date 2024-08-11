@@ -1,10 +1,11 @@
 import os
 import random
 import click
+import logging
 
 from typing import *
 from pathlib import Path
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, send_from_directory, request
 from flask_bootstrap import Bootstrap5
 from datetime import datetime
 
@@ -54,6 +55,9 @@ def get_summary_goals() -> List[Tuple[str, List[Goal]]]:
 
     return goal_blocks
     
+def save_goals():
+    ClientV2.instance().save_goals()
+
 @app.route('/')
 def index():
     dated_goal_blocks = get_summary_goals()
@@ -63,13 +67,35 @@ def index():
 @app.route('/resources/<path:filename>')
 def static_file(filename):
     image = get_random_image()
-    print(f"Sending {image} for {filename}")
+    logging.info(f"Sending {image} for {filename}")
     return send_from_directory(directory=image.parent, path=image.name)
+
+@app.route('/goals/toggle_goal_state', methods=['POST'])
+def toggle_goal_state():
+    data = request.get_json()
+    ClientV2.instance().toggle_goal_state(data['goal_id'])
+    save_goals()
+
+    return "OK"
+
+@app.before_request
+def before_request():
+    message = f"Processing request: client={request.remote_addr}, path={request.path}, method={request.method}"
+
+    if request.method == 'POST':
+        message += f", form={request.form}"
+
+    logging.debug(message)
 
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 def main(debug: bool):
     ClientV2.create_instance(debug)
+    rotating_log_handler = logging.handlers.RotatingFileHandler("logs/web_app.log",
+                                                                maxBytes=1000,
+                                                                backupCount=10)
+    logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, 
+                        handlers=[rotating_log_handler])
     app.run(host='0.0.0.0', port=80, debug=debug)
 
 if __name__ == '__main__':
