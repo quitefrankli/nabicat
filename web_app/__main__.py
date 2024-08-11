@@ -68,7 +68,7 @@ def static_file(filename):
     return send_from_directory(directory=image.parent, path=image.name)
 
 @click.command()
-@click.option('--debug', is_flag=True)
+@click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 def main(debug: bool):
     app.run(host='0.0.0.0', port=80, debug=debug)
 
