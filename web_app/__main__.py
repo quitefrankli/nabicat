@@ -13,9 +13,8 @@ from desktop_app.goal import Goal
 
 
 app = Flask(__name__)
-
 bootstrap = Bootstrap5(app)
-client = ClientV2(debug=True)
+
 def get_random_image() -> Path:
     BASE_DIR = Path(os.environ["RANDOM_IMAGES_DIR"])
     images = list(BASE_DIR.glob("*.jpeg"))
@@ -39,7 +38,7 @@ def get_summary_goals() -> List[Tuple[str, List[Goal]]]:
         
         return True
     
-    goals = client.fetch_goals()
+    goals = ClientV2.instance().fetch_goals()
     goals = [goal for goal in goals if should_render(goal)]
     goals.sort(key=lambda goal: goal.metadata.creation_date.timestamp())
 
@@ -70,6 +69,7 @@ def static_file(filename):
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 def main(debug: bool):
+    ClientV2.create_instance(debug)
     app.run(host='0.0.0.0', port=80, debug=debug)
 
 if __name__ == '__main__':

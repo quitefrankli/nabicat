@@ -11,6 +11,14 @@ from desktop_app.server import Backend
 class ClientV2:
     BUCKET_NAME = 'todoist2'
 
+    @staticmethod
+    def instance() -> 'ClientV2':
+        return ClientV2._instance
+    
+    @staticmethod
+    def create_instance(debug: bool) -> None:
+        ClientV2._instance = ClientV2(debug)
+
     def __init__(self, debug: bool) -> None:
         ACCESS_KEY = 'AKIAV2SIJY7TVPWJ2TOE'
         SECRET_ACCESS_KEY = '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'
