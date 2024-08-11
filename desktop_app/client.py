@@ -1,6 +1,7 @@
 import boto3
 import os
 
+from botocore.exceptions import ClientError
 from typing import *
 
 from desktop_app.goal import Goal
@@ -21,7 +22,7 @@ class ClientV2:
             try:
                 save_file_name = os.path.basename(Backend.SAVE_FILE)
                 self.s3_client.download_file(self.BUCKET_NAME, save_file_name, Backend.SAVE_FILE)
-            except boto3.ClientError as e:
+            except ClientError as e:
                 print(f"could not download save file from s3: {e}")
 
         self.backend = Backend()

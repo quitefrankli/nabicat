@@ -9,11 +9,11 @@ from typing import *
 from desktop_app.goal import Goal
 
 
-SAVE_DIRECTORY = Path.home() if os.name == 'nt' else '/tmp'
+SAVE_DIRECTORY = Path.home() / ".todoist2"
 
 class Backend:
-    SAVE_FILE = f"{SAVE_DIRECTORY}/.todoist2_goals.yaml"
-    BACKUP_DIR = f"{SAVE_DIRECTORY}/.todoist2_backup"
+    SAVE_FILE = f"{SAVE_DIRECTORY}/goals.yaml"
+    BACKUP_DIR = f"{SAVE_DIRECTORY}/backups"
 
     def __init__(self) -> None:
         self.goals: Dict[int, Goal] = self.load_goals()
