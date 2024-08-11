@@ -91,7 +91,7 @@ def before_request():
     if request.method == 'POST':
         message += f", form={request.form}"
 
-    logging.debug(message)
+    logging.info(message)
 
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
