@@ -68,19 +68,6 @@ class _DebugS3Client(_S3Client):
         pass
 
 class DataInterface:
-    @staticmethod
-    def instance() -> 'DataInterface':
-        # todo: when we have migrated to ec2 completely, we can remove this
-        return DataInterface(DataInterface._debug)
-        return DataInterface._instance
-    
-    @staticmethod
-    def create_instance(debug: bool) -> None:
-        # todo: when we have migrated to ec2 completely, we can remove this
-        DataInterface._debug = debug
-        return 
-        DataInterface._instance = DataInterface(debug)
-
     def __init__(self, debug: bool) -> None:
         self.s3_client = _DebugS3Client() if debug else _S3Client()
 
@@ -121,19 +108,19 @@ class DataInterface:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         backup_file = _get_backup_dir(user) / f"{timestamp}.json"
         backup_file.parent.mkdir(exist_ok=True, parents=True)
-        with open(backup_file, 'w') as file:
+        with open(backup_file, 'w', encoding='utf-8') as file:
             file.write(data.model_dump_json(indent=4))
         self.s3_client.upload_file(backup_file)
         
     def save_data(self, data: TopLevelData, user: User) -> None:
         data_file = _get_data_file(user)
         data_file.parent.mkdir(exist_ok=True, parents=True)
-        with open(data_file, 'w') as file:
+        with open(data_file, 'w', encoding='utf-8') as file:
             file.write(data.model_dump_json(indent=4))
         self.s3_client.upload_file(data_file)
 
     def save_users(self, users: List[User]) -> None:
         USERS_FILE.parent.mkdir(exist_ok=True, parents=True)
-        with open(USERS_FILE, 'w') as file:
+        with open(USERS_FILE, 'w', encoding='utf-8') as file:
             json.dump([user.to_dict() for user in users], file, indent=4)
         self.s3_client.upload_file(USERS_FILE)
