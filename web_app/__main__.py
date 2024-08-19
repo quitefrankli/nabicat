@@ -205,14 +205,6 @@ def unauthorized_handler():
 def debug():
     return render_template('debug.html')
 
-# @app.route('/shutdown')
-# @flask_login.login_required
-# def shutdown_server():
-#     logging.info("Shutting down server")
-#     import signal
-#     os.kill(os.getpid(), signal.SIGINT)
-#     return "Server shutting down..."
-
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 def main(debug: bool):

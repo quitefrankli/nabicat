@@ -39,10 +39,10 @@ class _S3Client:
 
     @staticmethod
     def _get_s3_path(file: Path) -> str:
-        return str(file.relative_to(LOCAL_SAVE_DIRECTORY))
+        return str(file.relative_to(LOCAL_SAVE_DIRECTORY).as_posix())
 
     def download_file(self, file: Path) -> None:
-        logging.info(f"Downloading {file} from s3")
+        logging.info(f"Downloading {self._get_s3_path(file)} from s3 to {file}")
         try:
             self.s3_client.download_file(self.BUCKET_NAME, self._get_s3_path(file), str(file))
         except ClientError as e:
@@ -52,7 +52,7 @@ class _S3Client:
                 raise
 
     def upload_file(self, file: Path) -> None:
-        logging.info(f"Uploading {file} to s3")
+        logging.info(f"Uploading {self._get_s3_path(file)} to s3 from {file}")
         self.s3_client.upload_file(str(file), self.BUCKET_NAME, self._get_s3_path(file))
 
 class _DebugS3Client(_S3Client):
