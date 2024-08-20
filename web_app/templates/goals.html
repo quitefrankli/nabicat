@@ -23,23 +23,28 @@
 		<div class="collapse" id="{{goal.id}}">
 			<div class="card" style="width: 100%">
 				<div class="card-body">
-					<div class="row">
+					<div class="row align-items-center">
 						<div class="col d-flex justify-content-start">
 							<h5 class="card-title">{{ goal.name }}</h5>
 						</div>
 						<div class="col d-flex justify-content-end">
-							<a href="/delete_goal?goal_id={{goal.id}}" class="btn">
+							<button type="button" class="btn" data-bs-toggle="modal" data-bs-target="#deleteGoalModal{{goal.id}}">
 								<img src={{ url_for('static', filename='trash.svg') }}/>
-							</a>
-							<button type="button" class="btn" data-bs-toggle="modal" data-bs-target="#modifyGoalModal{{goal.id}}">
+							</button>
+							<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modifyGoalModal{{goal.id}}">
 								Edit
 							</button>
 						</div>
 					</div>
-					<hr/>
-					<p class="card-text" style="white-space: pre-line">
+					<hr class="my-1"/>
+					<div class="card-text" style="white-space: pre-line">
 						{{ goal.description }}
-					</p>
+					</div>
+					<div class="col d-flex justify-content-end">
+						<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#logGoalModal{{goal.id}}">
+							Log
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -54,11 +59,11 @@
 {% for dated_goal_block in dated_goal_blocks %}
 	{% for goal in dated_goal_block[1] %}
 	<!-- Modal -->
-	<div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+	<div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
 		<div class="modal-dialog">
 			<div class="modal-content">
 			<div class="modal-header">
-				<h1 class="modal-title fs-5" id="exampleModalLabel">Edit Goal</h1>
+				<h1 class="modal-title fs-5" id="modalLabel{{goal.id}}">Edit Goal</h1>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 			<form action="/edit_goal?goal_id={{goal.id}}" method="post">
@@ -68,6 +73,52 @@
 						<input type="text" class="form-control" name="name" id="name" value={{goal.name}}>
 						<label for="description" class="col-form-label">Description</label>
 						<textarea class="form-control" name="description" id="description">{{goal.description}}</textarea>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+					<button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.value='Submitting...'; this.form.submit();">Save</button>
+				</div>
+			</form>
+			</div>
+		</div>
+	</div>
+	<div class="modal fade" id="deleteGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+			<div class="modal-header">
+				<h1 class="modal-title fs-5" id="modalLabel{{goal.id}}">Confirm Goal Delete</h1>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+				<div class="modal-body">
+					<a href="/delete_goal?goal_id={{goal.id}}" class="btn btn-danger">
+						Delete Goal
+					</a>
+					<a href="/fail_goal?goal_id={{goal.id}}" class="btn btn-warning">
+						Fail Goal Instead
+					</a>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+				</div>
+			</form>
+			</div>
+		</div>
+	</div>
+	<div class="modal fade" id="logGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+			<div class="modal-header">
+				<h1 class="modal-title fs-5" id="modalLabel{{goal.id}}">Log Goal Progress</h1>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<form action="/log_goal?goal_id={{goal.id}}" method="post">
+				<div class="modal-body">
+					<div class="form-group">
+						<label for="description" class="col-form-label">Description</label>
+						<textarea class="form-control" name="description" id="description" readonly>{{ goal.description }}</textarea>
+						<label for="log" class="col-form-label">New Log</label>
+						<textarea class="form-control" name="log" id="log"></textarea>
 					</div>
 				</div>
 				<div class="modal-footer">

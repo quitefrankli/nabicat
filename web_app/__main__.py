@@ -89,6 +89,10 @@ def get_summary_goals(user: User) -> List[Tuple[str, List[Goal]]]:
 
     return goal_blocks
     
+def from_req(key: str) -> str:
+    val = request.form[key] if key in request.form else request.args[key]
+    return val.encode('ascii', 'ignore').decode('ascii')
+
 @app.route('/')
 @app.route('/home')
 @flask_login.login_required
@@ -104,8 +108,8 @@ def login():
     if request.method == "GET":
         return render_template('login.html')
     
-    username = request.form['username']
-    password = request.form['password']
+    username = from_req('username')
+    password = from_req('password')
     existing_users = data_interface.load_users()
     if username in existing_users and password == existing_users[username].password:
         flask_login.login_user(existing_users[username])
@@ -124,8 +128,8 @@ def logout():
 @app.route('/register', methods=["POST"])
 @limiter.limit("1/second")
 def register():
-    username = request.form['username']
-    password = request.form['password']
+    username = from_req('username')
+    password = from_req('password')
 
     if not username or not password:
         flask.flash('Username and password are required', category='error')
@@ -155,11 +159,12 @@ def register():
 @flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def new_goal():
-    name = request.form['name']
+    name = from_req('name')
     if not name:
         flask.flash('Goal name cannot be empty', category='error')
         return flask.redirect(flask.url_for('home'))
-    description = request.form['description']
+
+    description = from_req('description')
 
     tld = data_interface.load_data(flask_login.current_user)
     goal_id = 0 if not tld.goals else max(tld.goals.keys()) + 1
@@ -175,11 +180,12 @@ def new_goal():
 @flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def edit_goal():
-    name = request.form['name']
+    name = from_req('name')
     if not name:
         flask.flash('Goal name cannot be empty', category='error')
         return flask.redirect(flask.url_for('home'))
-    description = request.form['description']
+    description = from_req('description')
+
     goal_id = int(request.args['goal_id'])
 
     tld = data_interface.load_data(flask_login.current_user)
@@ -199,6 +205,34 @@ def delete_goal():
     goal_id = int(req_data['goal_id'])
     tld = data_interface.load_data(flask_login.current_user)
     tld.goals.pop(goal_id)
+    data_interface.save_data(tld, flask_login.current_user)
+
+    return flask.redirect(flask.url_for('home'))
+
+@app.route('/fail_goal', methods=["GET"])
+@flask_login.login_required
+@limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
+def fail_goal():
+    req_data = request.args
+
+    goal_id = int(req_data['goal_id'])
+    tld = data_interface.load_data(flask_login.current_user)
+    tld.goals[goal_id].state = GoalState.FAILED
+    data_interface.save_data(tld, flask_login.current_user)
+
+    return flask.redirect(flask.url_for('home'))
+
+@app.route('/log_goal', methods=["POST"])
+@flask_login.login_required
+@limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
+def log_goal():
+    goal_id = int(request.args['goal_id'])
+
+    tld = data_interface.load_data(flask_login.current_user)
+    goal = tld.goals[goal_id]
+    today_date = datetime.now().date()
+    today_date = today_date.strftime("%d/%m/%Y")
+    goal.description += f"\n\n{'-'*10}\n{today_date}\n{from_req('log')}\n{'-'*10}"
     data_interface.save_data(tld, flask_login.current_user)
 
     return flask.redirect(flask.url_for('home'))
