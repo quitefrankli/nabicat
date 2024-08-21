@@ -58,8 +58,8 @@
 {% block actions_modal %}
 {% for dated_goal_block in dated_goal_blocks %}
 	{% for goal in dated_goal_block[1] %}
-	<!-- Modal -->
-	<div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
+	<!-- Edit Goal Modal -->
+	<div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{ goal.id }}" aria-hidden="true">
 		<div class="modal-dialog">
 			<div class="modal-content">
 			<div class="modal-header">
@@ -70,9 +70,9 @@
 				<div class="modal-body">
 					<div class="form-group">
 						<label for="name" class="col-form-label">Name</label>
-						<input type="text" class="form-control" name="name" id="name" value={{goal.name}}>
+						<input type="text" class="form-control" name="name" id="name" value="{{ goal.name }}">
 						<label for="description" class="col-form-label">Description</label>
-						<textarea class="form-control" name="description" id="description">{{goal.description}}</textarea>
+						<textarea class="form-control" name="description" id="description">{{ goal.description }}</textarea>
 					</div>
 				</div>
 				<div class="modal-footer">
@@ -83,6 +83,8 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Delete Goal Modal -->
 	<div class="modal fade" id="deleteGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
 		<div class="modal-dialog">
 			<div class="modal-content">
@@ -105,6 +107,8 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Log Goal Modal -->
 	<div class="modal fade" id="logGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{goal.id}}" aria-hidden="true">
 		<div class="modal-dialog">
 			<div class="modal-content">
