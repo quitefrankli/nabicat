@@ -102,8 +102,9 @@ def plot_velocity(goals: List[Goal]) -> str:
     fig.add_trace(trace5, secondary_y=True)
     fig['layout'].update(title='Goal Completion Velocity')
     fig.update_xaxes(title_text='Date')
-    fig.update_yaxes(title_text='cumulative', secondary_y=False)
-    fig.update_yaxes(title_text='velocity per week)', secondary_y=True)
+    fig.update_yaxes(title_text='Cumulative', secondary_y=False)
+    fig.update_yaxes(title_text='Velocity (per week)', secondary_y=True)
     fig.update_layout(yaxis2=dict(range=[0, max(completions_per_week)]))
+    fig.update_layout(legend=dict(yanchor='top', x=0, y=-0.2))
     
     return fig.to_html(full_html=False)

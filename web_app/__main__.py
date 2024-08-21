@@ -65,9 +65,9 @@ def get_summary_goals(user: User) -> List[Tuple[str, List[Goal]]]:
         # TODO: add support for parent/children goals
         if goal.parent or goal.children:
             return False
-        if goal.state in (GoalState.BACKLOGGED, GoalState.FAILED):
-            return False
         if goal.recurrence:
+            return False
+        if goal.state not in (GoalState.ACTIVE, GoalState.COMPLETED):
             return False
         # hides goals that have been completed for a while
         if goal.state == GoalState.COMPLETED and (now - goal.completion_date).days > 2:
@@ -76,7 +76,7 @@ def get_summary_goals(user: User) -> List[Tuple[str, List[Goal]]]:
     
     goals = list(data_interface.load_data(user).goals.values())
     goals = [goal for goal in goals if should_render(goal)]
-    goals.sort(key=lambda goal: goal.creation_date.timestamp())
+    goals.sort(key=lambda goal: goal.creation_date.timestamp(), reverse=True)
 
     goal_blocks = []
     last_date_label: date = None
@@ -86,7 +86,7 @@ def get_summary_goals(user: User) -> List[Tuple[str, List[Goal]]]:
             last_date_label = goal_date
             goal_blocks.append((last_date_label.strftime("%d/%m/%Y"), [goal]))
         else:
-            goal_blocks[-1] = (goal_blocks[-1][0], goal_blocks[-1][1] + [goal])
+            goal_blocks[-1] = (goal_blocks[-1][0], [goal] + goal_blocks[-1][1])
 
     return goal_blocks
     
@@ -100,7 +100,6 @@ def from_req(key: str) -> str:
 @limiter.limit("2/second")
 def home():
     dated_goal_blocks = get_summary_goals(flask_login.current_user)
-    dated_goal_blocks.reverse()
     return render_template('index.html', dated_goal_blocks=dated_goal_blocks)
 
 @app.route('/login', methods=["GET", "POST"])
