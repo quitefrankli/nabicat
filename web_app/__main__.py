@@ -21,6 +21,7 @@ from web_app.users import User
 from web_app.data_interface import DataInterface
 from web_app.app_data import TopLevelData, GoalState
 from web_app.app_data import GoalV2 as Goal
+from web_app.visualiser import plot_velocity
 
 
 app = Flask(__name__)
@@ -263,6 +264,16 @@ def toggle_goal_state():
     data_interface.save_data(tld, flask_login.current_user)
 
     return "OK"
+
+@app.route('/visualise/goal_velocity', methods=['GET'])
+@flask_login.login_required
+@limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
+def visualise_goal_velocity():
+    tld = data_interface.load_data(flask_login.current_user)
+    goals = list(tld.goals.values())
+    embeddable_plotly_html = plot_velocity(goals)
+
+    return render_template('goal_velocity.html', plot=embeddable_plotly_html)
 
 @app.before_request
 def before_request():
