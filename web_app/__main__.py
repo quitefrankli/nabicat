@@ -168,7 +168,7 @@ def main(debug: bool, admin: str):
 
     logging.info("Starting server")
 
-    def receive_sigterm():
+    def receive_sigterm(signum, frame):
         logging.info("Received SIGTERM, exiting")
         exit(0)
     signal(SIGTERM, receive_sigterm)
