@@ -4,8 +4,8 @@ import click
 import logging
 import flask
 import flask_login
-import re
 
+from signal import signal, SIGTERM
 from typing import *
 from pathlib import Path
 from flask import render_template, send_from_directory, request, session
@@ -167,6 +167,12 @@ def main(debug: bool, admin: str):
     DataInterface.create_instance(debug)
 
     logging.info("Starting server")
+
+    def receive_sigterm():
+        logging.info("Received SIGTERM, exiting")
+        exit(0)
+    signal(SIGTERM, receive_sigterm)
+
     app.run(host='0.0.0.0', port=80, debug=debug)
 
 if __name__ == '__main__':
