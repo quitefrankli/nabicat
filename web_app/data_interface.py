@@ -58,9 +58,6 @@ class _S3Client:
         self.s3_client.upload_file(str(file), self.BUCKET_NAME, self._get_s3_path(file))
 
 class _DebugS3Client(_S3Client):
-    def __init__(self) -> None:
-        self.s3_client = None
-
     def download_file(self, file: Path) -> None:
         pass
 

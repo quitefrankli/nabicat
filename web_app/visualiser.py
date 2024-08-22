@@ -66,12 +66,15 @@ def calculate_simple_rate(completions: List[datetime]) -> List[float]:
     return rate
 
 def plot_velocity(goals: List[Goal]) -> str:
+    if not goals:
+        raise RuntimeError("No goals to plot")
+
     goals = [goal for goal in goals if goal.state == GoalState.COMPLETED]
     goals.sort(key=lambda goal: goal.completion_date.timestamp())
     completion_dates = [goal.completion_date for goal in goals]
 
     completions_per_week, weeks = get_completions_per_week(completion_dates)
-    moving_averages = calculate_moving_averages(completions_per_week)
+    # moving_averages = calculate_moving_averages(completions_per_week)
     smoothened = apply_smoothening(completions_per_week)
 
     df = DataFrame(data={'completion_date': completion_dates, 'completions': range(len(completion_dates))})
@@ -79,11 +82,11 @@ def plot_velocity(goals: List[Goal]) -> str:
                                    y=df['completions'], 
                                    name='cumulative completions',
                                    line=dict(color='green'))
-    trace2 = graph_objects.Scatter(x=weeks, 
-                                   y=completions_per_week, 
-                                   name='completion velocity', 
-                                   line=dict(dash='dot', color='black'))
-    trace3 = graph_objects.Scatter(x=weeks, y=moving_averages, name='moving average')
+    # trace2 = graph_objects.Scatter(x=weeks, 
+    #                                y=completions_per_week, 
+    #                                name='completion velocity', 
+    #                                line=dict(dash='dot', color='black'))
+    # trace3 = graph_objects.Scatter(x=weeks, y=moving_averages, name='moving average')
     trace4 = graph_objects.Scatter(x=weeks, 
                                    y=smoothened, 
                                    name='smooth velocity',

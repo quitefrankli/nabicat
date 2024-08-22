@@ -1,19 +1,19 @@
 import flask
 import flask_login
 import logging
+import re
 
 from typing import *
 from flask import request, Blueprint, render_template
-from datetime import datetime
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
-from web_app.app_data import GoalState, GoalV2 as Goal
 from web_app.data_interface import DataInterface
 from web_app.helpers import limiter, from_req
 
 
 account_api = Blueprint('account_api', __name__)
+
+def get_default_redirect():
+    return flask.redirect(flask.url_for('account_api.login'))
 
 @account_api.route('/account/login', methods=["GET", "POST"])
 @limiter.limit("2/second")
@@ -29,14 +29,14 @@ def login():
         return flask.redirect(flask.url_for('home'))
     else:
         flask.flash('Invalid username or password', category='error')
-        return flask.redirect(flask.url_for('login'))
+        return get_default_redirect()
 
 @account_api.route('/account/logout')
 @flask_login.login_required
 def logout():
     flask_login.logout_user()
     flask.flash('You have been logged out', category='info')
-    return flask.redirect(flask.url_for('login'))
+    return get_default_redirect()
 
 @account_api.route('/account/register', methods=["POST"])
 @limiter.limit("1/second")
@@ -46,18 +46,18 @@ def register():
 
     if not username or not password:
         flask.flash('Username and password are required', category='error')
-        return flask.redirect(flask.url_for('login'))
+        return get_default_redirect()
     
     # password regex for only visible ascii characters
     validation_regex = re.compile(r'^[!-~]+$')
     if not validation_regex.match(username) or not validation_regex.match(password):
         flask.flash('Username and password must only contain visible ascii characters', category='error')
-        return flask.redirect(flask.url_for('login'))
+        return get_default_redirect()
 
     existing_users = DataInterface.instance().load_users()
     if username in existing_users:
         flask.flash('User already exists', category='error')
-        return flask.redirect(flask.url_for('login'))
+        return get_default_redirect()
 
     new_user = DataInterface.instance().generate_new_user(username, password)
     existing_users[username] = new_user

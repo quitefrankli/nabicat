@@ -17,7 +17,7 @@ from web_app.users import User
 from web_app.data_interface import DataInterface
 from web_app.app_data import TopLevelData, GoalState, GoalV2 as Goal
 from web_app.visualiser import plot_velocity
-from web_app.helpers import from_req, login_manager, limiter
+from web_app.helpers import from_req, limiter
 from web_app.app import app
 
 
@@ -25,8 +25,10 @@ from web_app.app import app
 app.secret_key = os.urandom(24)
 from web_app.api.goals_api import goals_api
 from web_app.api.account_api import account_api
+from web_app.api.metrics_api import metrics_api
 app.register_blueprint(goals_api)
 app.register_blueprint(account_api)
+app.register_blueprint(metrics_api)
 
 bootstrap = Bootstrap5(app)
 
@@ -35,16 +37,8 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 
-@login_manager.user_loader
-def user_loader(username: str) -> User | None:
-    users = DataInterface.instance().load_users()
-    return users.get(username, None)
-
-@login_manager.request_loader
-def request_loader(request: flask.Request) -> User | None:
-    username = request.form.get('username')
-    existing_users = DataInterface.instance().load_users()
-    return existing_users.get(username, None)
+def get_default_redirect():
+    return flask.redirect(flask.url_for('home'))
 
 def get_random_image() -> Path:
     BASE_DIR = Path(os.environ["RANDOM_IMAGES_DIR"] if "RANDOM_IMAGES_DIR" in os.environ else "resources")
@@ -122,8 +116,17 @@ def static_file(filename):
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def visualise_goal_velocity():
     tld = DataInterface.instance().load_data(flask_login.current_user)
-    goals = list(tld.goals.values())
-    embeddable_plotly_html = plot_velocity(goals)
+    goals = [goal for goal in tld.goals.values() if goal.state == GoalState.COMPLETED]
+    if len(goals) < 2:
+        flask.flash('Too few completeed goals to visualise', category='error')
+        return get_default_redirect()
+    
+    try:
+        embeddable_plotly_html = plot_velocity(goals)
+    except Exception as e:
+        logging.error(f"Failed to plot velocity: {e}")
+        flask.flash('Failed to plot velocity, try completing more goals and/or wait a couple days', category='error')
+        return get_default_redirect()
 
     return render_template('goal_velocity.html', plot=embeddable_plotly_html)
 
@@ -139,11 +142,6 @@ def before_request():
 
     logging.info(message)
 
-@login_manager.unauthorized_handler
-def unauthorized_handler():
-    flask.flash('Log in required', category='error')
-    return flask.redirect(flask.url_for('account_api.login'))
-
 @app.route('/debug')
 @flask_login.login_required
 def debug():
@@ -156,7 +154,7 @@ def debug():
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 @click.option('--admin', help='Set the admin user', default="")
 def main(debug: bool, admin: str):
-    global admin_user, data_interface
+    global admin_user
     admin_user = admin
     log_path = Path("logs/web_app.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
