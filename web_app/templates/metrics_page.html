@@ -146,7 +146,7 @@
 					<div class="col d-flex justify-content-end">
 						<button 
 							type="button" 
-							class="btn" 
+							class="btn btn-outline-danger me-2" 
 							data-bs-toggle="modal" 
 							data-bs-target="#deleteMetricModal{{ metric.id }}">
 								<img src={{ url_for('static', filename='trash.svg') }}/>
@@ -163,7 +163,8 @@
 				<hr class="my-1"/>
 				<div label="description" class="col-form-label">Description: {{ metric.description }}</div>
 				<div class="container-fluid">
-					{% for data_point in metric.data %}
+					<div class="overflow-auto" style="max-height: calc(10 * 2.5rem);">
+						{% for data_point in metric.data %}
 						<div class="row">
 							<div class="col">
 								{{ data_point.value }} {{ metric.unit }}
@@ -172,16 +173,20 @@
 								{{ data_point.date.strftime('%d/%m/%Y %H:%M') }}
 							</div>
 						</div>
-					{% endfor %}
+						{% endfor %}
+					</div>
 				</div>
-				<div class="col d-flex justify-content-end">
-					<button 
-						type="button" 
-						class="btn btn-outline-primary" 
-						data-bs-toggle="modal" 
-						data-bs-target="#logMetricModal{{ metric.id }}">
-							Log
-					</button>
+				<div class="row align-items-center">
+					<div class="col d-flex justify-content-end">
+						<a class="btn btn-outline-primary me-2" href="/metrics/visualise/{{ metric.id }}">Plot</a>
+						<button 
+							type="button" 
+							class="btn btn-outline-primary" 
+							data-bs-toggle="modal" 
+							data-bs-target="#logMetricModal{{ metric.id }}">
+								Log
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

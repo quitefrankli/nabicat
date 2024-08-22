@@ -10,6 +10,7 @@ from flask_limiter import Limiter
 from web_app.app_data import Metric, DataPoint
 from web_app.data_interface import DataInterface
 from web_app.helpers import limiter, from_req
+from web_app.visualiser import plot_metric
 
 
 metrics_api = Blueprint('metrics_api', __name__)
@@ -93,7 +94,11 @@ def edit_metric():
 @limiter.limit("2 per second")
 def log_metric():
     metric_id = int(from_req('metric_id'))
-    value = float(from_req('value'))
+    try:
+        value = float(from_req('value'))
+    except ValueError:
+        flask.flash('Value must be a number', category='error')
+        return get_default_redirect()
 
     tld = DataInterface.instance().load_data(flask_login.current_user)
     metric = tld.metrics[metric_id]
@@ -101,3 +106,21 @@ def log_metric():
     DataInterface.instance().save_data(tld, flask_login.current_user)
 
     return get_default_redirect()
+
+@metrics_api.route('/metrics/visualise/<int:metric_id>', methods=['GET'])
+@flask_login.login_required
+@limiter.limit("1 per second")
+def visualise_metric(metric_id: int):
+    tld = DataInterface.instance().load_data(flask_login.current_user)
+    metric = tld.metrics[metric_id]
+
+    try:
+        embeddable_plotly_html = plot_metric(metric)
+
+        return render_template('metric_plot.html', plot=embeddable_plotly_html)
+    except Exception as e:
+        logging.error(f"Failed to visualise metric {metric_id}: {e}")
+        flask.flash('Failed to visualise metric', category='error')
+
+        return get_default_redirect()
+

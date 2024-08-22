@@ -36,8 +36,12 @@
 							<h5 class="card-title">{{ goal.name }}</h5>
 						</div>
 						<div class="col d-flex justify-content-end">
-							<button type="button" class="btn" data-bs-toggle="modal" data-bs-target="#deleteGoalModal{{goal.id}}">
-								<img src={{ url_for('static', filename='trash.svg') }}/>
+							<button 
+								type="button" 
+								class="btn btn-outline-danger me-2" 
+								data-bs-toggle="modal" 
+								data-bs-target="#deleteGoalModal{{ goal.id }}">
+									<img src={{ url_for('static', filename='trash.svg') }}/>
 							</button>
 							<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modifyGoalModal{{goal.id}}">
 								Edit
