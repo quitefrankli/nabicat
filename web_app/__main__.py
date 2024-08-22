@@ -150,6 +150,20 @@ def debug():
         return "You must be an admin to access this page"
     return render_template('debug.html')
 
+def graceful_shutdown(signum=None, frame=None):
+    logging.info("Shutting down server")
+    exit(0)
+
+@app.route('/shutdown')
+@flask_login.login_required
+def shutdown():
+    global admin_user
+    if flask_login.current_user.id != admin_user:
+        return "You must be an admin to access this page"
+    graceful_shutdown()
+    return "Shutting down..."
+
+
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
 @click.option('--admin', help='Set the admin user', default="")
@@ -168,10 +182,7 @@ def main(debug: bool, admin: str):
 
     logging.info("Starting server")
 
-    def receive_sigterm(signum, frame):
-        logging.info("Received SIGTERM, exiting")
-        exit(0)
-    signal(SIGTERM, receive_sigterm)
+    signal(SIGTERM, graceful_shutdown)
 
     app.run(host='0.0.0.0', port=80, debug=debug)
 

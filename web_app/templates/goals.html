@@ -4,17 +4,25 @@
 	{% for goal in dated_goal_block[1] %}
 	<div class="container-fluid my-1">
 		<div class="row">
-			<div class="col" style="max-width: 90%">
-				<button class="btn btn-light w-100 truncate-button" type="button" data-bs-toggle="collapse" data-bs-target="#{{goal.id}}" aria-expanded="false" aria-controls="{{ goal.id }}">
-					{{ goal.name }}
+			<div 
+				class="col justify-content-start text-truncate overflow-hidden">
+				<button 
+					class="btn w-100 btn-light truncate-button" 
+					type="button" 
+					data-bs-toggle="collapse" 
+					data-bs-target="#{{goal.id}}" 
+					aria-expanded="false" 
+					aria-controls="{{ goal.id }}">
+						{{ goal.name }}
 				</button>
 			</div>
-			<div class="col d-flex align-items-center", style="max-width: 10%">
-				<div class="form-check form-switch">
+			<div class="col-auto d-flex align-items-center justify-content-end">
+				<div class="form-check">
 					<input 
 						class="form-check-input" 
 						type="checkbox" 
-						role="switch" {{ "checked" if goal.state.name == "COMPLETED" else "" }} 
+						style="width: 1.5em; height: 1.5em; " 
+						{{ "checked" if goal.state.name == "COMPLETED" else "" }} 
 						onchange="toggleGoalState(this, {{goal.id}})"
 					>
 				</div>

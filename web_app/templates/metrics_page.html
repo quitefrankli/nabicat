@@ -127,21 +127,15 @@
 
 {% for metric in metrics %}
 <div class="container-fluid my-1 p-1" style="background-color: rgb(168, 225, 244)">
-	<div class="row">
-		<div class="col" style="max-width: 90%">
-			<button 
-				class="btn btn-light w-100 truncate-button" 
-				type="button" 
-				data-bs-toggle="collapse" 
-				data-bs-target="#{{ metric.id }}" 
-				aria-expanded="false" 
-				aria-controls="{{ metric.id }}">
-				{{ metric.name }}
-			</button>
-		</div>
-		<div class="col d-flex align-items-center", style="max-width: 10%">
-		</div>
-	</div>
+	<button 
+		class="btn w-100 btn-light truncate-button" 
+		type="button" 
+		data-bs-toggle="collapse" 
+		data-bs-target="#{{metric.id}}" 
+		aria-expanded="false" 
+		aria-controls="{{ metric.id }}">
+			{{ metric.name }}
+	</button>
 	<div class="collapse" id="{{ metric.id }}">
 		<div class="card" style="width: 100%">
 			<div class="card-body">
@@ -167,14 +161,12 @@
 					</div>
 				</div>
 				<hr class="my-1"/>
-				<div class="card-text" style="white-space: pre-line">
-					{{ metric.description }}
-				</div>
+				<div label="description" class="col-form-label">Description: {{ metric.description }}</div>
 				<div class="container-fluid">
 					{% for data_point in metric.data %}
 						<div class="row">
 							<div class="col">
-								{{ data_point.value }}{{ metric.unit }}
+								{{ data_point.value }} {{ metric.unit }}
 							</div>
 							<div class="col d-flex justify-content-end">
 								{{ data_point.date.strftime('%d/%m/%Y %H:%M') }}
