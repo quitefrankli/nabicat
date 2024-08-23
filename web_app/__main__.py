@@ -17,7 +17,7 @@ from web_app.users import User
 from web_app.data_interface import DataInterface
 from web_app.app_data import TopLevelData, GoalState, GoalV2 as Goal
 from web_app.visualiser import plot_velocity
-from web_app.helpers import from_req, limiter
+from web_app.helpers import from_req, limiter, admin_only
 from web_app.app import app
 
 
@@ -32,7 +32,6 @@ app.register_blueprint(metrics_api)
 
 bootstrap = Bootstrap5(app)
 
-admin_user: str = ""
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
@@ -144,10 +143,8 @@ def before_request():
 
 @app.route('/debug')
 @flask_login.login_required
+@admin_only('home')
 def debug():
-    global admin_user
-    if flask_login.current_user.id != admin_user:
-        return "You must be an admin to access this page"
     return render_template('debug.html')
 
 def graceful_shutdown(signum=None, frame=None):
@@ -156,20 +153,15 @@ def graceful_shutdown(signum=None, frame=None):
 
 @app.route('/shutdown')
 @flask_login.login_required
+@admin_only('home')
 def shutdown():
-    global admin_user
-    if flask_login.current_user.id != admin_user:
-        return "You must be an admin to access this page"
     graceful_shutdown()
     return "Shutting down..."
 
 @app.route('/backup', methods=['GET'])
 @flask_login.login_required
+@admin_only('home')
 def backup():
-    global admin_user
-    if flask_login.current_user.id != admin_user:
-        return "You must be an admin to access this page"
-
     instance = DataInterface.instance()
     users = instance.load_users()
     for user in users.values():
@@ -182,10 +174,7 @@ def backup():
 
 @click.command()
 @click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
-@click.option('--admin', help='Set the admin user', default="")
-def main(debug: bool, admin: str):
-    global admin_user
-    admin_user = admin
+def main(debug: bool):
     log_path = Path("logs/web_app.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     rotating_log_handler = RotatingFileHandler(str(log_path),

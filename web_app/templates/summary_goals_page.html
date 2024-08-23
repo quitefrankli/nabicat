@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 
-{% set active = 'Completed' %}
+{% set active = 'Home' %}
 
 {% block actions_menu %}
 <li>
-	<a class="btn btn-outline-primary w-100" href="/visualise/goal_velocity">Goal Velocity</a>
+	<!-- Button trigger modal -->
+	<button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#newGoalModal">
+		New Goal
+	</button>
 </li>
 {% endblock %}
 
@@ -41,6 +44,6 @@
 {% block content %}
 
 {% include "flash_handler.html" %}
-{% include "completed_goals.html" %}
+{% include "summary_goals.html" %}
 
 {% endblock %}
