@@ -15,7 +15,7 @@ from logging.handlers import RotatingFileHandler
 
 from web_app.users import User
 from web_app.data_interface import DataInterface
-from web_app.app_data import TopLevelData, GoalState, GoalV2 as Goal
+from web_app.app_data import TopLevelData, GoalState, Goal
 from web_app.visualiser import plot_velocity
 from web_app.helpers import from_req, limiter, admin_only
 from web_app.app import app

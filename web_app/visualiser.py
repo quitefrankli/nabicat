@@ -5,8 +5,7 @@ from pandas import DataFrame
 from datetime import timedelta, datetime
 from scipy.signal import savgol_filter
 
-from web_app.app_data import GoalV2 as Goal
-from web_app.app_data import GoalState, Metric, DataPoint
+from web_app.app_data import Goal, GoalState, Metric, DataPoint
 
 
 def get_immediate_monday(date: datetime) -> datetime:

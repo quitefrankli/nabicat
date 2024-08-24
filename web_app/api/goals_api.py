@@ -7,7 +7,7 @@ from datetime import datetime
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from web_app.app_data import GoalState, GoalV2 as Goal
+from web_app.app_data import GoalState, Goal
 from web_app.data_interface import DataInterface
 from web_app.helpers import limiter, from_req
 

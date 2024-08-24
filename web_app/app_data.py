@@ -16,7 +16,7 @@ class Recurrence(BaseModel):
     repeat_period: Optional[timedelta]
     paused: bool
 
-class GoalV2(BaseModel):
+class Goal(BaseModel):
     id: int
     name: str
     state: GoalState
@@ -43,6 +43,6 @@ class Metric(BaseModel):
 
 
 class TopLevelData(BaseModel):
-    goals: Dict[int, GoalV2] = {}
+    goals: Dict[int, Goal] = {}
     metrics: Dict[int, Metric] = {}
     edited: datetime = datetime.now()
