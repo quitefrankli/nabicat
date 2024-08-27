@@ -105,6 +105,9 @@ def completed_goals():
     return render_template('completed_goals_page.html', dated_goal_blocks=goal_blocks)
 
 @app.route('/resources/<path:filename>')
+@flask_login.login_required
+@limiter.limit("2/second")
+@admin_only('home')
 def static_file(filename):
     image = get_random_image()
     logging.info(f"Sending {image} for {filename}")
