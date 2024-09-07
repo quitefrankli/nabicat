@@ -4,6 +4,7 @@ import logging
 import re
 
 from typing import *
+from datetime import timedelta
 from flask import request, Blueprint, render_template
 
 from web_app.data_interface import DataInterface
@@ -25,7 +26,7 @@ def login():
     password = from_req('password')
     existing_users = DataInterface.instance().load_users()
     if username in existing_users and password == existing_users[username].password:
-        flask_login.login_user(existing_users[username])
+        flask_login.login_user(existing_users[username], duration=timedelta(weeks=1))
         return flask.redirect(flask.url_for('home'))
     else:
         flask.flash('Invalid username or password', category='error')

@@ -8,7 +8,7 @@ import flask_login
 from signal import signal, SIGTERM
 from typing import *
 from pathlib import Path
-from flask import render_template, send_from_directory, request, session
+from flask import render_template, send_from_directory, request
 from flask_bootstrap import Bootstrap5
 from datetime import datetime, date
 from logging.handlers import RotatingFileHandler
