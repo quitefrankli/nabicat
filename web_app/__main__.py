@@ -35,15 +35,11 @@ bootstrap = Bootstrap5(app)
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
+all_images = list(Path("resources").glob("*.jpeg"))
+
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('home'))
-
-def get_random_image() -> Path:
-    BASE_DIR = Path(os.environ["RANDOM_IMAGES_DIR"] if "RANDOM_IMAGES_DIR" in os.environ else "resources")
-    images = list(BASE_DIR.glob("*.jpeg"))
-
-    return random.choice(images).absolute()
 
 def get_summary_goals(user: User) -> List[Tuple[str, List[Goal]]]:
     now = datetime.now()
@@ -104,15 +100,6 @@ def completed_goals():
             goal_blocks[-1] = (goal_blocks[-1][0], [goal] + goal_blocks[-1][1])
     return render_template('completed_goals_page.html', dated_goal_blocks=goal_blocks)
 
-@app.route('/resources/<path:filename>')
-@flask_login.login_required
-@limiter.limit("2/second")
-@admin_only('home')
-def static_file(filename):
-    image = get_random_image()
-    logging.info(f"Sending {image} for {filename}")
-    return send_from_directory(directory=image.parent, path=image.name)
-
 @app.route('/visualise/goal_velocity', methods=['GET'])
 @flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
@@ -145,10 +132,28 @@ def before_request():
     logging.info(message)
 
 @app.route('/debug')
+@app.route('/debug/<index>')
 @flask_login.login_required
 @admin_only('home')
-def debug():
-    return render_template('debug.html')
+def debug(index: Optional[int] = None):
+    if index is None:
+        random_idx = random.randint(0, len(all_images) - 1)
+    else:
+        random_idx = index
+
+    return render_template('debug.html', image_index=random_idx)
+
+@app.route('/debug/images/<index>')
+@flask_login.login_required
+@limiter.limit("2/second")
+@admin_only('home')
+def debug_image_index(index: int):
+    index = max(0, min(int(index), len(all_images) - 1))
+
+    image = all_images[index].absolute()
+    logging.info(f"Sending {image} for {index}")
+
+    return send_from_directory(directory=image.parent, path=image.name)
 
 def graceful_shutdown(signum=None, frame=None):
     logging.info("Shutting down server")
