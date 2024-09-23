@@ -50,7 +50,8 @@ def new_metric():
                                     name=name, 
                                     data=[], 
                                     unit=unit, 
-                                    description=description)
+                                    description=description,
+                                    creation_date=datetime.now())
     data_interface.save_data(tld, flask_login.current_user)
     
     return get_default_redirect()

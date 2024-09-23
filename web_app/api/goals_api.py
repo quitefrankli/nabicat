@@ -30,7 +30,8 @@ def new_goal():
     tld.goals[goal_id] = Goal(id=goal_id, 
                               name=name, 
                               state=GoalState.ACTIVE, 
-                              description=description)
+                              description=description,
+                              creation_date=datetime.now())
     DataInterface.instance().save_data(tld, flask_login.current_user)
 
     return flask.redirect(flask.url_for('home'))
