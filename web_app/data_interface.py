@@ -3,6 +3,7 @@ import logging
 import json
 import random
 import string
+import os
 
 from botocore.exceptions import ClientError
 from pathlib import Path
@@ -31,8 +32,8 @@ class _S3Client:
     BUCKET_NAME = 'todoist2'
     
     def __init__(self) -> None:
-        ACCESS_KEY = 'AKIAV2SIJY7TVPWJ2TOE'
-        SECRET_ACCESS_KEY = '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'
+        ACCESS_KEY = os.environ["AWS_ACCESS_KEY_ID"]
+        SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
         self.s3_client = boto3.client('s3', 
                                       aws_access_key_id=ACCESS_KEY, 
                                       aws_secret_access_key=SECRET_ACCESS_KEY)
@@ -57,7 +58,7 @@ class _S3Client:
         logging.info(f"Uploading {self._get_s3_path(file)} to s3 from {file}")
         self.s3_client.upload_file(str(file), self.BUCKET_NAME, self._get_s3_path(file))
 
-class _DebugS3Client(_S3Client):
+class _DebugS3Client:
     def download_file(self, file: Path) -> None:
         pass
 
@@ -74,7 +75,8 @@ class DataInterface:
         return cls._instance
 
     def __init__(self, debug: bool) -> None:
-        self.s3_client = _DebugS3Client() if debug else _S3Client()
+        # don't really need to use s3 if we keep everything on ec2
+        self.s3_client = _DebugS3Client() # if debug else _S3Client()
 
     def load_data(self, user: User) -> TopLevelData:
         data_file = _get_data_file(user)

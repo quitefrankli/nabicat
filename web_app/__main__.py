@@ -21,7 +21,6 @@ from web_app.helpers import from_req, limiter, admin_only
 from web_app.app import app
 
 
-# app = Flask(__name__)
 app.secret_key = os.urandom(24)
 from web_app.api.goals_api import goals_api
 from web_app.api.account_api import account_api
@@ -184,24 +183,30 @@ def backup():
 
     return flask.redirect(flask.url_for('debug'))
 
-@click.command()
-@click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
-def main(debug: bool):
+def configure_logging(debug: bool) -> None:
     log_path = Path("logs/web_app.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     rotating_log_handler = RotatingFileHandler(str(log_path),
-                                               maxBytes=int(1e6),
-                                               backupCount=10)
+                                                   maxBytes=int(1e6),
+                                                   backupCount=10)
     logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, 
-                        handlers=[] if debug else [rotating_log_handler])
+                        handlers=[] if debug else [rotating_log_handler],
+                        format='%(asctime)s %(levelname)s %(message)s')
     
-    DataInterface.create_instance(debug)
 
+@click.command()
+@click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
+def main(debug: bool):
+    configure_logging(debug=debug)
     logging.info("Starting server")
-
+    DataInterface.create_instance(debug=debug)
     signal(SIGTERM, graceful_shutdown)
 
     app.run(host='0.0.0.0', port=80, debug=debug)
 
 if __name__ == '__main__':
     main()
+else:
+    DataInterface.create_instance(debug=False)
+    configure_logging(debug=False)
+    logging.info("Starting server")
