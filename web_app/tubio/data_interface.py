@@ -128,8 +128,11 @@ class DataInterface(BaseDataInterface):
         return self.app_audio_dir / f"{crc}.m4a"
     
     def backup_data(self, backup_dir: Path) -> None:
-        audio_backup_dir = backup_dir / "audio"
+        tubio_backup_dir = backup_dir / "tubio"
+        tubio_backup_dir.mkdir(parents=True, exist_ok=True)
+        audio_backup_dir = tubio_backup_dir / "audio"
         audio_backup_dir.mkdir(parents=True, exist_ok=True)
+        
         metadata = deepcopy(self.get_metadata())
         for audio in metadata.audios.values():
             if audio.yt_video_id:
@@ -139,7 +142,7 @@ class DataInterface(BaseDataInterface):
                 shutil.copy2(self.get_audio_path(audio.crc, metadata), 
                              audio_backup_dir / f"{audio.crc}.m4a")
 
-        self.atomic_write(backup_dir / "metadata.json", 
+        self.atomic_write(tubio_backup_dir / "metadata.json", 
                           data=metadata.model_dump_json(indent=4), 
                           mode="w", 
                           encoding='utf-8')
