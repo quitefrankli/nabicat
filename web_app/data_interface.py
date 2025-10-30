@@ -138,6 +138,7 @@ class DataInterface:
     def backup_data(self, backup_dir: Path) -> None:
         self.generate_metadata_file(backup_dir)
         shutil.copy2(self.users_file, backup_dir / "users.json")
+        shutil.copy2(ConfigManager().tubio_cookie_path, backup_dir / "cookies.txt")
         # shutil.copytree(ConfigManager().save_data_path, new_backup)
 
     def atomic_write(self, file_path: Path, data: bytes|str|None=None, stream: IO|None=None, **kwargs) -> None:
