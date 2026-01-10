@@ -322,6 +322,25 @@ function toggleLoopTrack(crc) {
     }
 }
 
+// Volume control function
+function setVolume(crc, value) {
+    const audioElement = document.getElementById(`audio-${crc}`);
+    const volumeLabel = document.getElementById(`volume-label-${crc}`);
+    
+    if (!audioElement) {
+        console.error(`Audio element not found for crc: ${crc}`);
+        return;
+    }
+    
+    // Set the audio element's volume (0.0 to 1.0)
+    audioElement.volume = value / 100;
+    
+    // Update the label to show the percentage
+    if (volumeLabel) {
+        volumeLabel.textContent = value + '%';
+    }
+}
+
 // Playlist playback functionality
 let currentPlaylistQueue = [];
 let currentPlaylistIndex = 0;
