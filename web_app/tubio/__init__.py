@@ -331,10 +331,10 @@ def create_playlist():
     
     return redirect(url_for('.index'))
 
-@tubio_api.route('/add_songs_to_playlist', methods=['POST'])
+@tubio_api.route('/move_tracks_to_playlist', methods=['POST'])
 @login_required
 @limiter.limit("20 per minute")
-def add_songs_to_playlist():
+def move_tracks_to_playlist():
     try:
         target_playlist = request.form.get('target_playlist', '').strip()
         song_crcs_str = request.form.get('song_crcs', '')
@@ -348,12 +348,7 @@ def add_songs_to_playlist():
             return redirect(url_for('.index'))
         
         # Parse CRCs
-        try:
-            song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
-        except ValueError:
-            flash('Invalid song data.', 'error')
-            return redirect(url_for('.index'))
-        
+        song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
         if not song_crcs:
             flash('No valid songs selected.', 'warning')
             return redirect(url_for('.index'))
@@ -361,77 +356,18 @@ def add_songs_to_playlist():
         user = cur_user()
         user_metadata = DataInterface().get_user_metadata(user)
         
-        # Add each song to the target playlist
-        added_count = 0
         for crc in song_crcs:
-            try:
-                user_metadata.add_to_playlist(crc, target_playlist)
-                added_count += 1
-            except Exception as e:
-                logging.warning(f"Failed to add song {crc} to playlist {target_playlist}: {e}")
-        
+            user_metadata.remove_from_all_playlists(crc)
+            user_metadata.add_to_playlist(crc, target_playlist)
+
         DataInterface().save_user_metadata(user, user_metadata)
         
-        flash(f'Added {added_count} song(s) to "{target_playlist}".', 'success')
-        
     except Exception as e:
-        logging.exception("Error adding songs to playlist")
-        flash('Error adding songs to playlist.', 'error')
+        logging.exception("Error moving songs to playlist", exc_info=e)
+        flash('Error moving songs to playlist.', 'error')
     
     return redirect(url_for('.index'))
 
-@tubio_api.route('/remove_songs_from_playlist', methods=['POST'])
-@login_required
-@limiter.limit("20 per minute")
-def remove_songs_from_playlist():
-    try:
-        source_playlist = request.form.get('source_playlist', '').strip()
-        song_crcs_str = request.form.get('song_crcs', '')
-        
-        if not source_playlist:
-            flash('Please select a source playlist.', 'error')
-            return redirect(url_for('.index'))
-        
-        if source_playlist == "Favourites":
-            flash('Cannot remove songs from Favourites playlist.', 'error')
-            return redirect(url_for('.index'))
-        
-        if not song_crcs_str:
-            flash('No songs selected.', 'warning')
-            return redirect(url_for('.index'))
-        
-        # Parse CRCs
-        try:
-            song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
-        except ValueError:
-            flash('Invalid song data.', 'error')
-            return redirect(url_for('.index'))
-        
-        if not song_crcs:
-            flash('No valid songs selected.', 'warning')
-            return redirect(url_for('.index'))
-        
-        user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        # Remove each song from the source playlist
-        removed_count = 0
-        for crc in song_crcs:
-            try:
-                user_metadata.remove_from_playlist(crc, source_playlist)
-                removed_count += 1
-            except Exception as e:
-                logging.warning(f"Failed to remove song {crc} from playlist {source_playlist}: {e}")
-        
-        DataInterface().save_user_metadata(user, user_metadata)
-        
-        flash(f'Removed {removed_count} song(s) from "{source_playlist}".', 'success')
-        
-    except Exception as e:
-        logging.exception("Error removing songs from playlist")
-        flash('Error removing songs from playlist.', 'error')
-    
-    return redirect(url_for('.index'))
 
 @tubio_api.route('/delete_selected_songs', methods=['POST'])
 @login_required
@@ -444,50 +380,17 @@ def delete_selected_songs():
             flash('No songs selected.', 'warning')
             return redirect(url_for('.index'))
         
-        # Parse CRCs
-        try:
-            song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
-        except ValueError:
-            flash('Invalid song data.', 'error')
-            return redirect(url_for('.index'))
-        
-        if not song_crcs:
-            flash('No valid songs selected.', 'warning')
-            return redirect(url_for('.index'))
-        
+        song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
         user = cur_user()
         user_metadata = DataInterface().get_user_metadata(user)
-        metadata = DataInterface().get_metadata()
         
-        deleted_count = 0
         for crc in song_crcs:
-            try:
-                # Remove from user's playlists first
-                for playlist in user_metadata.playlists.values():
-                    if crc in playlist.audio_crcs:
-                        playlist.audio_crcs.remove(crc)
-                
-                # Check if any other users have this audio
-                other_users_have_audio = any(
-                    crc in other_user_metadata.get_playlist().audio_crcs 
-                    for user_id, other_user_metadata in metadata.users.items()
-                    if user_id != user.folder
-                )
-                
-                # Only delete the file if no other users have it
-                if not other_users_have_audio:
-                    DataInterface().delete_audio(crc)
-                
-                deleted_count += 1
-            except Exception as e:
-                logging.warning(f"Failed to delete song {crc}: {e}")
-        
+            user_metadata.remove_from_all_playlists(crc)
         DataInterface().save_user_metadata(user, user_metadata)
         
-        flash(f'Deleted {deleted_count} song(s) successfully.', 'success')
-        
+        DataInterface().cleanup_unused_tracks()
     except Exception as e:
-        logging.exception("Error deleting selected songs")
+        logging.exception("Error deleting selected songs", exc_info=e)
         flash('Error deleting songs.', 'error')
     
     return redirect(url_for('.index'))

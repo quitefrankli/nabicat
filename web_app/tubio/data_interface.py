@@ -25,15 +25,15 @@ class UserMetadata(BaseModel):
         if audio_crc not in playlist.audio_crcs:
             playlist.audio_crcs.append(audio_crc)
 
-        # Always add it to Favourites as well
-        fav_playlist = self.get_playlist()
-        if audio_crc not in fav_playlist.audio_crcs:
-            fav_playlist.audio_crcs.append(audio_crc)
-
     def remove_from_playlist(self, audio_crc: int, playlist_name: str = "Favourites") -> None:
         playlist = self.get_playlist(playlist_name)
         if audio_crc in playlist.audio_crcs:
             playlist.audio_crcs.remove(audio_crc)
+
+    def remove_from_all_playlists(self, audio_crc: int) -> None:
+        for playlist in self.playlists.values():
+            if audio_crc in playlist.audio_crcs:
+                playlist.audio_crcs.remove(audio_crc)
 
     def get_playlist(self, playlist_name: str = "Favourites") -> Playlist:
         if playlist_name not in self.playlists:
@@ -144,6 +144,20 @@ class DataInterface(BaseDataInterface):
             raise ValueError(f"Audio with crc {crc} does not exist.")
         
         return self.app_audio_dir / f"{crc}.m4a"
+    
+    def cleanup_unused_tracks(self) -> None:
+        metadata = self.get_metadata()
+        used_crcs = set()
+        for user_metadata in metadata.users.values():
+            for playlist in user_metadata.playlists.values():
+                used_crcs.update(playlist.audio_crcs)
+        
+        all_crcs = set(metadata.audios.keys())
+        unused_crcs = all_crcs - used_crcs
+
+        for crc in unused_crcs:
+            self.delete_audio(crc)
+            logging.info(f"Deleted unused audio with crc {crc}.")
     
     def backup_data(self, backup_dir: Path) -> None:
         tubio_backup_dir = backup_dir / "tubio"

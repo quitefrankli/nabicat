@@ -527,23 +527,15 @@ function preparePlaylistModal() {
     const selectedSongs = getSelectedSongs();
     const count = selectedSongs.length;
     
-    // Update count displays
-    document.getElementById('add-selected-count').textContent = count;
-    document.getElementById('remove-selected-count').textContent = count;
-    document.getElementById('delete-selected-count').textContent = count;
-    
     // Set hidden inputs
-    document.getElementById('add_song_crcs').value = selectedSongs.join(',');
-    document.getElementById('remove_song_crcs').value = selectedSongs.join(',');
+    document.getElementById('move_playlist_tracks_crcs').value = selectedSongs.join(',');
     document.getElementById('delete_song_crcs').value = selectedSongs.join(',');
     
     // Disable submit if no songs selected
-    const addBtn = document.querySelector('#add-to-playlist-form button[type="submit"]');
-    const removeBtn = document.querySelector('#remove-from-playlist-form button[type="submit"]');
+    const movePlaylistBtn = document.querySelector('#move-playlist-form button[type="submit"]');
     const deleteBtn = document.querySelector('#delete-selected-songs-form button[type="submit"]');
     
-    if (addBtn) addBtn.disabled = (count === 0);
-    if (removeBtn) removeBtn.disabled = (count === 0);
+    if (movePlaylistBtn) movePlaylistBtn.disabled = (count === 0);
     if (deleteBtn) deleteBtn.disabled = (count === 0);
 }
 
