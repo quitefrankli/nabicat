@@ -3,9 +3,11 @@ import json
 import logging
 import shutil
 
+from io import BytesIO
 from pathlib import Path
 from pydantic import BaseModel
 from copy import deepcopy
+from pydub import AudioSegment
 
 from web_app.data_interface import DataInterface as BaseDataInterface
 from web_app.users import User
@@ -104,17 +106,25 @@ class DataInterface(BaseDataInterface):
                     return audio
             raise ValueError(f"Audio with yt_video_id {yt_video_id} does not exist.")
         
-    def save_audio(self, title: str, audio_data: bytes) -> int:
+    def save_audio(self, title: str, audio_data: bytes, ext: str) -> int:
         crc = binascii.crc32(audio_data)
 
         if crc in self.get_metadata().audios:
             logging.warning(f"Audio with crc {crc} already exists, skipping save.")
             return crc  # already exists
 
-        audio_path = self.app_audio_dir / f"{crc}.m4a"
+        audio_path = self.app_audio_dir / f"{crc}.{ext}"
         audio_path.parent.mkdir(parents=True, exist_ok=True)
         with open(audio_path, 'wb') as f:
             f.write(audio_data)
+
+        if ext != 'm4a':
+            # convert to m4a
+            audio = AudioSegment.from_file(audio_path, format=ext)
+            output_path = self.app_audio_dir / f"{crc}.m4a"
+            audio.export(output_path, format='mp4', bitrate="128k")
+            audio_path.unlink()  # remove original file
+
         audio_metadata = AudioMetadata(crc=crc, title=title, is_cached=True)
         self.save_audio_metadata(audio_metadata)
 

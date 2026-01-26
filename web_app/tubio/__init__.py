@@ -127,7 +127,6 @@ def youtube_download():
 @login_required
 @limiter.limit("20 per minute")
 def upload_audio():
-    """Handle manual audio file uploads (mp3, mp4, m4a)"""
     try:
         # Check if file is in the request
         if 'audio_file' not in request.files:
@@ -147,14 +146,14 @@ def upload_audio():
             title = Path(file.filename).stem
         
         # Validate file extension
-        allowed_extensions = {'.mp3', '.mp4', '.m4a'}
-        file_ext = Path(file.filename).suffix.lower()
+        allowed_extensions = {'mp3', 'mp4', 'm4a'}
+        file_ext = Path(file.filename).suffix.lower()[1:]
         
         if file_ext not in allowed_extensions:
             flash(f"Unsupported file format: {file_ext}. Allowed: {', '.join(allowed_extensions)}", "error")
             return redirect(url_for('.index'))
         
-        crc = DataInterface().save_audio(title, file.read())
+        crc = DataInterface().save_audio(title, file.read(), file_ext)
         audio_metadata = DataInterface().get_audio_metadata(crc=crc)
         user_metadata = DataInterface().get_user_metadata(cur_user())
         user_metadata.add_to_playlist(audio_metadata.crc)
