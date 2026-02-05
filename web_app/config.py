@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -24,6 +25,7 @@ class ConfigManager:
         self.tudio_max_results = 10
         self.tudio_max_video_length = timedelta(minutes=10)
         self.todoist2_default_page_size = 8
+        self.getajob_api_key = os.environ['X_RAPID_API_KEY']        
 
     @property
     def project_name(self) -> str:

@@ -21,6 +21,7 @@ from web_app.metrics import metrics_api
 from web_app.account_api import account_api
 from web_app.misc import misc_api
 from web_app.api import api_api
+from web_app.getajob import getajob_api
 
 
 app.register_blueprint(todoist2_api)
@@ -30,6 +31,7 @@ app.register_blueprint(metrics_api)
 app.register_blueprint(account_api)
 app.register_blueprint(misc_api)
 app.register_blueprint(api_api)
+app.register_blueprint(getajob_api)
 
 @app.context_processor
 def inject_app_name():
