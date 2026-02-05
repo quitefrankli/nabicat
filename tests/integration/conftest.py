@@ -9,6 +9,13 @@ import signal
 import os
 from pathlib import Path
 
+# Import and disable rate limiter
+import web_app.__main__ as main_module
+from web_app.helpers import limiter
+
+# Disable rate limiting for integration tests
+limiter.enabled = False
+
 # Port for the test server
 TEST_PORT = 54321
 TEST_BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
@@ -45,13 +52,26 @@ def server_url():
     # Get the project root directory
     project_root = Path(__file__).parent.parent.parent
     
-    # Start the server as a subprocess
-    # Use -m web_app to run the Flask app
+    # Start the server as a subprocess with a script that disables rate limiting
     env = os.environ.copy()
     env['X_RAPID_API_KEY'] = 'test_key_for_integration_tests'
     
+    # Create a startup script that disables rate limiting
+    startup_script = f'''
+import sys
+sys.path.insert(0, "{project_root}")
+
+# Import and disable rate limiter before importing other modules
+import web_app.helpers
+web_app.helpers.limiter.enabled = False
+
+# Now run the app
+from web_app.__main__ import cli_start
+cli_start(["--port", "{port}", "--debug"])
+'''
+    
     process = subprocess.Popen(
-        [sys.executable, "-m", "web_app", "--port", str(port), "--debug"],
+        [sys.executable, "-c", startup_script],
         cwd=str(project_root),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

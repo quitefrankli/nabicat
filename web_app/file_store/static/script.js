@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const item = document.createElement('div');
                 item.className = 'd-flex justify-content-between align-items-center mb-1';
                 if (actionType === 'download') {
-                    item.innerHTML = `<span>${file}</span> <a href="/misc/download/${encodeURIComponent(file)}" class="btn btn-success btn-sm">Download</a>`;
+                    item.innerHTML = `<span>${file}</span> <a href="/file_store/download/${encodeURIComponent(file)}" class="btn btn-success btn-sm">Download</a>`;
                 } else if (actionType === 'delete') {
-                    item.innerHTML = `<span>${file}</span> <form method="post" action="/misc/delete/${encodeURIComponent(file)}" style="display:inline;"><button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this file?');">Delete</button></form>`;
+                    item.innerHTML = `<span>${file}</span> <form method="post" action="/file_store/delete/${encodeURIComponent(file)}" style="display:inline;"><button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this file?');">Delete</button></form>`;
                 }
                 fileListDiv.appendChild(item);
             });
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         modal.addEventListener('show.bs.modal', function () {
-            fetch('/misc/files_list').then(r => r.json()).then(data => {
+            fetch('/file_store/files_list').then(r => r.json()).then(data => {
                 files = data.files || [];
                 renderFileList();
             });
