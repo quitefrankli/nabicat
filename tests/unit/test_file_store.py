@@ -80,6 +80,47 @@ class TestFileStoreDataInterface:
         assert call_args[0][0] == Path('/fake/user/dir/test.txt')
 
     @patch('web_app.file_store.DataInterface._get_user_dir')
+    def test_save_file_prevents_path_traversal(self, mock_get_user_dir):
+        """Test that save_file prevents path traversal attacks"""
+        mock_get_user_dir.return_value = Path('/fake/user/dir')
+        
+        data_interface = FileStoreDataInterface()
+        data_interface.atomic_write = Mock()
+        
+        # Create a mock FileStorage with malicious filename
+        file_storage = Mock(spec=FileStorage)
+        file_storage.filename = '../../../etc/passwd'
+        file_storage.stream = io.BytesIO(b'malicious content')
+        
+        user = Mock(spec=User)
+        
+        data_interface.save_file(file_storage, user)
+        
+        # Verify the path was sanitized (secure_filename removes path traversal)
+        call_args = data_interface.atomic_write.call_args
+        saved_path = call_args[0][0]
+        # The path should NOT contain parent directory references
+        assert '..' not in str(saved_path)
+        # Should be flattened to just the filename
+        assert saved_path.name == 'etc_passwd' or saved_path.name == 'passwd'
+
+    @patch('web_app.file_store.DataInterface._get_user_dir')
+    def test_get_file_path_prevents_path_traversal(self, mock_get_user_dir):
+        """Test that get_file_path prevents path traversal attacks"""
+        mock_get_user_dir.return_value = Path('/fake/user/dir')
+        
+        data_interface = FileStoreDataInterface()
+        user = Mock(spec=User)
+        
+        # Try path traversal attack
+        result = data_interface.get_file_path('../../../etc/passwd', user)
+        
+        # Verify the path was sanitized
+        assert '..' not in str(result)
+        # Should still be under the user directory
+        assert '/fake/user/dir' in str(result)
+
+    @patch('web_app.file_store.DataInterface._get_user_dir')
     def test_get_file_path(self, mock_get_user_dir):
         """Test getting file path"""
         mock_get_user_dir.return_value = Path('/fake/user/dir')

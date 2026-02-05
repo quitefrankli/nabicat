@@ -1,6 +1,7 @@
 import logging
 
 from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash
 from flask_login import login_required
 from pathlib import Path
@@ -29,12 +30,16 @@ class FileStoreDataInterface(DataInterface):
 
     def save_file(self, file_storage: FileStorage, user: User) -> None:
         user_dir = self._get_user_dir(user)
-        file_path = user_dir / str(file_storage.filename)
+        # Sanitize filename to prevent path traversal
+        safe_filename = secure_filename(file_storage.filename)
+        file_path = user_dir / safe_filename
 
         self.atomic_write(file_path, stream=file_storage.stream, mode="wb")
 
     def get_file_path(self, filename: str, user: User) -> Path:
-        return self._get_user_dir(user) / filename
+        # Sanitize filename to prevent path traversal
+        safe_filename = secure_filename(filename)
+        return self._get_user_dir(user) / safe_filename
 
     def get_total_storage_size(self, user: User) -> int:
         """Get total storage size used by a user in bytes"""
