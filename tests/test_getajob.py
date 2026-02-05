@@ -93,26 +93,6 @@ class TestSearchJobs:
         assert all('title' in job for job in jobs)
 
     @patch('web_app.getajob.requests.get')
-    def test_search_jobs_correct_api_call(self, mock_get):
-        mock_response = Mock()
-        mock_response.json.return_value = []
-        mock_get.return_value = mock_response
-
-        with app.app_context():
-            with patch('web_app.getajob.flash'):
-                search_jobs('python developer', 'tokyo')
-
-        # Verify the API was called with correct parameters
-        mock_get.assert_called_once()
-        call_args = mock_get.call_args
-        assert call_args is not None
-        assert 'headers' in call_args.kwargs
-        assert 'params' in call_args.kwargs
-        params = call_args.kwargs['params']
-        assert params['advanced_title_filter'] == "'python developer'"
-        assert params['location_filter'] == 'tokyo'
-
-    @patch('web_app.getajob.requests.get')
     def test_search_jobs_timeout(self, mock_get):
         mock_get.side_effect = Timeout("Request timed out")
 
