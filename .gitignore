@@ -16,3 +16,4 @@ cookies.txt
 
 terraform/*
 !terraform/main.tf
+.env

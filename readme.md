@@ -1,5 +1,11 @@
 # Web App
 
+## Configuration
+
+create a `.env` file in the root of the project with the following content:
+
+* `X_RAPID_API_KEY` - from https://rapidapi.com/hub
+
 ## Running
 
 ```bash
@@ -69,7 +75,7 @@ The above can be automated, check out `python scripts/api_helper.py`
 ## Renewing Cert
 
 ```bash
-sudo systemctl nginx stop
+sudo systemctl stop nginx 
 sudo $(which certbot) renew
-sudo systemctl nginx start
+sudo systemctl start nginx 
 ```
