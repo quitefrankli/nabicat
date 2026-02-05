@@ -9,11 +9,7 @@ python -m web_app [--debug] [--port PORT]
 
 ## Testing
 
-run `python -m web_app --debug --port 12345`
-and on separate terminal run `pytest`
-
-need to install:
-* sudo apt install ffmpeg
+`python -m pytest`
 
 ## Cloud Setup
 
