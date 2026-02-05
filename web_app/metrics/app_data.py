@@ -14,6 +14,7 @@ class Metric(BaseModel):
     unit: str
     description: str = ""
     creation_date: datetime = datetime.now()
+    last_modified: datetime = datetime.now()
 
 
 class Metrics(BaseModel):

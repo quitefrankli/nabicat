@@ -33,7 +33,8 @@ def get_default_redirect():
 def get_metrics():
     tld = DataInterface().load_data(cur_user())
     metrics = list(tld.metrics.values())
-    metrics.sort(key=lambda x: x.id)
+    # Sort by last_modified (most recent first), similar to todoist2
+    metrics.sort(key=lambda x: x.last_modified.timestamp(), reverse=True)
     for metric in metrics:
         metric.data.sort(key=lambda x: x.date, reverse=True)
 
@@ -95,6 +96,7 @@ def edit_metric():
     metric.name = name
     metric.unit = unit
     metric.description = description
+    metric.last_modified = datetime.now()
     DataInterface().save_data(tld, cur_user())
 
     return get_default_redirect()
@@ -113,6 +115,7 @@ def log_metric():
     tld = DataInterface().load_data(cur_user())
     metric = tld.metrics[metric_id]
     metric.data.append(DataPoint(date=datetime.now(), value=value))
+    metric.last_modified = datetime.now()
     DataInterface().save_data(tld, cur_user())
 
     return get_default_redirect()
