@@ -4,13 +4,13 @@ from unittest.mock import Mock, patch
 from requests.exceptions import RequestException, HTTPError, Timeout
 
 from web_app.app import app
-from web_app.getajob import search_jobs
+from web_app.jswipe import search_jobs
 
 
 class TestSearchJobs:
     """Tests for search_jobs function"""
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_success(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -26,49 +26,49 @@ class TestSearchJobs:
         mock_get.return_value = mock_response
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('software engineer', 'sydney')
 
         assert len(jobs) == 1
-        assert jobs[0]['id'] == 'job1'
-        assert jobs[0]['title'] == 'Software Engineer'
-        assert jobs[0]['company'] == 'Tech Corp'
+        assert jobs[0].id == 'job1'
+        assert jobs[0].title == 'Software Engineer'
+        assert jobs[0].company == 'Tech Corp'
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_no_results(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = []
         mock_get.return_value = mock_response
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('obscure job title', 'nowhere')
 
         assert jobs == []
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_request_exception(self, mock_get):
         mock_get.side_effect = RequestException("Connection error")
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('software engineer', 'sydney')
 
         assert jobs == []
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_http_error(self, mock_get):
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = HTTPError("404 Not Found")
         mock_get.return_value = mock_response
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('software engineer', 'sydney')
 
         assert jobs == []
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_multiple_results(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -85,24 +85,24 @@ class TestSearchJobs:
         mock_get.return_value = mock_response
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('engineer', 'sydney')
 
         assert len(jobs) == 5
-        assert all('id' in job for job in jobs)
-        assert all('title' in job for job in jobs)
+        assert all(hasattr(job, 'id') for job in jobs)
+        assert all(hasattr(job, 'title') for job in jobs)
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_timeout(self, mock_get):
         mock_get.side_effect = Timeout("Request timed out")
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 jobs = search_jobs('software engineer', 'sydney')
 
         assert jobs == []
 
-    @patch('web_app.getajob.requests.get')
+    @patch('web_app.jswipe.requests.get')
     def test_search_jobs_handles_missing_fields(self, mock_get):
         mock_response = Mock()
         # This will raise KeyError when trying to access missing fields
@@ -116,7 +116,7 @@ class TestSearchJobs:
         mock_get.return_value = mock_response
 
         with app.app_context():
-            with patch('web_app.getajob.flash'):
+            with patch('web_app.jswipe.flash'):
                 with pytest.raises(KeyError):
                     search_jobs('engineer', 'sydney')
 
