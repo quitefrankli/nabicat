@@ -67,58 +67,79 @@
           Job Listings
         </h5>
         {% if jobs %}
-          <span class="badge bg-sage">{{ jobs|length }} found</span>
+          <span class="badge bg-sage" id="job-counter">{{ jobs|length }} found</span>
         {% endif %}
       </div>
       <div class="card-body p-4">
         {% if jobs %}
-          <div id="swipe-container" class="position-relative" 
-               style="min-height: 400px;">
+          <!-- Card Stack Container -->
+          <div id="swipe-container" class="card-stack">
             {% for job in jobs %}
-            <div class="card job-card border-0 shadow-sm mb-3" data-job-id="{{ job.id }}">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                  <div>
-                    <h5 class="card-title text-forest mb-1">{{ job.title }}</h5>
-                    <h6 class="card-subtitle text-muted d-flex align-items-center gap-2">
-                      <i class="bi bi-building"></i>
-                      {{ job.company }}
-                    </h6>
-                  </div>
-                  <span class="badge bg-light text-dark border">
-                    <i class="bi bi-geo-alt-fill text-sage me-1"></i>
-                    {{ job.location }}
-                  </span>
+            <div class="job-card" data-job-id="{{ job.id }}">
+              <!-- Card Header -->
+              <div class="job-card-header">
+                <h5 class="job-title">{{ job.title }}</h5>
+                <div class="job-company">
+                  <i class="bi bi-building"></i>
+                  {{ job.company }}
                 </div>
-                
-                <p class="card-text text-secondary" style="max-height: 150px; overflow-y: auto;">
-                  {{ job.description[:300] }}{% if job.description|length > 300 %}...{% endif %}
-                </p>
-                
-                <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                  <small class="text-muted">
-                    <i class="bi bi-calendar3 me-1"></i>
-                    Posted: {{ job.post_date }}
-                  </small>
-                  <a href="{{ job.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>
-                    View Job
-                  </a>
+              </div>
+              
+              <!-- Card Body -->
+              <div class="job-card-body">
+                <div class="job-location">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  {{ job.location }}
                 </div>
+                <div class="job-description">
+                  {{ job.description[:400] }}{% if job.description|length > 400 %}...{% endif %}
+                </div>
+              </div>
+              
+              <!-- Card Footer -->
+              <div class="job-card-footer">
+                <span class="job-date">
+                  <i class="bi bi-calendar3"></i>
+                  Posted: {{ job.post_date }}
+                </span>
+                <a href="{{ job.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                  View Job
+                </a>
+              </div>
+              
+              <!-- Swipe Indicators -->
+              <div class="swipe-indicator swipe-left">
+                <i class="bi bi-x-lg"></i>
+                SKIP
+              </div>
+              <div class="swipe-indicator swipe-right">
+                <i class="bi bi-heart-fill"></i>
+                SAVE
               </div>
             </div>
             {% endfor %}
           </div>
           
           <!-- Action Buttons -->
-          <div class="d-flex justify-content-center gap-3 mt-4">
-            <button class="btn btn-danger btn-lg px-5 d-flex align-items-center gap-2" id="reject-btn">
+          <div class="d-flex justify-content-center gap-4 mt-4">
+            <button class="btn btn-action btn-skip" id="reject-btn">
               <i class="bi bi-x-lg"></i>
-              Skip
             </button>
-            <button class="btn btn-success btn-lg px-5 d-flex align-items-center gap-2" id="apply-btn">
+            <button class="btn btn-action btn-save" id="apply-btn">
               <i class="bi bi-heart-fill"></i>
-              Save
+            </button>
+          </div>
+          
+          <!-- Empty State (shown when all cards are swiped) -->
+          <div id="empty-stack" class="text-center py-5 d-none">
+            <div class="mb-4">
+              <i class="bi bi-check-circle display-1 text-sage" style="opacity: 0.5;"></i>
+            </div>
+            <h5 class="text-muted mb-2">All caught up!</h5>
+            <p class="text-muted">You've reviewed all job listings.</p>
+            <button type="button" class="btn btn-primary" onclick="location.reload()">
+              <i class="bi bi-arrow-clockwise me-2"></i>Search Again
             </button>
           </div>
         {% else %}

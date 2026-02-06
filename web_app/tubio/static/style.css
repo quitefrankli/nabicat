@@ -101,24 +101,39 @@
 }
 
 /* Song checkbox styling */
-.song-checkbox {
-  width: 1.2em;
-  height: 1.2em;
+.song-checkbox,
+.form-check-input.song-checkbox {
+  width: 1.4em !important;
+  height: 1.4em !important;
   cursor: pointer;
-  border: 2px solid var(--hw-sage, #87A878);
-  border-radius: 6px;
-  margin: 0;
+  border: 2px solid var(--hw-sage, #87A878) !important;
+  border-radius: 6px !important;
+  margin: 0 !important;
   vertical-align: middle;
   accent-color: var(--hw-sage, #87A878);
+  background-color: white;
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative;
+  flex-shrink: 0;
 }
 
-.song-checkbox:checked {
-  background-color: var(--hw-sage, #87A878);
-  border-color: var(--hw-sage, #87A878);
+.song-checkbox:checked,
+.form-check-input.song-checkbox:checked {
+  background-color: var(--hw-sage, #87A878) !important;
+  border-color: var(--hw-sage, #87A878) !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
+  background-size: 75%;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
-.song-checkbox:hover {
-  border-color: var(--hw-sage-dark, #6B8E5A);
+.song-checkbox:hover,
+.form-check-input.song-checkbox:hover {
+  border-color: var(--hw-sage-dark, #6B8E5A) !important;
   box-shadow: 0 0 0 3px rgba(135, 168, 120, 0.2);
 }
 
@@ -128,6 +143,7 @@
   margin-bottom: 0;
   padding: 0;
   min-height: 40px;
+  padding-left: 0 !important;
 }
 
 /* Accordion item styling for tracks */

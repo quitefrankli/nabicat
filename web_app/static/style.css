@@ -102,6 +102,8 @@ body {
   box-shadow: var(--hw-shadow-sm);
   padding: 0.75rem 1.5rem !important;
   margin-bottom: 2rem !important;
+  position: relative;
+  z-index: 1030;
 }
 
 .navbar-brand,
@@ -234,6 +236,7 @@ body {
   box-shadow: var(--hw-shadow-md);
   transition: var(--hw-transition-base);
   overflow: hidden;
+  position: relative;
 }
 
 .card:hover {
@@ -299,12 +302,18 @@ body {
    ============================================ */
 
 .dropdown-menu {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(12px);
   border: 1px solid var(--hw-border);
   border-radius: var(--hw-radius-md);
   box-shadow: var(--hw-shadow-lg);
   padding: 0.5rem;
+  z-index: 1050 !important;
+}
+
+/* Ensure navbar dropdowns are always on top */
+.navbar .dropdown-menu {
+  z-index: 1050 !important;
 }
 
 .dropdown-item {
