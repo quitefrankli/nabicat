@@ -6,38 +6,38 @@
 <!-- Upload Audio Modal -->
 <div class="modal fade" id="uploadAudioModal" tabindex="-1" aria-labelledby="uploadAudioModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content" style="border-radius: 12px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%); color: white; border-radius: 12px 12px 0 0;">
+        <div class="modal-content border-0" style="border-radius: 16px;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border-radius: 16px 16px 0 0;">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="uploadAudioModalLabel">
                     <i class="bi bi-cloud-upload me-2"></i>Upload Audio File
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="upload-audio-form" method="post" action="{{ url_for('.upload_audio') }}" enctype="multipart/form-data">
-                <div class="modal-body" style="padding: 2rem;">
+                <div class="modal-body p-4">
                     <div class="form-floating mb-3">
                         <input type="file" class="form-control" name="audio_file" id="audio_file" 
                                accept=".mp3,.mp4,.m4a,audio/mpeg,audio/mp4,audio/x-m4a" 
-                               required style="border-radius: 8px;">
+                               required>
                         <label for="audio_file">
-                            <i class="bi bi-file-music me-2"></i>Audio File (mp3, mp4, m4a)
+                            <i class="bi bi-file-music me-2 text-sage"></i>Audio File (mp3, mp4, m4a)
                         </label>
                     </div>
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" name="audio_title" id="audio_title" 
-                               placeholder="Enter audio title (optional)" style="border-radius: 8px;">
+                               placeholder="Enter audio title (optional)">
                         <label for="audio_title">
-                            <i class="bi bi-pencil me-2"></i>Audio Title (Optional)
+                            <i class="bi bi-pencil me-2 text-sage"></i>Audio Title (Optional)
                         </label>
                     </div>
-                    <div class="alert alert-info" role="alert">
-                        <i class="bi bi-info-circle me-2"></i>
+                    <div class="alert" role="alert" style="background: rgba(135, 168, 120, 0.1); color: var(--hw-text-secondary, #5A6B5A); border: none;">
+                        <i class="bi bi-info-circle me-2 text-sage"></i>
                         <strong>Supported formats:</strong> MP3, MP4, M4A<br>
                         <small>If no title is provided, the filename will be used.</small>
                     </div>
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
                     <button type="submit" class="btn btn-primary">
@@ -52,28 +52,28 @@
 <!-- New Playlist Modal -->
 <div class="modal fade" id="newPlaylistModal" tabindex="-1" aria-labelledby="newPlaylistModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content" style="border-radius: 12px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #0dcaf0 0%, #0a9ec7 100%); color: white; border-radius: 12px 12px 0 0;">
+        <div class="modal-content border-0" style="border-radius: 16px;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%); border-radius: 16px 16px 0 0;">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="newPlaylistModalLabel">
                     <i class="bi bi-plus-circle me-2"></i>Create New Playlist
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="new-playlist-form" method="post" action="{{ url_for('.create_playlist') }}">
-                <div class="modal-body" style="padding: 2rem;">
+                <div class="modal-body p-4">
                     <div class="form-floating mb-3">
-                        <input type="text" class="form-control" name="playlist_name" id="playlist_name" placeholder="Enter playlist name" required style="border-radius: 8px;">
+                        <input type="text" class="form-control" name="playlist_name" id="playlist_name" placeholder="Enter playlist name" required>
                         <label for="playlist_name">
-                            <i class="bi bi-music-note-list me-2"></i>Playlist Name
+                            <i class="bi bi-music-note-list me-2 text-sage"></i>Playlist Name
                         </label>
                     </div>
-                    <div class="alert alert-info" role="alert">
-                        <i class="bi bi-info-circle me-2"></i>
+                    <div class="alert" role="alert" style="background: rgba(233, 196, 106, 0.15); color: var(--hw-text-secondary, #5A6B5A); border: none;">
+                        <i class="bi bi-info-circle me-2" style="color: var(--hw-gold, #E9C46A);"></i>
                         Create a new playlist to organize your music collection.
                     </div>
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
                     <button type="submit" class="btn btn-info">
@@ -102,7 +102,7 @@
                         <div class="input-group" style="max-width: 800px; margin: 0 auto;">
                             <input type="text" class="form-control" id="youtube-query" name="youtube_query" 
                                    placeholder="Search YouTube..." required>
-                            <button class="btn btn-outline-secondary" type="submit">
+                            <button class="btn btn-outline-primary" type="submit">
                                 <i class="bi bi-search me-1"></i>Search
                             </button>
                         </div>
@@ -119,30 +119,30 @@
 <!-- Move to Playlist Modal -->
 <div class="modal fade" id="addToPlaylistModal" tabindex="-1" aria-labelledby="moveToPlaylistModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content" style="border-radius: 12px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%); color: white; border-radius: 12px 12px 0 0;">
+        <div class="modal-content border-0" style="border-radius: 16px;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border-radius: 16px 16px 0 0;">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="moveToPlaylistModalLabel">
                     <i class="bi bi-plus-square me-2"></i>Move to Playlist
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="move-playlist-form" method="post" action="{{ url_for('.move_tracks_to_playlist') }}">
-                <div class="modal-body" style="padding: 2rem;">
+                <div class="modal-body p-4">
                     <div class="form-floating mb-3">
-                        <select class="form-select" name="target_playlist" id="add_target_playlist" required style="border-radius: 8px;">
+                        <select class="form-select" name="target_playlist" id="add_target_playlist" required>
                             <option value="">Select a playlist...</option>
                             {% for playlist_name, playlist_data in playlists %}
                             <option value="{{ playlist_name }}">{{ playlist_name }}</option>
                             {% endfor %}
                         </select>
                         <label for="add_target_playlist">
-                            <i class="bi bi-music-note-list me-2"></i>Target Playlist
+                            <i class="bi bi-music-note-list me-2 text-sage"></i>Target Playlist
                         </label>
                     </div>
                     <input type="hidden" name="song_crcs" id="move_playlist_tracks_crcs">
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
                     <button type="submit" class="btn btn-success">
@@ -157,23 +157,23 @@
 <!-- Delete Selected Songs Modal -->
 <div class="modal fade" id="deleteSelectedSongsModal" tabindex="-1" aria-labelledby="deleteSelectedSongsModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content" style="border-radius: 12px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%); color: white; border-radius: 12px 12px 0 0;">
+        <div class="modal-content border-0" style="border-radius: 16px;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, #E07A5F 0%, #D35400 100%); border-radius: 16px 16px 0 0;">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="deleteSelectedSongsModalLabel">
                     <i class="bi bi-trash me-2"></i>Delete Tracks
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="delete-selected-songs-form" method="post" action="{{ url_for('.delete_selected_songs') }}">
-                <div class="modal-body" style="padding: 2rem;">
-                    <div class="alert alert-danger mb-3">
+                <div class="modal-body p-4">
+                    <div class="alert mb-3" style="background: rgba(224, 122, 95, 0.15); color: #D35400; border: none;">
                         <i class="bi bi-exclamation-triangle me-2"></i>
                         <strong>Warning:</strong> track(s) will be permanently deleted!
                     </div>
                     <input type="hidden" name="song_crcs" id="delete_song_crcs">
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
                     <button type="submit" class="btn btn-danger">

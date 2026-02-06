@@ -1,6 +1,6 @@
 {% for dated_goal_block in dated_goal_blocks %}
-<div class="card shadow-sm my-3" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border: none; border-radius: 12px;">
-    <div class="card-header" style="background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); border: none; border-radius: 12px 12px 0 0;">
+<div class="card shadow-sm my-3" style="background: linear-gradient(135deg, rgba(135, 168, 120, 0.1) 0%, rgba(168, 198, 134, 0.1) 100%); border: none; border-radius: 16px;">
+    <div class="card-header" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border: none; border-radius: 16px 16px 0 0;">
         <h5 class="text-white mb-0">
             <i class="bi bi-calendar-event me-2"></i>{{ dated_goal_block[0] }}
         </h5>
@@ -8,7 +8,7 @@
     <div class="card-body p-3">
         {% for goal in dated_goal_block[1] %}
         <div class="accordion mb-2" id="accordion{{ goal.id }}">
-            <div class="accordion-item" style="border: none; border-radius: 8px; overflow: hidden;">
+            <div class="accordion-item" style="border: none; border-radius: 12px; overflow: hidden; background: white;">
                 <h2 class="accordion-header" id="heading{{ goal.id }}">
                     <button 
                         class="accordion-button collapsed" 
@@ -17,16 +17,16 @@
                         data-bs-target="#collapse{{ goal.id }}" 
                         aria-expanded="false" 
                         aria-controls="collapse{{ goal.id }}"
-                        style="background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%); border: none; padding: 12px 16px;">
+                        style="background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%); border: none; padding: 12px 16px; border-radius: 12px;">
                         <div class="d-flex align-items-center w-100 justify-content-between">
                             <div class="d-flex align-items-center flex-grow-1" style="overflow: hidden;">
-                                <i class="bi bi-target text-info me-2"></i>
+                                <i class="bi bi-target text-sage me-2"></i>
                                 <span class="fw-medium" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ goal.name }}</span>
                             </div>
                             <div class="form-check ms-2">
                                 <input class="form-check-input" 
                                        type="checkbox" 
-                                       style="width: 1.25em; height: 1.25em;" 
+                                       style="width: 1.25em; height: 1.25em; border-color: var(--hw-sage, #87A878); accent-color: var(--hw-sage, #87A878);" 
                                        id="checkbox-{{ goal.id }}"
                                        {{ "checked" if goal.state.name == "COMPLETED" else "" }} 
                                        onchange="toggleGoalState(this, {{ goal.id }})"
@@ -37,12 +37,12 @@
                 </h2>
                 <div id="collapse{{ goal.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ goal.id }}" data-bs-parent="#accordion{{ goal.id }}">
                     <div class="accordion-body" style="background: #fafafa; padding: 20px;">
-                        <div class="card border-0 shadow-sm">
+                        <div class="card border-0 shadow-sm" style="border-radius: 12px;">
                             <div class="card-body">
-                                <h5 class="card-title text-primary mb-3">
+                                <h5 class="card-title mb-3" style="color: var(--hw-sage-dark, #6B8E5A);">
                                     <i class="bi bi-target me-2"></i>{{ goal.name }}
                                 </h5>
-                                <div class="card-text" style="white-space: pre-line; line-height: 1.6;">
+                                <div class="card-text" style="white-space: pre-line; line-height: 1.6; color: var(--hw-text-secondary, #5A6B5A);">
                                     {{ goal.description or "No description provided." }}
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap justify-content-end mt-3">
@@ -86,8 +86,8 @@
 	<!-- Edit Goal Modal -->
 	<div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{ goal.id }}" aria-hidden="true">
 		<div class="modal-dialog modal-lg">
-			<div class="modal-content border-0 shadow">
-				<div class="modal-header bg-primary text-white">
+			<div class="modal-content border-0 shadow" style="border-radius: 16px;">
+				<div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);">
 					<h1 class="modal-title fs-5" id="modalLabel{{goal.id}}">
 						<i class="bi bi-pencil me-2"></i>Edit Goal
 					</h1>
@@ -96,19 +96,19 @@
 				<form action="{{ url_for('.goals_api.edit_goal', goal_id=goal.id) }}" method="post">
 					<div class="modal-body p-4">
 						<div class="mb-3">
-							<label for="name-{{goal.id}}" class="form-label fw-semibold text-primary">
+							<label for="name-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
 								<i class="bi bi-tag me-1"></i>Goal Name
 							</label>
 							<input type="text" class="form-control form-control-lg" name="name" id="name-{{goal.id}}" value="{{ goal.name }}" required>
 						</div>
 						<div class="mb-3">
-							<label for="description-{{goal.id}}" class="form-label fw-semibold text-primary">
+							<label for="description-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
 								<i class="bi bi-text-paragraph me-1"></i>Description
 							</label>
 							<textarea class="form-control" name="description" id="description-{{goal.id}}" rows="6" style="min-height: 150px; resize: vertical;" placeholder="Describe your goal in detail...">{{ goal.description }}</textarea>
 						</div>
 					</div>
-					<div class="modal-footer bg-light">
+					<div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
 						<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
 							<i class="bi bi-x-circle me-1"></i>Cancel
 						</button>
@@ -124,8 +124,8 @@
 	<!-- Delete Goal Modal -->
 	<div class="modal fade" id="deleteGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="deleteModalLabel{{goal.id}}" aria-hidden="true">
 		<div class="modal-dialog">
-			<div class="modal-content border-0 shadow">
-				<div class="modal-header bg-danger text-white">
+			<div class="modal-content border-0 shadow" style="border-radius: 16px;">
+				<div class="modal-header text-white" style="background: linear-gradient(135deg, #E07A5F 0%, #D35400 100%);">
 					<h1 class="modal-title fs-5" id="deleteModalLabel{{goal.id}}">
 						<i class="bi bi-exclamation-triangle me-2"></i>Confirm Action
 					</h1>
@@ -133,8 +133,8 @@
 				</div>
 				<div class="modal-body p-4">
 					<p class="mb-3">What would you like to do with this goal?</p>
-					<div class="alert alert-warning">
-						<strong>{{ goal.name }}</strong>
+					<div class="alert alert-warning" style="background: rgba(233, 196, 106, 0.15); border-color: rgba(233, 196, 106, 0.3);">
+						<strong style="color: var(--hw-forest, #2D4A3E);">{{ goal.name }}</strong>
 					</div>
 					<div class="d-grid gap-2">
 						<a href="{{ url_for('.goals_api.delete_goal', goal_id=goal.id) }}" class="btn btn-danger">
@@ -145,7 +145,7 @@
 						</a>
 					</div>
 				</div>
-				<div class="modal-footer bg-light">
+				<div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
 					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
 						<i class="bi bi-arrow-left me-1"></i>Cancel
 					</button>
@@ -157,8 +157,8 @@
 	<!-- Log Goal Modal -->
 	<div class="modal fade" id="logGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="logModalLabel{{goal.id}}" aria-hidden="true">
 		<div class="modal-dialog modal-lg">
-			<div class="modal-content border-0 shadow">
-				<div class="modal-header bg-success text-white">
+			<div class="modal-content border-0 shadow" style="border-radius: 16px;">
+				<div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);">
 					<h1 class="modal-title fs-5" id="logModalLabel{{goal.id}}">
 						<i class="bi bi-journal-plus me-2"></i>Log Progress
 					</h1>
@@ -167,23 +167,23 @@
 				<form action="{{ url_for('.goals_api.log_goal', goal_id=goal.id) }}" method="post">
 					<div class="modal-body p-4">
 						<div class="mb-3">
-							<label for="goal-desc-{{goal.id}}" class="form-label fw-semibold text-primary">
+							<label for="goal-desc-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
 								<i class="bi bi-info-circle me-1"></i>Goal Description
 							</label>
-							<div class="form-control bg-light text-muted" style="min-height: 80px; white-space: pre-line;">{{ goal.description or 'No description provided.' }}</div>
+							<div class="form-control text-muted" style="min-height: 80px; white-space: pre-line; background: rgba(135, 168, 120, 0.05);">{{ goal.description or 'No description provided.' }}</div>
 						</div>
 						<div class="mb-3">
-							<label for="log-{{goal.id}}" class="form-label fw-semibold text-success">
+							<label for="log-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
 								<i class="bi bi-pencil-square me-1"></i>Progress Log
 							</label>
 							<textarea class="form-control" name="log" id="log-{{goal.id}}" rows="5" style="min-height: 120px; resize: vertical;" placeholder="Describe the progress you've made on this goal..." required></textarea>
 						</div>
 					</div>
-					<div class="modal-footer bg-light">
+					<div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
 						<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
 							<i class="bi bi-x-circle me-1"></i>Cancel
 						</button>
-						<button type="submit" class="btn btn-success" onclick="this.disabled=true; this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Logging...'; this.form.submit();">
+						<button type="submit" class="btn btn-primary" onclick="this.disabled=true; this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Logging...'; this.form.submit();">
 							<i class="bi bi-check-circle me-1"></i>Save Log
 						</button>
 					</div>

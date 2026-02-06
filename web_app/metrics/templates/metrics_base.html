@@ -1,12 +1,26 @@
-{% extends "root_base.html" %}
-{% block navbar_items %}
-    <li class="nav-item mx-2">
-        <a class="nav-link {{'active' if active == 'Home' else ''}}" href="/metrics">
-            <i class="bi bi-graph-up me-1"></i>Metrics
-        </a>
-    </li>
+{% extends "subpage_base.html" %}
+
+{% block page_icon %}
+  <div class="rounded-circle d-flex align-items-center justify-content-center" 
+       style="width: 56px; height: 56px; background: linear-gradient(135deg, #E9C46A 0%, #F4A261 100%);">
+    <i class="bi bi-graph-up-arrow text-white fs-4"></i>
+  </div>
+{% endblock %}
+
+{% block page_title %}Metrics{% endblock %}
+{% block page_subtitle %}Visualize your progress and insights{% endblock %}
+
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link {{'active' if active == 'Home' else ''}} d-flex align-items-center gap-2" href="/metrics">
+      <i class="bi bi-speedometer2"></i>
+      <span>Dashboard</span>
+    </a>
+  </li>
 {% endblock %}
 
 {% block scripts %}
-    <script src="/metrics/static/script.js"></script>
+  {{ super() }}
+  <script src="/metrics/static/script.js"></script>
+  <link rel="stylesheet" href="/metrics/static/style.css">
 {% endblock %}

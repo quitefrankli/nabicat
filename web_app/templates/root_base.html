@@ -1,78 +1,114 @@
 <!doctype html>
 <html lang="en">
   <head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>{{ app_name }}</title>
-	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-	<link rel="stylesheet" href={{ url_for('static', filename='style.css') }}>
-	<script src={{ url_for('static', filename='script.js') }}></script>
-	<link rel="icon" type="image/x-icon" href={{ url_for('static', filename='wombat.ico') }}>
-	<meta name="apple-mobile-web-app-capable" content="yes">
-	<meta name="mobile-web-app-capable" content="yes">
-	<meta name="apple-mobile-web-app-status-bar-style" content="default">
-	<meta name="apple-mobile-web-app-title" content="LazyWombat">
-	<link rel="apple-touch-icon" href="{{ url_for('static', filename='wombat.png') }}">
-	<!-- <link rel="manifest" href="/manifest.json"> -->
-	<meta name="format-detection" content="telephone=no, email=no">
-	{% block scripts %}
-	{% endblock %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }}</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    
+    <!-- {{ app_name }} Honeydew Theme -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='wombat.ico') }}">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="{{ app_name }}">
+    <meta name="theme-color" content="#87A878">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='wombat.png') }}">
+    <meta name="format-detection" content="telephone=no, email=no">
+    
+    <!-- Custom Page Scripts -->
+    {% block scripts %}{% endblock %}
+    
+    <style>
+      /* Additional font application */
+      body {
+        font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-weight: 600;
+      }
+    </style>
   </head>
-  <body>
-	
-	{% include "flash_handler.html" %}
+  <body class="animate-fade-in">
+    
+    {% include "flash_handler.html" %}
 
-	<div class="p-3">
-		{% block actions_modal %}
-		{% endblock %}
-        <nav class="navbar navbar-expand-lg bg-body-tertiary mb-4">
-            <div class="container-fluid">
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
+    <div class="p-3 p-lg-4">
+      {% block actions_modal %}{% endblock %}
+      
+      <!-- Navigation -->
+      <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+          <!-- Brand -->
+          <a class="navbar-brand d-flex align-items-center" href="/" title="Home">
+            <i class="bi bi-house-heart-fill me-2 text-sage"></i>
+            <span class="fw-bold">{{ app_name }}</span>
+          </a>
+          
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          
+          <div class="collapse navbar-collapse" id="navbarContent">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              {% block navbar_items %}{% endblock %}
+            </ul>
+            
+            <div class="d-flex flex-column flex-lg-row gap-2 align-items-lg-center">
+              <!-- Actions Dropdown -->
+              <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="bi bi-grid-3x3-gap-fill"></i>
+                  <span>Actions</span>
                 </button>
-                
-                <div class="collapse navbar-collapse" id="navbarContent">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center" href="/" title="Home">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-house-door me-2" viewBox="0 0 16 16">
-                                    <path d="M8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 2 7.5V14a1 1 0 0 0 1 1h3.5a.5.5 0 0 0 .5-.5V11a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v3.5a.5.5 0 0 0 .5.5H13a1 1 0 0 0 1-1V7.5a.5.5 0 0 0-.146-.354l-6-6zM13 14H9.5V11a1.5 1.5 0 0 0-3 0v3H3V7.707l5-5 5 5V14z"/>
-                                    <path d="M2.5 8.5V14a.5.5 0 0 0 .5.5h3.5V11a1.5 1.5 0 0 1 3 0v3.5H13a.5.5 0 0 0 .5-.5V8.5l-5-5-5 5z"/>
-                                </svg>
-                                Home
-                            </a>
-                        </li>
-                        {% block navbar_items %}
-                        {% endblock %}
-                    </ul>
-                    
-                    <div class="d-flex flex-column flex-lg-row gap-2">
-                        <div class="dropdown">
-                            <button class="btn dropdown-toggle btn-outline-primary w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Actions
-                            </button>
-                            <ul class="dropdown-menu">
-                                {% block actions_menu %}
-                                {% endblock %}
-                            </ul>
-                        </div>
-                        {% if current_user.is_authenticated %}
-                            <a class="btn btn-outline-primary w-100" href="/account/logout">Logout</a>
-                        {% else %}
-                            <a class="btn btn-outline-primary w-100" href="/account/login">Login</a>
-                        {% endif %}
-                    </div>
-                </div>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  {% block actions_menu %}
+                  <li><span class="dropdown-item-text text-muted fst-italic">No actions available</span></li>
+                  {% endblock %}
+                </ul>
+              </div>
+              
+              <!-- Login/Logout -->
+              {% if current_user.is_authenticated %}
+                <a class="btn btn-outline-primary d-flex align-items-center gap-2" href="/account/logout">
+                  <i class="bi bi-box-arrow-right"></i>
+                  <span>Logout</span>
+                </a>
+              {% else %}
+                <a class="btn btn-primary d-flex align-items-center gap-2" href="/account/login">
+                  <i class="bi bi-box-arrow-in-right"></i>
+                  <span>Login</span>
+                </a>
+              {% endif %}
             </div>
-        </nav>
+          </div>
+        </div>
+      </nav>
 
-		<!-- spacer -->
-		<div style="height: 20px;"></div>
+      <!-- Main Content -->
+      <main class="container-fluid px-0">
+        {% block content %}{% endblock %}
+      </main>
+      
 
-		{% block content %}
-		{% endblock %}
-	</div>
+    </div>
+    
+
   </body>
 </html>

@@ -31,7 +31,7 @@ jswipe_api = Blueprint(
 
 @jswipe_api.context_processor
 def inject_app_name():
-    return dict(app_name='Get a Job', cities=AUSTRALIAN_CITIES)
+    return dict(app_name='JSwipe', cities=AUSTRALIAN_CITIES)
 
 def search_jobs(job_type, location) -> list[JobPost]:
     url = "https://active-jobs-db.p.rapidapi.com/active-ats-7d"

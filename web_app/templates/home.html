@@ -1,40 +1,165 @@
 {% extends "root_base.html" %}
+
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-			<div class="card shadow-lg border-0 bg-gradient" style="background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);">
-				<div class="d-flex flex-column align-items-center mb-4">
-					<h1 class="fw-bold text-center" style="letter-spacing: 2px; color: #2c3e50;">Build Version</h1>
-                    <div class="version p-2 rounded bg-light border d-inline-block text-center" style="max-width: 90vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        <code class="fs-4" style="max-width: 80vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ commit_hash }}</code>
-                    </div>
-				</div>
-            </div>
-				<div class="card-body text-center p-5">
-                    <div class="row g-3 mb-4 justify-content-center">
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/todoist2" class="btn btn-primary btn-lg w-100 rounded-pill shadow">Todoist2</a>
-                        </div>
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/metrics" class="btn btn-warning btn-lg w-100 rounded-pill shadow">Metrics</a>
-                        </div>
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/tubio" class="btn btn-info btn-lg w-100 rounded-pill shadow">Tubio</a>
-                        </div>
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/jswipe" class="btn btn-primary btn-lg w-100 rounded-pill shadow">JSwipe</a>
-                        </div>
-                        {% if current_user.is_authenticated and current_user.is_admin %}
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/crosswords" class="btn btn-secondary btn-lg w-100 rounded-pill shadow">Crosswords</a>
-                        </div>
-                        {% endif %}
-                        <div class="col-12 col-md-6 col-lg-6">
-                            <a href="/file_store" class="btn btn-success btn-lg w-100 rounded-pill shadow">File Store</a>
-                        </div>
-                    </div>
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-10 col-xl-8">
+      
+      <!-- Welcome Section -->
+      <div class="text-center mb-5">
+        <h1 class="display-4 mb-3" style="color: var(--hw-forest);">
+          <i class="bi bi-moon-stars-fill text-sage me-3"></i>
+          Welcome to {{ app_name }}
+        </h1>
+      </div>
+      
+      <!-- Build Version Card -->
+      <div class="card mb-5 border-0 shadow-soft">
+        <div class="card-body text-center p-4">
+          <div class="d-inline-flex align-items-center gap-2 version-badge">
+            <i class="bi bi-git text-sage"></i>
+            <code class="text-forest">{{ commit_hash[:12] if commit_hash else 'unknown' }}</code>
+          </div>
+          <p class="text-muted mb-0 mt-2 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Current build version
+          </p>
+        </div>
+      </div>
+      
+      <!-- App Grid -->
+      <div class="row g-4">
+        <!-- Todoist2 -->
+        <div class="col-12 col-md-6">
+          <a href="/todoist2" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
+                  <i class="bi bi-check2-square"></i>
                 </div>
+                <h3 class="h5 mb-2 text-forest">Todoist2</h3>
+                <p class="text-muted small mb-0">Track your goals and manage tasks with ease</p>
+              </div>
             </div>
+          </a>
+        </div>
+        
+        <!-- Metrics -->
+        <div class="col-12 col-md-6">
+          <a href="/metrics" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #E9C46A 0%, #F4A261 100%);">
+                  <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">Metrics</h3>
+                <p class="text-muted small mb-0">Visualize your progress and insights</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        
+        <!-- Tubio -->
+        <div class="col-12 col-md-6">
+          <a href="/tubio" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
+                  <i class="bi bi-music-note-beamed"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">Tubio</h3>
+                <p class="text-muted small mb-0">Your personal music collection manager</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        
+        <!-- JSwipe -->
+        <div class="col-12 col-md-6">
+          <a href="/jswipe" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #E07A5F 0%, #F4A261 100%);">
+                  <i class="bi bi-briefcase-fill"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">JSwipe</h3>
+                <p class="text-muted small mb-0">Find your next career opportunity</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        
+        <!-- File Store -->
+        <div class="col-12 col-md-6">
+          <a href="/file_store" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #6B8E5A 0%, #87A878 100%);">
+                  <i class="bi bi-cloud-upload-fill"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">File Store</h3>
+                <p class="text-muted small mb-0">Secure cloud storage for your files</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        
+        <!-- Crosswords (Admin Only) -->
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        <div class="col-12 col-md-6">
+          <a href="/crosswords" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);">
+                  <i class="bi bi-grid-3x3"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">Crosswords</h3>
+                <p class="text-muted small mb-0">Generate and solve crossword puzzles</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        {% endif %}
+      </div>
+      
     </div>
+  </div>
 </div>
+
+<style>
+  .home-app-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 20px !important;
+  }
+  
+  .home-app-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(45, 74, 62, 0.15) !important;
+  }
+  
+  .app-icon-wrapper {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    color: white;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease;
+  }
+  
+  .home-app-card:hover .app-icon-wrapper {
+    transform: scale(1.1) rotate(-5deg);
+  }
+  
+  .version-badge {
+    background: rgba(135, 168, 120, 0.1);
+    border: 1px solid rgba(135, 168, 120, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem 1.5rem;
+  }
+</style>
 {% endblock %}

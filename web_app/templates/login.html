@@ -1,21 +1,82 @@
 {% extends "root_base.html" %}
 
 {% block content %}
-	<div class="text-center mt-5">
-		<h1>Login</h1>
-		<form action="#" method="post" style="max-width: 350px; margin: auto">
-			<div class="form-group">
-				<input type="username" class="form-control" aria-describedby="usernameHelp" placeholder="Username" name="username">
-			</div>
-			<div class="form-group">
-				<input type="password" class="form-control" placeholder="Password" name="password">
-			</div>
-			<div class="row">
-				<div class="col-sm-12 text-center">
-					<button type="submit" class="btn btn-primary">Login</button>
-					<button type="submit" class="btn btn-outline-primary" formaction="{{ url_for('.register') }}">Register</button>
-				</div>
-			</div>
-		</form>
-	</div>
+<div class="container">
+  <div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-12 col-md-6 col-lg-4">
+      
+      <!-- Login Card -->
+      <div class="card border-0 shadow-lg" style="border-radius: 24px;">
+        <div class="card-body p-4 p-md-5">
+          
+          <!-- Header -->
+          <div class="text-center mb-4">
+            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                 style="width: 80px; height: 80px; background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
+              <i class="bi bi-person-heart text-white" style="font-size: 2.5rem;"></i>
+            </div>
+            <h2 class="text-forest mb-1">Welcome Back</h2>
+            <p class="text-muted small">Sign in to your {{ app_name }} account</p>
+          </div>
+          
+          <!-- Login Form -->
+          <form action="#" method="post">
+            <div class="mb-4">
+              <label for="username" class="form-label d-flex align-items-center gap-2">
+                <i class="bi bi-person text-muted"></i>
+                Username
+              </label>
+              <input type="text" 
+                     class="form-control form-control-lg" 
+                     id="username"
+                     name="username" 
+                     placeholder="Enter your username"
+                     required>
+            </div>
+            
+            <div class="mb-4">
+              <label for="password" class="form-label d-flex align-items-center gap-2">
+                <i class="bi bi-lock text-muted"></i>
+                Password
+              </label>
+              <input type="password" 
+                     class="form-control form-control-lg" 
+                     id="password"
+                     name="password" 
+                     placeholder="Enter your password"
+                     required>
+            </div>
+            
+            <div class="d-grid gap-3">
+              <button type="submit" class="btn btn-primary btn-lg d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-box-arrow-in-right"></i>
+                Sign In
+              </button>
+              
+              <div class="position-relative text-center my-2">
+                <hr class="border-secondary opacity-25">
+                <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 text-muted small">or</span>
+              </div>
+              
+              <button type="submit" 
+                      class="btn btn-outline-primary btn-lg d-flex align-items-center justify-content-center gap-2"
+                      formaction="{{ url_for('.register') }}">
+                <i class="bi bi-person-plus"></i>
+                Create Account
+              </button>
+            </div>
+          </form>
+          
+        </div>
+      </div>
+      
+      <!-- Footer Text -->
+      <p class="text-center text-muted mt-4 small">
+        <i class="bi bi-shield-check me-1"></i>
+        Secure login with encrypted connection
+      </p>
+      
+    </div>
+  </div>
+</div>
 {% endblock %}

@@ -1,5 +1,5 @@
-<div class="card mb-4 shadow-sm" style="border: none; border-radius: 12px; overflow: hidden;">
-    <div class="card-header" style="background: linear-gradient(135deg, #0dcaf0 0%, #0a9ec7 100%); padding: 0;">
+<div class="card mb-4 shadow-sm" style="border: none; border-radius: 16px; overflow: hidden;">
+    <div class="card-header" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); padding: 0;">
         <div class="d-flex justify-content-between align-items-center">
             <button class="btn btn-link text-white text-decoration-none flex-grow-1 text-start py-3 px-3 playlist-collapse-btn" 
                     type="button" 
@@ -11,7 +11,7 @@
                     style="font-size: 1.25rem; font-weight: bold;">
                 <i class="bi bi-chevron-down me-3 playlist-chevron" style="font-size: 1.5rem; font-weight: bold;"></i>
                 <i class="bi bi-music-note-list me-2"></i>{{ playlist_name }}
-                <span class="badge bg-light text-info ms-2">{{ playlist_data|length }} songs</span>
+                <span class="badge bg-light ms-2" style="color: var(--hw-sage-dark, #6B8E5A);">{{ playlist_data|length }} songs</span>
             </button>
             <div class="d-flex gap-2 pe-3">
                 {% if playlist_data %}
@@ -32,35 +32,35 @@
         </div>
     </div>
     <div id="playlist-{{ playlist_name|replace(' ', '-')|replace("'", '') }}" class="collapse show">
-        <div class="card-body p-3">
+        <div class="card-body p-3" style="background: rgba(135, 168, 120, 0.03);">
             {% if not playlist_data %}
             <div class="text-center py-4 text-muted">
-                <i class="bi bi-music-note-beamed" style="font-size: 3rem; opacity: 0.3;"></i>
+                <i class="bi bi-music-note-beamed" style="font-size: 3rem; opacity: 0.3; color: var(--hw-sage, #87A878);"></i>
                 <p class="mt-2">No songs in this playlist yet.</p>
             </div>
             {% else %}
             <div class="accordion" id="audioAccordion-{{ playlist_name|replace(' ', '-') }}" data-playlist-name="{{ playlist_name }}">
                 {% for crc, title in playlist_data %}
-                <div class="accordion-item mb-3 border-0 shadow-sm" data-audio-crc="{{ crc }}" data-playlist="{{ playlist_name }}">
+                <div class="accordion-item mb-3 border-0 shadow-sm" data-audio-crc="{{ crc }}" data-playlist="{{ playlist_name }}" style="border-radius: 12px; overflow: hidden;">
                     <h2 class="accordion-header">
                         <div class="d-flex align-items-center gap-2">
                             <div class="form-check ms-2">
-                                <input class="form-check-input song-checkbox" type="checkbox" value="{{ crc }}" id="checkbox-{{ crc }}-{{ playlist_name|replace(' ', '-') }}" data-song-crc="{{ crc }}">
+                                <input class="form-check-input song-checkbox" type="checkbox" value="{{ crc }}" id="checkbox-{{ crc }}-{{ playlist_name|replace(' ', '-') }}" data-song-crc="{{ crc }}" style="border-color: var(--hw-sage, #87A878); accent-color: var(--hw-sage, #87A878);">
                             </div>
-                            <button class="btn btn-sm btn-outline-primary track-play-btn" id="play-btn-{{ crc }}" onclick="togglePlayTrack('{{ crc }}')" title="Play/Pause track" style="min-width: 40px;">
+                            <button class="btn btn-sm btn-outline-primary track-play-btn" id="play-btn-{{ crc }}" onclick="togglePlayTrack('{{ crc }}')" title="Play/Pause track" style="min-width: 40px; border-color: var(--hw-sage, #87A878); color: var(--hw-sage, #87A878);">
                                 <i class="bi bi-play-fill"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-secondary track-loop-btn" id="loop-btn-{{ crc }}" onclick="toggleLoopTrack('{{ crc }}')" title="Toggle loop" style="min-width: 40px;">
                                 <i class="bi bi-arrow-repeat"></i>
                             </button>
-                            <button class="accordion-button collapsed bg-gradient text-primary fw-semibold flex-grow-1" 
+                            <button class="accordion-button collapsed bg-gradient fw-semibold flex-grow-1" 
                                     type="button" 
                                     data-bs-toggle="collapse" 
                                     data-bs-target="#collapse-{{ crc }}" 
                                     aria-expanded="false" 
                                     aria-controls="collapse-{{ crc }}"
-                                    style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-                                <i class="bi bi-musical-note me-2"></i>
+                                    style="background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%); color: var(--hw-forest, #2D4A3E);">
+                                <i class="bi bi-musical-note me-2 text-sage"></i>
                                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ title }}</span>
                             </button>
                         </div>
@@ -68,9 +68,9 @@
                     <div id="collapse-{{ crc }}" 
                         class="accordion-collapse collapse" 
                         data-bs-parent="#audioAccordion-{{ playlist_name|replace(' ', '-') }}">
-                        <div class="accordion-body bg-light">
+                        <div class="accordion-body" style="background: white;">
                             <div class="mb-3">
-                                <h6 class="text-primary mb-2">Full Title:</h6>
+                                <h6 class="mb-2" style="color: var(--hw-sage-dark, #6B8E5A);">Full Title:</h6>
                                 <p class="text-dark fw-medium">{{ title }}</p>
                             </div>
                             <div class="d-flex flex-column align-items-center">
@@ -81,8 +81,8 @@
                                 </audio>
                             </div>
                             <div class="mt-3 d-flex align-items-center justify-content-center gap-3">
-                                <label for="volume-{{ crc }}" class="form-label mb-0" style="min-width: 60px;">
-                                    <i class="bi bi-volume-up"></i> Volume:
+                                <label for="volume-{{ crc }}" class="form-label mb-0" style="min-width: 60px; color: var(--hw-text-secondary, #5A6B5A);">
+                                    <i class="bi bi-volume-up text-sage"></i> Volume:
                                 </label>
                                 <input type="range" class="form-range" id="volume-{{ crc }}" 
                                        min="0" max="100" value="100" 

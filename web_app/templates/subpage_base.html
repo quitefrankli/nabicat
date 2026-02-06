@@ -1,0 +1,57 @@
+{% extends "root_base.html" %}
+
+{#
+  Unified Subpage Base Template
+  All subpages should extend this template for consistent theming
+  
+  Usage:
+    {% extends "subpage_base.html" %}
+    
+    {% block page_title %}Your Page Title{% endblock %}
+    {% block page_subtitle %}Optional subtitle{% endblock %}
+    
+    {% block page_nav_items %}
+      <!-- Navigation items specific to this subpage -->
+    {% endblock %}
+    
+    {% block page_actions %}
+      <!-- Action menu items -->
+    {% endblock %}
+    
+    {% block page_content %}
+      <!-- Main page content -->
+    {% endblock %}
+#}
+
+{% block navbar_items %}
+  {{ super() }}
+  {% block page_nav_items %}{% endblock %}
+{% endblock %}
+
+{% block actions_menu %}
+  {% block page_actions %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+  <!-- Page Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        {% block page_icon %}{% endblock %}
+        <div>
+          <h1 class="h2 mb-1 text-forest">
+            {% block page_title %}Page Title{% endblock %}
+          </h1>
+          {% if self.page_subtitle() %}
+            <p class="text-muted mb-0">
+              {% block page_subtitle %}{% endblock %}
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Page Content -->
+  {% block page_content %}{% endblock %}
+{% endblock %}

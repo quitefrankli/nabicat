@@ -1,80 +1,138 @@
-/* Modern Todoist2 Styling */
+/* Todoist2 - Honeydew Theme Enhancements */
+
+/* Truncate button for long text */
 .truncate-button {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
-/* Custom accordion styling */
+/* Custom accordion styling for honeydew theme */
 .accordion-button {
-	transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px !important;
 }
 
 .accordion-button:not(.collapsed) {
-	color: #1976d2;
-	background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
-	box-shadow: none;
+  color: var(--hw-sage-dark, #6B8E5A);
+  background: linear-gradient(135deg, rgba(135, 168, 120, 0.1) 0%, rgba(168, 198, 134, 0.1) 100%) !important;
+  box-shadow: none;
 }
 
 .accordion-button:focus {
-	box-shadow: 0 0 0 0.25rem rgba(33, 150, 243, 0.25);
+  box-shadow: 0 0 0 0.25rem rgba(135, 168, 120, 0.25);
 }
 
-/* Enhanced card shadows */
-.card {
-	transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* Goal cards with honeydew accents */
+.goal-card {
+  border-left: 4px solid var(--hw-sage, #87A878);
+  transition: all 0.3s ease;
 }
 
-.card:hover {
-	transform: translateY(-2px);
-	box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+.goal-card:hover {
+  border-left-color: var(--hw-sage-dark, #6B8E5A);
 }
 
-/* Modal enhancements */
-.modal-content {
-	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+/* Priority indicators */
+.priority-high {
+  border-left-color: var(--hw-coral, #E07A5F) !important;
+}
+
+.priority-medium {
+  border-left-color: var(--hw-gold, #E9C46A) !important;
+}
+
+.priority-low {
+  border-left-color: var(--hw-sage-light, #A8C686) !important;
 }
 
 /* Chart container styling */
 .chart-container {
-	background: white;
-	min-height: 400px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  min-height: 400px;
+  padding: 1.5rem;
+}
+
+/* Velocity badge */
+.velocity-badge {
+  background: linear-gradient(135deg, var(--hw-peach, #F4A261) 0%, var(--hw-gold, #E9C46A) 100%);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+}
+
+/* Empty state for goals */
+.empty-goals {
+  text-align: center;
+  padding: 3rem;
+  color: var(--hw-text-muted, #8A9A8A);
+}
+
+.empty-goals i {
+  font-size: 4rem;
+  opacity: 0.3;
+  margin-bottom: 1rem;
 }
 
 /* Form floating labels with icons */
 .form-floating > label {
-	padding-left: 1rem;
-	color: #666;
+  padding-left: 1rem;
+  color: var(--hw-text-secondary, #5A6B5A);
 }
 
 .form-floating > .form-control:focus ~ label,
 .form-floating > .form-control:not(:placeholder-shown) ~ label {
-	color: #1976d2;
+  color: var(--hw-sage, #87A878);
 }
 
 /* Button group enhancements */
 .btn-group .btn {
-	transition: all 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .btn-group .btn:hover {
-	transform: scale(1.05);
-	z-index: 2;
+  transform: scale(1.05);
+  z-index: 2;
 }
 
-/* Alert styling */
-.alert {
-	border: none;
-	border-radius: 8px;
+/* Status badges */
+.status-completed {
+  background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-light, #A8C686) 100%);
 }
 
-/* Empty state styling */
-.text-center i[style*="font-size: 4rem"] {
-	opacity: 0.5;
+.status-pending {
+  background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%);
 }
 
 /* Data points styling */
 .border-start.border-4 {
-	padding-left: 1rem !important;
+  padding-left: 1rem !important;
+}
+
+/* Summary cards */
+.summary-stat {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 249, 246, 0.9) 100%);
+  border: 1px solid rgba(135, 168, 120, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.summary-stat:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(45, 74, 62, 0.1);
+}
+
+.summary-stat .stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--hw-forest, #2D4A3E);
+}
+
+.summary-stat .stat-label {
+  color: var(--hw-text-secondary, #5A6B5A);
+  font-size: 0.875rem;
 }

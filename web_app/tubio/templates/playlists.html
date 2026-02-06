@@ -7,17 +7,20 @@
     <div class="container py-5">
         <div class="row justify-content-center">
             <div class="col-md-8 col-lg-6">
-                <div class="card shadow-lg border-0" style="border-radius: 16px; background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%);">
+                <div class="card shadow-lg border-0" style="border-radius: 20px; background: linear-gradient(135deg, rgba(135, 168, 120, 0.1) 0%, rgba(168, 198, 134, 0.1) 100%);">
                     <div class="card-body text-center p-5">
                         <div class="mb-4">
-                            <i class="bi bi-music-note-list" style="font-size: 5rem; color: #0dcaf0; opacity: 0.7;"></i>
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center" 
+                                 style="width: 100px; height: 100px; background: linear-gradient(135deg, rgba(135, 168, 120, 0.2) 0%, rgba(168, 198, 134, 0.2) 100%);">
+                                <i class="bi bi-music-note-list" style="font-size: 3.5rem; color: var(--hw-sage, #87A878);"></i>
+                            </div>
                         </div>
-                        <h3 class="mb-3" style="color: #0a9ec7; font-weight: bold;">No Music Yet!</h3>
-                        <p class="lead mb-4" style="color: #495057;">
+                        <h3 class="mb-3" style="color: var(--hw-forest, #2D4A3E); font-weight: bold;">No Music Yet!</h3>
+                        <p class="lead mb-4" style="color: var(--hw-text-secondary, #5A6B5A);">
                             Your music library is empty. Get started by downloading your first song!
                         </p>
-                        <div class="alert alert-info border-0 mb-4" style="background-color: rgba(255, 255, 255, 0.7);">
-                            <i class="bi bi-lightbulb me-2"></i>
+                        <div class="alert border-0 mb-4" style="background-color: rgba(255, 255, 255, 0.7); color: var(--hw-text-secondary, #5A6B5A);">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
                             <strong>How to get started:</strong>
                             <ol class="text-start mt-2 mb-0">
                                 <li>Switch to the <strong>Search</strong> tab</li>
@@ -26,7 +29,7 @@
                                 <li>Return here to see your music!</li>
                             </ol>
                         </div>
-                        <button class="btn btn-info btn-lg shadow" onclick="switchTab('search')" style="border-radius: 10px; padding: 0.75rem 2rem;">
+                        <button class="btn btn-primary btn-lg shadow" onclick="switchTab('search')" style="border-radius: 12px; padding: 0.75rem 2rem;">
                             <i class="bi bi-search me-2"></i>Go to Search
                         </button>
                     </div>

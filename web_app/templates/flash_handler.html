@@ -1,28 +1,34 @@
-<div class="text-center mt-1">
-	{% with messages = get_flashed_messages(with_categories=true) %}
-	{% if messages %}
-		{% for category, message in messages %}
-			{% if category == 'error' %}
-			<div class="alert alert-danger" role="alert">
-				{{ message }}
-			</div>
-			{% endif %}
-			{% if category == 'warning' %}
-			<div class="alert alert-warning" role="alert">
-				{{ message }}
-			</div>
-			{% endif %}
-			{% if category == 'info' %}
-			<div class="alert alert-info" role="alert">
-				{{ message }}
-			</div>
-			{% endif %}
-			{% if category == 'success' %}
-			<div class="alert alert-success" role="alert">
-				{{ message }}
-			</div>
-			{% endif %}
-		{% endfor %}
-	{% endif %}
-	{% endwith %}
+<div class="container mt-3">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="row justify-content-center">
+      <div class="col-12 col-lg-8">
+        {% for category, message in messages %}
+          {% set alert_class = 'alert-info' %}
+          {% set icon = 'bi-info-circle-fill' %}
+          
+          {% if category == 'error' %}
+            {% set alert_class = 'alert-danger' %}
+            {% set icon = 'bi-exclamation-triangle-fill' %}
+          {% elif category == 'warning' %}
+            {% set alert_class = 'alert-warning' %}
+            {% set icon = 'bi-exclamation-circle-fill' %}
+          {% elif category == 'success' %}
+            {% set alert_class = 'alert-success' %}
+            {% set icon = 'bi-check-circle-fill' %}
+          {% elif category == 'info' %}
+            {% set alert_class = 'alert-info' %}
+            {% set icon = 'bi-info-circle-fill' %}
+          {% endif %}
+          
+          <div class="alert {{ alert_class }} alert-dismissible fade show d-flex align-items-center gap-2 shadow-sm" role="alert" style="border-radius: 12px;">
+            <i class="bi {{ icon }} flex-shrink-0"></i>
+            <div>{{ message }}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+  {% endwith %}
 </div>

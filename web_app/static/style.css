@@ -1,0 +1,679 @@
+/* ============================================
+   LazyWombat - Honeydew Theme
+   A cool, chill but warm aesthetic
+   ============================================ */
+
+/* CSS Variables for the Honeydew Theme */
+:root {
+  /* Core Colors */
+  --hw-bg-primary: #F0FFF0;
+  --hw-bg-secondary: #FAF9F6;
+  --hw-bg-cream: #F5F5DC;
+  --hw-white: #FFFFFF;
+  
+  /* Brand Colors */
+  --hw-sage: #87A878;
+  --hw-sage-light: #A8C686;
+  --hw-sage-dark: #6B8E5A;
+  --hw-forest: #2D4A3E;
+  --hw-moss: #4A5D4A;
+  
+  /* Warm Accents */
+  --hw-peach: #F4A261;
+  --hw-peach-light: #F4C5A1;
+  --hw-gold: #E9C46A;
+  --hw-coral: #E07A5F;
+  --hw-terracotta: #D4866A;
+  
+  /* Neutrals */
+  --hw-text-primary: #2D4A3E;
+  --hw-text-secondary: #5A6B5A;
+  --hw-text-muted: #8A9A8A;
+  --hw-border: rgba(135, 168, 120, 0.2);
+  
+  /* Gradients */
+  --hw-gradient-warm: linear-gradient(135deg, #F0FFF0 0%, #FAF9F6 50%, #F5F5DC 100%);
+  --hw-gradient-sage: linear-gradient(135deg, #87A878 0%, #A8C686 100%);
+  --hw-gradient-golden: linear-gradient(135deg, #E9C46A 0%, #F4A261 100%);
+  --hw-gradient-soft: linear-gradient(135deg, rgba(240, 255, 240, 0.9) 0%, rgba(250, 249, 246, 0.95) 100%);
+  
+  /* Shadows */
+  --hw-shadow-sm: 0 2px 8px rgba(45, 74, 62, 0.06);
+  --hw-shadow-md: 0 4px 20px rgba(45, 74, 62, 0.08);
+  --hw-shadow-lg: 0 8px 32px rgba(45, 74, 62, 0.12);
+  --hw-shadow-glow: 0 0 20px rgba(135, 168, 120, 0.3);
+  
+  /* Border Radius */
+  --hw-radius-sm: 8px;
+  --hw-radius-md: 12px;
+  --hw-radius-lg: 16px;
+  --hw-radius-xl: 24px;
+  --hw-radius-full: 9999px;
+  
+  /* Transitions */
+  --hw-transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --hw-transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --hw-transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--hw-gradient-warm);
+  background-attachment: fixed;
+  color: var(--hw-text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--hw-bg-secondary);
+  border-radius: var(--hw-radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hw-sage-light);
+  border-radius: var(--hw-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hw-sage);
+}
+
+/* ============================================
+   Navigation - Glassmorphism Style
+   ============================================ */
+
+.navbar {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-sm);
+  padding: 0.75rem 1.5rem !important;
+  margin-bottom: 2rem !important;
+}
+
+.navbar-brand,
+.nav-link {
+  color: var(--hw-text-primary) !important;
+  font-weight: 500;
+  transition: var(--hw-transition-fast);
+  border-radius: var(--hw-radius-md);
+  padding: 0.5rem 1rem !important;
+}
+
+.nav-link:hover {
+  color: var(--hw-sage-dark) !important;
+  background: rgba(135, 168, 120, 0.1);
+}
+
+.nav-link.active {
+  color: var(--hw-sage-dark) !important;
+  background: rgba(135, 168, 120, 0.15);
+  font-weight: 600;
+}
+
+.navbar-toggler {
+  border: none;
+  border-radius: var(--hw-radius-md);
+  padding: 0.5rem;
+}
+
+.navbar-toggler:focus {
+  box-shadow: 0 0 0 3px rgba(135, 168, 120, 0.3);
+}
+
+/* ============================================
+   Buttons - Honeydew Style
+   ============================================ */
+
+.btn {
+  border-radius: var(--hw-radius-md);
+  font-weight: 500;
+  padding: 0.625rem 1.25rem;
+  transition: var(--hw-transition-base);
+  border: none;
+}
+
+/* Primary Button - Sage Green */
+.btn-primary {
+  background: var(--hw-gradient-sage);
+  color: white;
+  box-shadow: 0 4px 12px rgba(135, 168, 120, 0.4);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--hw-sage-dark) 0%, var(--hw-sage) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(135, 168, 120, 0.5);
+}
+
+/* Secondary Button - Warm Peach */
+.btn-secondary {
+  background: linear-gradient(135deg, var(--hw-peach) 0%, var(--hw-coral) 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(244, 162, 97, 0.4);
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(135deg, var(--hw-terracotta) 0%, var(--hw-peach) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(244, 162, 97, 0.5);
+}
+
+/* Success Button - Forest Green */
+.btn-success {
+  background: linear-gradient(135deg, var(--hw-forest) 0%, var(--hw-moss) 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(45, 74, 62, 0.3);
+}
+
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 74, 62, 0.4);
+}
+
+/* Info Button - Soft Gold */
+.btn-info {
+  background: var(--hw-gradient-golden);
+  color: var(--hw-text-primary);
+  box-shadow: 0 4px 12px rgba(233, 196, 106, 0.4);
+}
+
+.btn-info:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(233, 196, 106, 0.5);
+  color: var(--hw-text-primary);
+}
+
+/* Warning & Danger */
+.btn-warning {
+  background: linear-gradient(135deg, #F4D03F 0%, #F5B041 100%);
+  color: var(--hw-text-primary);
+  box-shadow: 0 4px 12px rgba(244, 208, 63, 0.4);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #E07A5F 0%, #D35400 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(224, 122, 95, 0.4);
+}
+
+/* Outline Buttons */
+.btn-outline-primary {
+  background: transparent;
+  border: 2px solid var(--hw-sage);
+  color: var(--hw-sage);
+}
+
+.btn-outline-primary:hover {
+  background: var(--hw-sage);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* ============================================
+   Cards - Soft & Elevated
+   ============================================ */
+
+.card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-md);
+  transition: var(--hw-transition-base);
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--hw-shadow-lg);
+}
+
+.card-header {
+  background: var(--hw-gradient-soft);
+  border-bottom: 1px solid var(--hw-border);
+  padding: 1.25rem;
+  font-weight: 600;
+  color: var(--hw-text-primary);
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+.card-footer {
+  background: transparent;
+  border-top: 1px solid var(--hw-border);
+  padding: 1rem 1.5rem;
+}
+
+/* ============================================
+   Forms - Clean & Minimal
+   ============================================ */
+
+.form-control,
+.form-select {
+  background: rgba(255, 255, 255, 0.8);
+  border: 2px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  padding: 0.75rem 1rem;
+  color: var(--hw-text-primary);
+  transition: var(--hw-transition-fast);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background: white;
+  border-color: var(--hw-sage);
+  box-shadow: 0 0 0 4px rgba(135, 168, 120, 0.15);
+  outline: none;
+}
+
+.form-label {
+  color: var(--hw-text-secondary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label,
+.form-floating > .form-select ~ label {
+  color: var(--hw-sage);
+  font-weight: 600;
+}
+
+/* ============================================
+   Dropdowns
+   ============================================ */
+
+.dropdown-menu {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  box-shadow: var(--hw-shadow-lg);
+  padding: 0.5rem;
+}
+
+.dropdown-item {
+  border-radius: var(--hw-radius-sm);
+  padding: 0.625rem 1rem;
+  color: var(--hw-text-primary);
+  transition: var(--hw-transition-fast);
+}
+
+.dropdown-item:hover {
+  background: rgba(135, 168, 120, 0.1);
+  color: var(--hw-sage-dark);
+}
+
+.dropdown-divider {
+  border-color: var(--hw-border);
+  margin: 0.5rem;
+}
+
+/* ============================================
+   Modals
+   ============================================ */
+
+.modal-content {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: 0 25px 50px -12px rgba(45, 74, 62, 0.25);
+}
+
+.modal-header {
+  background: var(--hw-gradient-soft);
+  border-bottom: 1px solid var(--hw-border);
+  padding: 1.25rem 1.5rem;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--hw-border);
+  padding: 1.25rem 1.5rem;
+}
+
+/* ============================================
+   List Groups
+   ============================================ */
+
+.list-group-item {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: var(--hw-border);
+  color: var(--hw-text-primary);
+  transition: var(--hw-transition-fast);
+}
+
+.list-group-item:hover {
+  background: rgba(135, 168, 120, 0.08);
+}
+
+.list-group-item.active {
+  background: var(--hw-gradient-sage);
+  border-color: var(--hw-sage);
+}
+
+/* ============================================
+   Accordion
+   ============================================ */
+
+.accordion-item {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md) !important;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.accordion-button {
+  background: transparent;
+  color: var(--hw-text-primary);
+  font-weight: 500;
+  padding: 1.25rem;
+}
+
+.accordion-button:not(.collapsed) {
+  background: rgba(135, 168, 120, 0.1);
+  color: var(--hw-sage-dark);
+  box-shadow: none;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+  border-color: var(--hw-sage);
+}
+
+.accordion-button::after {
+  filter: hue-rotate(100deg) saturate(0.5);
+}
+
+/* ============================================
+   Alerts & Badges
+   ============================================ */
+
+.alert {
+  border: none;
+  border-radius: var(--hw-radius-md);
+  padding: 1rem 1.25rem;
+}
+
+.alert-info {
+  background: rgba(135, 168, 120, 0.15);
+  color: var(--hw-sage-dark);
+}
+
+.alert-warning {
+  background: rgba(244, 162, 97, 0.15);
+  color: var(--hw-terracotta);
+}
+
+.alert-success {
+  background: rgba(135, 168, 120, 0.2);
+  color: var(--hw-forest);
+}
+
+.alert-danger {
+  background: rgba(224, 122, 95, 0.15);
+  color: var(--hw-coral);
+}
+
+.badge {
+  border-radius: var(--hw-radius-full);
+  font-weight: 500;
+  padding: 0.5em 0.75em;
+}
+
+/* ============================================
+   Home Page - Special Styling
+   ============================================ */
+
+.home-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 249, 246, 0.9) 100%);
+  border: 1px solid rgba(135, 168, 120, 0.2);
+  border-radius: var(--hw-radius-xl);
+  box-shadow: var(--hw-shadow-md);
+  overflow: hidden;
+}
+
+.home-btn {
+  border-radius: var(--hw-radius-full) !important;
+  padding: 1rem 2rem !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  transition: var(--hw-transition-base);
+  border: none !important;
+}
+
+.home-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: var(--hw-shadow-lg);
+}
+
+.version-badge {
+  background: rgba(135, 168, 120, 0.1);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  padding: 0.75rem 1.5rem;
+  font-family: 'SF Mono', monospace;
+  color: var(--hw-text-secondary);
+}
+
+/* ============================================
+   Tables
+   ============================================ */
+
+.table {
+  color: var(--hw-text-primary);
+}
+
+.table thead th {
+  background: var(--hw-gradient-soft);
+  border-bottom: 2px solid var(--hw-border);
+  color: var(--hw-text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.table tbody tr:hover {
+  background: rgba(135, 168, 120, 0.05);
+}
+
+/* ============================================
+   Pagination
+   ============================================ */
+
+.pagination .page-link {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--hw-border);
+  color: var(--hw-text-primary);
+  border-radius: var(--hw-radius-sm);
+  margin: 0 0.25rem;
+}
+
+.pagination .page-link:hover {
+  background: rgba(135, 168, 120, 0.1);
+  border-color: var(--hw-sage);
+  color: var(--hw-sage-dark);
+}
+
+.pagination .page-item.active .page-link {
+  background: var(--hw-gradient-sage);
+  border-color: var(--hw-sage);
+}
+
+/* ============================================
+   Progress Bars
+   ============================================ */
+
+.progress {
+  background: rgba(135, 168, 120, 0.15);
+  border-radius: var(--hw-radius-full);
+  height: 0.75rem;
+}
+
+.progress-bar {
+  background: var(--hw-gradient-sage);
+  border-radius: var(--hw-radius-full);
+}
+
+/* ============================================
+   Toast Notifications
+   ============================================ */
+
+.toast {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  box-shadow: var(--hw-shadow-lg);
+}
+
+.toast-header {
+  background: var(--hw-gradient-soft);
+  border-bottom: 1px solid var(--hw-border);
+}
+
+/* ============================================
+   Tooltips & Popovers
+   ============================================ */
+
+.tooltip .tooltip-inner {
+  background: var(--hw-forest);
+  border-radius: var(--hw-radius-sm);
+  padding: 0.5rem 0.75rem;
+}
+
+.popover {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  box-shadow: var(--hw-shadow-lg);
+}
+
+.popover-header {
+  background: var(--hw-gradient-soft);
+  border-bottom: 1px solid var(--hw-border);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(135, 168, 120, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(135, 168, 120, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-pulse {
+  animation: pulse-glow 2s infinite;
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.text-sage {
+  color: var(--hw-sage) !important;
+}
+
+.text-forest {
+  color: var(--hw-forest) !important;
+}
+
+.text-peach {
+  color: var(--hw-peach) !important;
+}
+
+.bg-honeydew {
+  background: var(--hw-bg-primary) !important;
+}
+
+.bg-sage {
+  background: var(--hw-sage) !important;
+}
+
+.border-sage {
+  border-color: var(--hw-sage) !important;
+}
+
+.shadow-soft {
+  box-shadow: var(--hw-shadow-md) !important;
+}
+
+.rounded-xl {
+  border-radius: var(--hw-radius-xl) !important;
+}
+
+/* ============================================
+   Responsive Adjustments
+   ============================================ */
+
+@media (max-width: 768px) {
+  .navbar {
+    border-radius: var(--hw-radius-md);
+    padding: 0.5rem 1rem !important;
+  }
+  
+  .card {
+    border-radius: var(--hw-radius-md);
+  }
+  
+  .home-btn {
+    padding: 0.875rem 1.5rem !important;
+  }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+  body {
+    background: white !important;
+  }
+  
+  .navbar,
+  .btn {
+    display: none !important;
+  }
+  
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+}

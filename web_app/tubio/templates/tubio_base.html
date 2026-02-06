@@ -1,46 +1,66 @@
-{% extends "root_base.html" %}
+{% extends "subpage_base.html" %}
+
+{% block page_icon %}
+  <div class="rounded-circle d-flex align-items-center justify-content-center" 
+       style="width: 56px; height: 56px; background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
+    <i class="bi bi-music-note-beamed text-white fs-4"></i>
+  </div>
+{% endblock %}
+
+{% block page_title %}Tubio{% endblock %}
+{% block page_subtitle %}Your personal music collection manager{% endblock %}
+
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link d-flex align-items-center gap-2" href="#" id="playlists-nav-tab" onclick="switchTab('playlists')">
+      <i class="bi bi-music-note-list"></i>
+      <span>Playlists</span>
+    </a>
+  </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link d-flex align-items-center gap-2" href="#" id="search-nav-tab" onclick="switchTab('search')">
+      <i class="bi bi-search"></i>
+      <span>Search</span>
+    </a>
+  </li>
+{% endblock %}
+
+{% block page_actions %}
+  <li>
+    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('.index') }}">
+      <i class="bi bi-arrow-clockwise text-sage"></i>
+      <span>Refresh</span>
+    </a>
+  </li>
+  <li><hr class="dropdown-divider"></li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadAudioModal">
+      <i class="bi bi-cloud-upload text-primary"></i>
+      <span>Upload Audio</span>
+    </button>
+  </li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#newPlaylistModal">
+      <i class="bi bi-plus-circle text-success"></i>
+      <span>New Playlist</span>
+    </button>
+  </li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addToPlaylistModal" onclick="preparePlaylistModal()">
+      <i class="bi bi-plus-square text-info"></i>
+      <span>Move to Playlist</span>
+    </button>
+  </li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2 text-danger" data-bs-toggle="modal" data-bs-target="#deleteSelectedSongsModal" onclick="preparePlaylistModal()">
+      <i class="bi bi-trash"></i>
+      <span>Delete Tracks</span>
+    </button>
+  </li>
+{% endblock %}
+
 {% block scripts %}
-<script src="{{ url_for('.static', filename='script.js') }}"></script>
-{% endblock %}
-
-{% block navbar_items %}
-<li class="nav-item mx-2">
-    <a class="nav-link" href="#" id="playlists-nav-tab" onclick="switchTab('playlists')">
-        <i class="bi bi-music-note-list me-1"></i>Playlists
-    </a>
-</li>
-<li class="nav-item mx-2">
-    <a class="nav-link" href="#" id="search-nav-tab" onclick="switchTab('search')">
-        <i class="bi bi-search me-1"></i>Search
-    </a>
-</li>
-{% endblock %}
-
-{% block actions_menu %}
-<li>
-    <a class="dropdown-item" href="{{ url_for('.index') }}">
-        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-    </a>
-</li>
-<li><hr class="dropdown-divider"></li>
-<li>
-    <button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#uploadAudioModal">
-        <i class="bi bi-cloud-upload me-1"></i>Upload Audio
-    </button>
-</li>
-<li>
-    <button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#newPlaylistModal">
-        <i class="bi bi-plus-circle me-1"></i>New Playlist
-    </button>
-</li>
-<li>
-    <button type="button" class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#addToPlaylistModal" onclick="preparePlaylistModal()">
-        <i class="bi bi-plus-square me-1"></i>Move to Playlist
-    </button>
-</li>
-<li>
-    <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#deleteSelectedSongsModal" onclick="preparePlaylistModal()">
-        <i class="bi bi-trash me-1"></i>Delete Tracks
-    </button>
-</li>
+  {{ super() }}
+  <script src="{{ url_for('.static', filename='script.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
 {% endblock %}
