@@ -17,6 +17,21 @@ python -m web_app [--debug] [--port PORT]
 
 `python -m pytest`
 
+### Playwright UI Tests
+
+need an initial setup
+
+```bash
+pip install playwright
+playwright install
+sudo $(which playwright) install-deps
+```
+
+run ui tests in headless mode -> `pytest tests/ui/`
+
+to see the UI in the test -> `pytest tests/ui/ --headed --slowmo 500`
+
+
 ## Cloud Setup
 
 1. install terraform

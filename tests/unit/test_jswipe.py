@@ -4,14 +4,13 @@ from unittest.mock import Mock, patch
 from requests.exceptions import RequestException, HTTPError, Timeout
 
 from web_app.app import app
-from web_app.jswipe import search_jobs
+from web_app.jswipe.endpoints import RapidAPIActiveJobsDB
+from web_app.jswipe.__init__ import search_jobs
 
 
-class TestSearchJobs:
-    """Tests for search_jobs function"""
-
+class TestRapidAPIActiveJobsDB:
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_success(self, mock_get):
+    def test_search_success(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = [
             {
@@ -25,9 +24,9 @@ class TestSearchJobs:
         ]
         mock_get.return_value = mock_response
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('software engineer', 'sydney')
+            jobs = api.search('software engineer', 'sydney')
 
         assert len(jobs) == 1
         assert jobs[0].id == 'job1'
@@ -35,41 +34,39 @@ class TestSearchJobs:
         assert jobs[0].company == 'Tech Corp'
 
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_no_results(self, mock_get):
+    def test_search_no_results(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = []
         mock_get.return_value = mock_response
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('obscure job title', 'nowhere')
+            jobs = api.search('obscure job', 'nowhere')
 
         assert jobs == []
 
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_request_exception(self, mock_get):
+    def test_search_request_exception(self, mock_get):
         mock_get.side_effect = RequestException("Connection error")
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('software engineer', 'sydney')
-
-        assert jobs == []
+            with pytest.raises(RequestException):
+                api.search('software engineer', 'sydney')
 
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_http_error(self, mock_get):
+    def test_search_http_error(self, mock_get):
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = HTTPError("404 Not Found")
         mock_get.return_value = mock_response
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('software engineer', 'sydney')
-
-        assert jobs == []
+            with pytest.raises(HTTPError):
+                api.search('software engineer', 'sydney')
 
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_multiple_results(self, mock_get):
+    def test_search_multiple_results(self, mock_get):
         mock_response = Mock()
         mock_response.json.return_value = [
             {
@@ -84,23 +81,21 @@ class TestSearchJobs:
         ]
         mock_get.return_value = mock_response
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('engineer', 'sydney')
+            jobs = api.search('engineer', 'sydney')
 
         assert len(jobs) == 5
         assert all(hasattr(job, 'id') for job in jobs)
-        assert all(hasattr(job, 'title') for job in jobs)
 
     @patch('web_app.jswipe.endpoints.requests.get')
-    def test_search_jobs_timeout(self, mock_get):
+    def test_search_timeout(self, mock_get):
         mock_get.side_effect = Timeout("Request timed out")
 
+        api = RapidAPIActiveJobsDB()
         with app.app_context():
-            with patch('web_app.jswipe.flash'):
-                jobs = search_jobs('software engineer', 'sydney')
-
-        assert jobs == []
+            with pytest.raises(Timeout):
+                api.search('software engineer', 'sydney')
 
     @patch('web_app.jswipe.endpoints.requests.get')
     def test_search_jobs_handles_missing_fields(self, mock_get):

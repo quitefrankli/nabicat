@@ -3,8 +3,6 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta, date
-from flask import Flask
-from enum import Enum
 
 from web_app.app import app
 from web_app.users import User

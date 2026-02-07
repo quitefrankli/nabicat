@@ -222,6 +222,15 @@
   box-shadow: 0 6px 20px rgba(135, 168, 120, 0.5);
 }
 
+.btn-apply {
+  background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%);
+  color: white;
+}
+
+.btn-apply:hover {
+  box-shadow: 0 6px 20px rgba(233, 196, 106, 0.5);
+}
+
 /* Animations */
 @keyframes swipeLeft {
   to {
