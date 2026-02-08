@@ -54,7 +54,7 @@ def before_request():
     # Auto-login as admin in debug mode
     if ConfigManager().debug_mode and not flask_login.current_user.is_authenticated:
         user = DataInterface().load_users()["admin"]
-        flask_login.login_user(user)
+        flask_login.login_user(user, remember=True)
 
     message = f"Processing request: client={get_ip()}, path={request.path}, method={request.method}"
 

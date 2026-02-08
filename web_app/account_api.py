@@ -27,7 +27,7 @@ def login():
     password = from_req('password')
     existing_users = DataInterface().load_users()
     if username in existing_users and password == existing_users[username].password:
-        flask_login.login_user(existing_users[username], duration=timedelta(weeks=1))
+        flask_login.login_user(existing_users[username], remember=True)
         # Validate next_url to prevent open redirect vulnerabilities
         if next_url and next_url.startswith('/'):
             return flask.redirect(next_url)
@@ -69,6 +69,6 @@ def register():
     DataInterface().save_users(list(existing_users.values()))
     logging.info(f"Registered new user: {username}")
 
-    flask_login.login_user(new_user)
+    flask_login.login_user(new_user, remember=True)
 
     return flask.redirect(flask.url_for('home'))
