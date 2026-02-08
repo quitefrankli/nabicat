@@ -12,12 +12,17 @@ from web_app.todoist2.data_interface import DataInterface
 
 goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')
 
+@goals_api.before_request
+@flask_login.login_required
+def require_admin():
+    if not flask_login.current_user.is_admin:
+        flask.flash('You must be an admin to access this page', category='error')
+        return flask.redirect(flask.url_for('home'))
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('todoist2_api.summary_goals'))
 
 @goals_api.route('/new', methods=["POST"])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def new_goal():
     name = from_req('name')
@@ -39,7 +44,6 @@ def new_goal():
     return get_default_redirect()
 
 @goals_api.route('/fail', methods=["GET"])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def fail_goal():
     req_data = request.args
@@ -52,7 +56,6 @@ def fail_goal():
     return get_default_redirect()
 
 @goals_api.route('/log', methods=["POST"])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def log_goal():
     goal_id = int(request.args['goal_id'])
@@ -68,7 +71,6 @@ def log_goal():
     return get_default_redirect()
 
 @goals_api.route('/toggle_state', methods=['POST'])
-@flask_login.login_required
 @limiter.limit("2/second", key_func=lambda: flask_login.current_user.id)
 def toggle_goal_state():
     req_data = request.get_json()
@@ -89,7 +91,6 @@ def toggle_goal_state():
     return flask.jsonify(success=True)
 
 @goals_api.route('/edit', methods=["POST"])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def edit_goal():
     name = from_req('name')
@@ -110,7 +111,6 @@ def edit_goal():
     return get_default_redirect()
 
 @goals_api.route('/delete', methods=["GET"])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def delete_goal():
     req_data = request.args

@@ -15,7 +15,7 @@ def test_home_page_loads(logged_in_page, test_server):
 
 
 def test_app_grid_visible(logged_in_page, test_server):
-    """Test that the app grid is displayed with all expected apps."""
+    """Test that the app grid is displayed with all expected apps for admin."""
     expected_apps = ["Todoist2", "Metrics", "Tubio", "JSwipe", "File Store"]
     
     for app_name in expected_apps:
@@ -24,7 +24,7 @@ def test_app_grid_visible(logged_in_page, test_server):
 
 
 def test_all_app_cards_clickable(logged_in_page, test_server):
-    """Test that all app cards are clickable links."""
+    """Test that all app cards are clickable links for admin."""
     apps = [
         ("Todoist2", "/todoist2"),
         ("Metrics", "/metrics"),
@@ -59,5 +59,26 @@ def test_navbar_present(logged_in_page):
 
 def test_logout_button_present(logged_in_page):
     """Test that logout button is present (or login if not logged in)."""
-    # In debug mode, user is auto-logged in
     expect(logged_in_page.locator("a:has-text('Logout')")).to_be_visible()
+
+
+def test_admin_only_apps_hidden_for_non_admin(page, test_server):
+    """Test that admin-only apps are hidden for non-admin users."""
+    # Log in as non-admin user
+    page.goto(f"{test_server}/account/login")
+    page.wait_for_load_state("networkidle")
+    page.fill("input#username", "jacky")
+    page.fill("input#password", "chen")
+    page.click("button:has-text('Sign In')")
+    page.wait_for_url(f"{test_server}/", timeout=10000)
+    page.wait_for_load_state("networkidle")
+    
+    # Verify non-admin apps are visible
+    expect(page.locator("text=Metrics")).to_be_visible()
+    expect(page.locator("text=Tubio")).to_be_visible()
+    expect(page.locator("text=File Store")).to_be_visible()
+    
+    # Verify admin-only apps are NOT visible
+    expect(page.locator("text=Todoist2")).not_to_be_visible()
+    expect(page.locator("text=JSwipe")).not_to_be_visible()
+    expect(page.locator("text=Crosswords")).not_to_be_visible()

@@ -29,6 +29,13 @@ todoist2_api.register_blueprint(goals_api)
 def inject_app_name():
     return dict(app_name='Todoist2')
 
+@todoist2_api.before_request
+@flask_login.login_required
+def require_admin():
+    if not flask_login.current_user.is_admin:
+        flask.flash('You must be an admin to access this page', category='error')
+        return flask.redirect(flask.url_for('home'))
+
 def get_default_redirect():
     return flask.redirect(flask.url_for('.summary_goals'))
 
@@ -91,7 +98,6 @@ def _completed_goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]
     return goal_blocks
 
 @todoist2_api.route('/')
-@flask_login.login_required
 @limiter.limit("2/second")
 def summary_goals():
     goals = _get_filtered_summary_goals(cur_user())
@@ -102,7 +108,6 @@ def summary_goals():
                            has_more=len(goals) > PAGE_SIZE)
 
 @todoist2_api.route('/completed_goals')
-@flask_login.login_required
 @limiter.limit("2/second")
 def completed_goals():
     goals = _get_completed_goals(cur_user())
@@ -113,7 +118,6 @@ def completed_goals():
                            has_more=len(goals) > PAGE_SIZE)
 
 @todoist2_api.route('/api/summary_goals_page', methods=['GET'])
-@flask_login.login_required
 @limiter.limit("2/second")
 def api_summary_goals_page():
     page = int(request.args.get('page', 0))
@@ -126,7 +130,6 @@ def api_summary_goals_page():
     return jsonify({'html': html, 'has_more': has_more})
 
 @todoist2_api.route('/api/completed_goals_page', methods=['GET'])
-@flask_login.login_required
 @limiter.limit("2/second")
 def api_completed_goals_page():
     page = int(request.args.get('page', 0))
@@ -139,7 +142,6 @@ def api_completed_goals_page():
     return jsonify({'html': html, 'has_more': has_more})
 
 @todoist2_api.route('/visualise/goal_velocity', methods=['GET'])
-@flask_login.login_required
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def visualise_goal_velocity():
     tld = DataInterface().load_data(cur_user())

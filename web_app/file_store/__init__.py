@@ -23,6 +23,13 @@ file_store_api = Blueprint(
 )
 
 
+@file_store_api.before_request
+@login_required
+def before_request():
+    # This ensures all routes in this blueprint require login
+    pass
+
+
 class FileStoreDataInterface(DataInterface):
     # Shares same directory as api.data_interface.DataInterface
     def __init__(self) -> None:
@@ -59,14 +66,12 @@ def inject_app_name():
 
 
 @file_store_api.route('/')
-@login_required
 def index():
     files = FileStoreDataInterface().list_files(cur_user()) if cur_user() else []
     return render_template("file_store_index.html", files=files)
 
 
 @file_store_api.route('/upload', methods=['POST'])
-@login_required
 def upload_file():
     if 'file' not in request.files:
         flash('No file part', 'error')
@@ -100,21 +105,18 @@ def upload_file():
 
 
 @file_store_api.route('/download/<filename>')
-@login_required
 def download_file(filename: str):
     file_path = FileStoreDataInterface().get_file_path(filename, cur_user())
     return send_file(file_path, as_attachment=True)
 
 
 @file_store_api.route('/files_list')
-@login_required
 def files_list():
     files = FileStoreDataInterface().list_files(cur_user())
     return {'files': files}
 
 
 @file_store_api.route('/delete/<filename>', methods=['POST'])
-@login_required
 def delete_file(filename):
     try:
         FileStoreDataInterface().delete_data(filename, cur_user())

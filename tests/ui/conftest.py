@@ -74,8 +74,19 @@ def page(page, test_server):
 @pytest.fixture
 def logged_in_page(page, test_server):
     """Provide a Playwright page object logged in as admin (debug mode)."""
-    page.goto(test_server)
+    # Navigate to login page
+    page.goto(f"{test_server}/account/login")
     page.wait_for_load_state("networkidle")
+    
+    # Log in as admin
+    page.fill("input#username", "admin")
+    page.fill("input#password", "admin")
+    page.click("button:has-text('Sign In')")
+    
+    # Wait for redirect to home page
+    page.wait_for_url(f"{test_server}/", timeout=10000)
+    page.wait_for_load_state("networkidle")
+    
     yield page
 
 

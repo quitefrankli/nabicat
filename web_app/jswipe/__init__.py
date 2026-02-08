@@ -1,14 +1,15 @@
+import flask
 import requests
 import logging
+import flask_login
 
 from datetime import date
 from flask import Blueprint, render_template, request, flash, jsonify
-from flask_login import login_required
 
 from web_app.config import ConfigManager
 from web_app.jswipe.endpoints import RapidAPIActiveJobsDB
+from web_app.jswipe.debug_data import DEBUG_JOBS
 from web_app.jswipe.data_interface import DataInterface, JobPost, JobPostState
-from web_app.helpers import cur_user
 
 
 AUSTRALIAN_CITIES = [
@@ -16,54 +17,6 @@ AUSTRALIAN_CITIES = [
     'Hobart', 'Canberra', 'Gold Coast', 'Newcastle', 'Wollongong'
 ]
 
-# Hardcoded jobs for debug mode
-DEBUG_JOBS = [
-    JobPost(
-        id='debug-1',
-        title='Software Engineer',
-        company='TechCorp Australia',
-        location='Sydney',
-        description='We are looking for a skilled Software Engineer to join our team. You will work on exciting projects using Python, JavaScript, and cloud technologies. Experience with web frameworks like Flask or Django preferred.',
-        url='https://example.com/job1',
-        post_date=date.today()
-    ),
-    JobPost(
-        id='debug-2',
-        title='Senior Python Developer',
-        company='DataFlow Systems',
-        location='Melbourne',
-        description='Join our data engineering team! We need a Senior Python Developer with experience in data processing, ETL pipelines, and machine learning. Remote work options available.',
-        url='https://example.com/job2',
-        post_date=date.today()
-    ),
-    JobPost(
-        id='debug-3',
-        title='Full Stack Developer',
-        company='StartupXYZ',
-        location='Brisbane',
-        description='Fast-growing startup seeking a Full Stack Developer. Tech stack: React, Node.js, PostgreSQL. Must be comfortable with rapid iteration and agile development.',
-        url='https://example.com/job3',
-        post_date=date.today()
-    ),
-    JobPost(
-        id='debug-4',
-        title='DevOps Engineer',
-        company='CloudNative Solutions',
-        location='Perth',
-        description='Looking for a DevOps Engineer with AWS, Kubernetes, and Terraform experience. You will help build and maintain our cloud infrastructure and CI/CD pipelines.',
-        url='https://example.com/job4',
-        post_date=date.today()
-    ),
-    JobPost(
-        id='debug-5',
-        title='Product Manager',
-        company='FinTech Innovations',
-        location='Sydney',
-        description='Join our fintech team as a Product Manager. You will drive product strategy, work with engineering teams, and deliver features that help our customers. Finance background a plus.',
-        url='https://example.com/job5',
-        post_date=date.today()
-    ),
-]
 
 jswipe_api = Blueprint(
     'jswipe', __name__,
@@ -71,6 +24,14 @@ jswipe_api = Blueprint(
     static_folder='static',
     url_prefix='/jswipe'
 )
+
+
+@jswipe_api.before_request
+@flask_login.login_required
+def require_admin():
+    if not flask_login.current_user.is_admin:
+        flask.flash('You must be an admin to access this page', category='error')
+        return flask.redirect(flask.url_for('home'))
 
 
 @jswipe_api.context_processor
@@ -87,8 +48,8 @@ def search_jobs(job_type: str, location: str):
         api = RapidAPIActiveJobsDB()
         return api.search(job_type=job_type, location=location, limit=10)
 
+
 @jswipe_api.route('/', methods=['GET', 'POST'])
-@login_required
 def index():
     jobs = []
     if request.method == 'POST':
@@ -108,7 +69,6 @@ def index():
 
 
 @jswipe_api.route('/api/job/<job_id>/<action>', methods=['POST'])
-@login_required
 def job_action(job_id: str, action: str):
     """Record save/reject/apply action on a job."""
     action_map = {

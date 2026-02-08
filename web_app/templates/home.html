@@ -29,7 +29,8 @@
       
       <!-- App Grid -->
       <div class="row g-4">
-        <!-- Todoist2 -->
+        <!-- Todoist2 (Admin Only) -->
+        {% if current_user.is_authenticated and current_user.is_admin %}
         <div class="col-12 col-md-6">
           <a href="/todoist2" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
@@ -43,6 +44,7 @@
             </div>
           </a>
         </div>
+        {% endif %}
         
         <!-- Metrics -->
         <div class="col-12 col-md-6">
@@ -74,7 +76,8 @@
           </a>
         </div>
         
-        <!-- JSwipe -->
+        <!-- JSwipe (Admin Only) -->
+        {% if current_user.is_authenticated and current_user.is_admin %}
         <div class="col-12 col-md-6">
           <a href="/jswipe" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
@@ -88,6 +91,7 @@
             </div>
           </a>
         </div>
+        {% endif %}
         
         <!-- File Store -->
         <div class="col-12 col-md-6">
