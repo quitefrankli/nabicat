@@ -27,9 +27,13 @@ playwright install
 sudo $(which playwright) install-deps
 ```
 
-run ui tests in headless mode -> `pytest tests/ui/`
+run ui tests in headless mode
 
-to see the UI in the test -> `pytest tests/ui/ --headed --slowmo 500`
+`pytest tests/ui/`
+
+to see the UI in the test
+
+`pytest tests/ui/ --headed --slowmo 500`
 
 
 ## Cloud Setup
