@@ -9,11 +9,8 @@ from werkzeug.datastructures import FileStorage
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
 from web_app.users import User
-from web_app.file_store import (
-    file_store_api,
-    FileStoreDataInterface,
-    NON_ADMIN_MAX_STORAGE,
-)
+from web_app.file_store import file_store_api
+from web_app.file_store.data_interface import DataInterface, NON_ADMIN_MAX_STORAGE
 from web_app.helpers import limiter
 import web_app.helpers as helpers
 
@@ -55,15 +52,15 @@ def auth_mock(test_user):
     helpers.login_manager._user_callback = original_user_loader
 
 
-class TestFileStoreDataInterface:
+class TestDataInterface:
     """Tests for FileStoreDataInterface"""
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_save_file(self, mock_get_user_dir):
         """Test saving a file"""
         mock_get_user_dir.return_value = Path('/fake/user/dir')
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         data_interface.atomic_write = Mock()
         
         # Create a mock FileStorage
@@ -79,12 +76,12 @@ class TestFileStoreDataInterface:
         call_args = data_interface.atomic_write.call_args
         assert call_args[0][0] == Path('/fake/user/dir/test.txt')
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_save_file_prevents_path_traversal(self, mock_get_user_dir):
         """Test that save_file prevents path traversal attacks"""
         mock_get_user_dir.return_value = Path('/fake/user/dir')
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         data_interface.atomic_write = Mock()
         
         # Create a mock FileStorage with malicious filename
@@ -104,12 +101,12 @@ class TestFileStoreDataInterface:
         # Should be flattened to just the filename
         assert saved_path.name == 'etc_passwd' or saved_path.name == 'passwd'
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_get_file_path_prevents_path_traversal(self, mock_get_user_dir):
         """Test that get_file_path prevents path traversal attacks"""
         mock_get_user_dir.return_value = Path('/fake/user/dir')
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         user = Mock(spec=User)
         
         # Try path traversal attack
@@ -120,31 +117,31 @@ class TestFileStoreDataInterface:
         # Should still be under the user directory
         assert '/fake/user/dir' in str(result)
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_get_file_path(self, mock_get_user_dir):
         """Test getting file path"""
         mock_get_user_dir.return_value = Path('/fake/user/dir')
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         user = Mock(spec=User)
         
         result = data_interface.get_file_path('test.txt', user)
         
         assert result == Path('/fake/user/dir/test.txt')
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_get_total_storage_size_empty_dir(self, mock_get_user_dir):
         """Test getting storage size when directory doesn't exist"""
         mock_get_user_dir.return_value = Path('/nonexistent/dir')
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         user = Mock(spec=User)
         
         result = data_interface.get_total_storage_size(user)
         
         assert result == 0
 
-    @patch('web_app.file_store.DataInterface._get_user_dir')
+    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
     def test_get_total_storage_size_with_files(self, mock_get_user_dir, tmp_path):
         """Test getting storage size with existing files"""
         # Create temporary files
@@ -155,7 +152,7 @@ class TestFileStoreDataInterface:
         
         mock_get_user_dir.return_value = test_dir
         
-        data_interface = FileStoreDataInterface()
+        data_interface = DataInterface()
         user = Mock(spec=User)
         
         result = data_interface.get_total_storage_size(user)
@@ -166,11 +163,15 @@ class TestFileStoreDataInterface:
 class TestFileStoreRoutes:
     """Tests for file_store routes"""
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_index(self, mock_di_class, client, auth_mock):
         """Test index page"""
         mock_di = mock_di_class.return_value
-        mock_di.list_files.return_value = ['file1.txt', 'file2.txt']
+        mock_di.list_files_with_metadata.return_value = [
+            {'name': 'file1.txt', 'size': 100, 'size_formatted': '100.0 B', 'modified': None, 'modified_formatted': '2024-01-01 00:00'},
+            {'name': 'file2.txt', 'size': 200, 'size_formatted': '200.0 B', 'modified': None, 'modified_formatted': '2024-01-01 00:00'}
+        ]
+        mock_di.get_total_storage_size.return_value = 300
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
@@ -178,9 +179,9 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/')
 
         assert response.status_code == 200
-        mock_di.list_files.assert_called_once_with(auth_mock)
+        mock_di.list_files_with_metadata.assert_called_once_with(auth_mock)
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_upload_file_success(self, mock_di_class, client, auth_mock):
         """Test successful file upload"""
         mock_di = mock_di_class.return_value
@@ -214,7 +215,7 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 302  # Redirect with flash error
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_upload_non_admin_exceeds_limit(self, mock_di_class, client, auth_mock):
         """Test non-admin upload exceeding storage limit"""
         mock_di = mock_di_class.return_value
@@ -230,7 +231,7 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 302  # Redirect with flash error
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_upload_admin_no_limit(self, mock_di_class, client, admin_user):
         """Test admin upload has no storage limit"""
         # Set up auth mock for admin
@@ -253,7 +254,7 @@ class TestFileStoreRoutes:
         finally:
             helpers.login_manager._user_callback = original_user_loader
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_download_file(self, mock_di_class, client, auth_mock, tmp_path):
         """Test downloading a file"""
         mock_di = mock_di_class.return_value
@@ -270,7 +271,7 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 200
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_files_list(self, mock_di_class, client, auth_mock):
         """Test files list API"""
         mock_di = mock_di_class.return_value
@@ -286,11 +287,11 @@ class TestFileStoreRoutes:
         data = json.loads(response.data)
         assert data['files'] == ['file1.txt', 'file2.txt']
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_delete_file_success(self, mock_di_class, client, auth_mock):
         """Test successful file deletion"""
         mock_di = mock_di_class.return_value
-        mock_di.delete_data = Mock()
+        mock_di.delete_file = Mock()
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
@@ -299,11 +300,11 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 302  # Redirect success
 
-    @patch('web_app.file_store.FileStoreDataInterface')
+    @patch('web_app.file_store.DataInterface')
     def test_delete_file_not_found(self, mock_di_class, client, auth_mock):
         """Test deleting non-existent file"""
         mock_di = mock_di_class.return_value
-        mock_di.delete_data.side_effect = FileNotFoundError()
+        mock_di.delete_file.side_effect = FileNotFoundError()
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id

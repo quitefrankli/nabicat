@@ -39,12 +39,34 @@
 
 /* File name */
 .file-name {
-  flex-grow: 1;
   font-weight: 500;
   color: var(--hw-text-primary, #2D4A3E);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* File metadata (size and date) */
+.file-meta {
+  font-size: 0.8rem;
+  color: var(--hw-text-muted, #8A9A8A);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-size {
+  font-weight: 500;
+  color: var(--hw-sage, #6B8E5A);
+}
+
+.file-meta-separator {
+  opacity: 0.5;
+}
+
+.file-date {
+  font-style: italic;
 }
 
 /* File actions */
@@ -168,4 +190,69 @@ input[type="file"].form-control:hover {
   padding: 0.375rem 0.875rem;
   border-radius: 9999px;
   font-size: 0.875rem;
+}
+
+/* Storage Usage Card */
+.storage-usage-card {
+  background: linear-gradient(135deg, rgba(135, 168, 120, 0.08) 0%, rgba(168, 198, 134, 0.08) 100%);
+  border: 1px solid rgba(135, 168, 120, 0.15);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.storage-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--hw-sage-dark, #6B8E5A);
+  display: flex;
+  align-items: center;
+}
+
+.storage-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--hw-text-primary, #2D4A3E);
+}
+
+.storage-bar-container {
+  height: 10px;
+  background: rgba(135, 168, 120, 0.2);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.storage-bar-fill {
+  height: 100%;
+  background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-light, #A8C686) 100%);
+  border-radius: 9999px;
+  transition: width 0.6s ease;
+  position: relative;
+}
+
+.storage-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.storage-percentage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--hw-sage, #6B8E5A);
+}
+
+.storage-remaining {
+  font-size: 0.75rem;
+  color: var(--hw-text-muted, #8A9A8A);
 }
