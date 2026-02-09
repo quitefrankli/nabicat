@@ -11,8 +11,9 @@ from web_app.config import ConfigManager
 from web_app.users import User
 
 
-# Maximum total storage size for non-admin users (in bytes)
-NON_ADMIN_MAX_STORAGE = 100 * 1024 * 1024  # 100 MB
+# Maximum total storage size limits (in bytes)
+NON_ADMIN_MAX_STORAGE = 30 * 1024 * 1024  # 30 MB
+ADMIN_MAX_STORAGE = 1 * 1024 * 1024 * 1024  # 1 GB
 
 
 def format_file_size(size_bytes: int) -> str:

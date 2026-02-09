@@ -10,7 +10,7 @@ from werkzeug.datastructures import FileStorage
 import web_app.__main__ as main_module
 from web_app.users import User
 from web_app.file_store import file_store_api
-from web_app.file_store.data_interface import DataInterface, NON_ADMIN_MAX_STORAGE
+from web_app.file_store.data_interface import DataInterface, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
 from web_app.helpers import limiter
 import web_app.helpers as helpers
 
@@ -232,25 +232,48 @@ class TestFileStoreRoutes:
         assert response.status_code == 302  # Redirect with flash error
 
     @patch('web_app.file_store.DataInterface')
-    def test_upload_admin_no_limit(self, mock_di_class, client, admin_user):
-        """Test admin upload has no storage limit"""
+    def test_upload_admin_has_limit(self, mock_di_class, client, admin_user):
+        """Test admin upload has 1GB storage limit"""
         # Set up auth mock for admin
         original_user_loader = helpers.login_manager._user_callback
         helpers.login_manager._user_callback = lambda username: admin_user if username == admin_user.id else None
         
         try:
             mock_di = mock_di_class.return_value
-            # Simulate already using more than the non-admin limit
-            mock_di.get_total_storage_size.return_value = NON_ADMIN_MAX_STORAGE + 1000000
+            # Simulate using less than admin limit
+            mock_di.get_total_storage_size.return_value = ADMIN_MAX_STORAGE - 100000
 
             with client.session_transaction() as sess:
                 sess['_user_id'] = admin_user.id
 
-            # Upload should still work for admin
+            # Upload should work for admin under limit
             data = {'file': (io.BytesIO(b'a' * 1000), 'large.txt')}
             response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
 
             assert response.status_code == 302  # Redirect success
+        finally:
+            helpers.login_manager._user_callback = original_user_loader
+
+    @patch('web_app.file_store.DataInterface')
+    def test_upload_admin_exceeds_limit(self, mock_di_class, client, admin_user):
+        """Test admin upload exceeding 1GB storage limit fails"""
+        # Set up auth mock for admin
+        original_user_loader = helpers.login_manager._user_callback
+        helpers.login_manager._user_callback = lambda username: admin_user if username == admin_user.id else None
+        
+        try:
+            mock_di = mock_di_class.return_value
+            # Simulate already using almost all admin storage
+            mock_di.get_total_storage_size.return_value = ADMIN_MAX_STORAGE - 100
+
+            with client.session_transaction() as sess:
+                sess['_user_id'] = admin_user.id
+
+            # Upload a file that would exceed the limit
+            data = {'file': (io.BytesIO(b'a' * 1000), 'large.txt')}
+            response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
+
+            assert response.status_code == 302  # Redirect with flash error
         finally:
             helpers.login_manager._user_callback = original_user_loader
 
@@ -327,7 +350,11 @@ class TestFileStoreBlueprint:
 
     def test_non_admin_max_storage_constant(self):
         """Test the storage limit constant"""
-        assert NON_ADMIN_MAX_STORAGE == 100 * 1024 * 1024  # 100 MB
+        assert NON_ADMIN_MAX_STORAGE == 30 * 1024 * 1024  # 30 MB
+
+    def test_admin_max_storage_constant(self):
+        """Test the admin storage limit constant"""
+        assert ADMIN_MAX_STORAGE == 1 * 1024 * 1024 * 1024  # 1 GB
 
 
 if __name__ == '__main__':

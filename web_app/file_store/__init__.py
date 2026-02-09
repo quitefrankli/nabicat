@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, send_file, redirect, url_
 from flask_login import login_required
 
 from web_app.helpers import cur_user
-from web_app.file_store.data_interface import DataInterface, format_file_size, NON_ADMIN_MAX_STORAGE
+from web_app.file_store.data_interface import DataInterface, format_file_size, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
 
 
 file_store_api = Blueprint(
@@ -35,19 +35,20 @@ def index():
     data_interface = DataInterface()
     files = data_interface.list_files_with_metadata(user) if user else []
     
-    # Calculate storage info for non-admin users
+    # Calculate storage info for all users
     storage_info = None
-    if user and not user.is_admin:
+    if user:
         total_used = data_interface.get_total_storage_size(user)
-        usage_percent = (total_used / NON_ADMIN_MAX_STORAGE) * 100 if NON_ADMIN_MAX_STORAGE > 0 else 0
+        max_storage = ADMIN_MAX_STORAGE if user.is_admin else NON_ADMIN_MAX_STORAGE
+        usage_percent = (total_used / max_storage) * 100 if max_storage > 0 else 0
         storage_info = {
             'used': total_used,
             'used_formatted': format_file_size(total_used),
-            'max': NON_ADMIN_MAX_STORAGE,
-            'max_formatted': format_file_size(NON_ADMIN_MAX_STORAGE),
+            'max': max_storage,
+            'max_formatted': format_file_size(max_storage),
             'usage_percent': min(usage_percent, 100),  # Cap at 100%
-            'remaining': NON_ADMIN_MAX_STORAGE - total_used,
-            'remaining_formatted': format_file_size(max(0, NON_ADMIN_MAX_STORAGE - total_used))
+            'remaining': max_storage - total_used,
+            'remaining_formatted': format_file_size(max(0, max_storage - total_used))
         }
     
     return render_template("file_store_index.html", files=files, storage_info=storage_info)
@@ -66,19 +67,21 @@ def upload_file():
     user = cur_user()
     data_interface = DataInterface()
     
-    # Check storage limit for non-admin users
-    if not user.is_admin:
-        current_size = data_interface.get_total_storage_size(user)
-        # Get file size from the stream
-        file.seek(0, 2)  # Seek to end
-        file_size = file.tell()
-        file.seek(0)  # Reset to beginning
-        
-        if current_size + file_size > NON_ADMIN_MAX_STORAGE:
-            flash(f'Upload failed: Storage limit of {NON_ADMIN_MAX_STORAGE / (1024*1024):.0f}MB exceeded. '
-                  f'Current usage: {current_size / (1024*1024):.1f}MB, '
-                  f'File size: {file_size / (1024*1024):.1f}MB', 'error')
-            return redirect(url_for('.index'))
+    # Check storage limit for all users
+    current_size = data_interface.get_total_storage_size(user)
+    # Get file size from the stream
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to beginning
+    
+    max_storage = ADMIN_MAX_STORAGE if user.is_admin else NON_ADMIN_MAX_STORAGE
+    
+    if current_size + file_size > max_storage:
+        max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.is_admin else f'{max_storage / (1024*1024):.0f}MB'
+        flash(f'Upload failed: Storage limit of {max_label} exceeded. '
+              f'Current usage: {format_file_size(current_size)}, '
+              f'File size: {format_file_size(file_size)}', 'error')
+        return redirect(url_for('.index'))
     
     data_interface.save_file(file, user)
     logging.info(f"user {user.id} uploaded file: {file.filename}")
