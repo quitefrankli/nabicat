@@ -1,21 +1,81 @@
 import base64
 import gzip
 import json
+import time
+import threading
 import flask
 import flask_login
+import logging
 
 from io import BytesIO
 from flask import request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from web_app.app import app
 from web_app.data_interface import DataInterface
 from web_app.users import User
 from web_app.errors import *
-from web_app.config import ConfigManager
+
+
+class TimedDict:
+    """Thread-safe dict with TTL for ephemeral key storage."""
+    
+    def __init__(self, default_ttl_seconds: int = 300):
+        self._data = {}
+        self._lock = threading.RLock()
+        self._default_ttl = default_ttl_seconds
+        self._last_cleanup = time.time()
+    
+    def _cleanup_expired(self):
+        """Remove expired entries."""
+        now = time.time()
+        # Run cleanup at most once every 60 seconds
+        if now - self._last_cleanup < 60:
+            return
+        
+        expired_keys = [
+            k for k, v in self._data.items()
+            if v['expires'] < now
+        ]
+        for k in expired_keys:
+            del self._data[k]
+        self._last_cleanup = now
+    
+    def set(self, key: str, value, ttl: int = None):
+        """Store value with TTL."""
+        with self._lock:
+            self._cleanup_expired()
+            self._data[key] = {
+                'value': value,
+                'expires': time.time() + (ttl or self._default_ttl)
+            }
+    
+    def get(self, key: str):
+        """Get value if not expired, else return None and delete."""
+        with self._lock:
+            self._cleanup_expired()
+            entry = self._data.get(key)
+            if not entry:
+                return None
+            if entry['expires'] < time.time():
+                del self._data[key]
+                return None
+            return entry['value']
+    
+    def delete(self, key: str):
+        """Delete a key."""
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+
+
+# Ephemeral RSA key storage (session_id -> private_key)
+_ephemeral_keys = TimedDict(default_ttl_seconds=300)
 
 
 login_manager = flask_login.LoginManager()
@@ -88,14 +148,95 @@ def authenticate_user(username: str, password: str, require_admin: bool = True) 
     
     return True
 
-def decode_decrypt_decompress(encrypted_payload: str) -> dict:
-    """Decrypt, decompress and parse the encrypted request payload."""
-    key = ConfigManager().symmetric_encryption_key
-    encrypted_data = base64.b64decode(encrypted_payload)
-    compressed_data = Fernet(key).decrypt(encrypted_data)
-    with gzip.GzipFile(fileobj=BytesIO(compressed_data)) as gz:
-        json_data = gz.read()
-    return json.loads(json_data.decode('utf-8'))
+def generate_ephemeral_keypair() -> tuple[str, str]:
+    """
+    Generate an ephemeral RSA key pair for hybrid encryption.
+    
+    Returns:
+        tuple: (session_id, public_key_pem)
+        The private key is stored in memory with TTL.
+    """
+    import uuid
+    
+    # Generate 2048-bit RSA key pair
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    
+    # Generate unique session ID
+    session_id = str(uuid.uuid4())
+    
+    # Serialize public key to PEM
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode('utf-8')
+    
+    # Store private key in memory (5 minute TTL)
+    _ephemeral_keys.set(session_id, private_key, ttl=300)
+    
+    logging.debug(f"Generated ephemeral keypair, session_id: {session_id}")
+    return session_id, public_pem
+
+
+def decode_decrypt_decompress(encrypted_payload: dict) -> dict:
+    """
+    Decrypt hybrid-encrypted payload.
+    
+    Expected payload format:
+    {
+        "session_id": "<uuid>",
+        "encrypted_key": "<base64>",  # AES key encrypted with RSA public key
+        "encrypted_data": "<base64>", # gzip-compressed JSON encrypted with AES-GCM
+        "nonce": "<base64>"           # AES-GCM nonce
+    }
+    """
+    try:
+        session_id = encrypted_payload['session_id']
+        encrypted_key_b64 = encrypted_payload['encrypted_key']
+        encrypted_data_b64 = encrypted_payload['encrypted_data']
+        nonce_b64 = encrypted_payload['nonce']
+    except KeyError as e:
+        raise APIError(f"Missing required field in encrypted payload: {e}")
+    
+    # Retrieve ephemeral private key
+    private_key = _ephemeral_keys.get(session_id)
+    if not private_key:
+        raise AuthenticationError("Invalid or expired session ID")
+    
+    try:
+        # Decode base64
+        encrypted_key = base64.b64decode(encrypted_key_b64)
+        encrypted_data = base64.b64decode(encrypted_data_b64)
+        nonce = base64.b64decode(nonce_b64)
+        
+        # Decrypt AES key using RSA-OAEP
+        aes_key = private_key.decrypt(
+            encrypted_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        
+        # Decrypt data using AES-GCM
+        aesgcm = AESGCM(aes_key)
+        compressed_data = aesgcm.decrypt(nonce, encrypted_data, None)
+        
+        # Decompress and parse JSON
+        with gzip.GzipFile(fileobj=BytesIO(compressed_data)) as gz:
+            json_data = gz.read()
+        
+        # Clean up: delete the ephemeral key after successful decryption
+        _ephemeral_keys.delete(session_id)
+        
+        return json.loads(json_data.decode('utf-8'))
+        
+    except Exception as e:
+        logging.warning(f"Decryption failed for session {session_id}: {e}")
+        raise APIError(f"Failed to decrypt request: {str(e)}")
 
 def parse_request(require_login: bool = True, require_admin: bool = True) -> dict:
     if require_admin:
@@ -113,14 +254,18 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
     else:
         raise APIError("Unsupported content type")
     
-    # Check if this is an encrypted request (new protocol)
-    # TODO: deperecate old unencrypted endpoints and remove this fallback logic in the future
+    # Check if this is a hybrid-encrypted request (new protocol)
     encrypted_payload = request_body.get("req")
     if encrypted_payload:
-        try:
-            request_body = decode_decrypt_decompress(encrypted_payload)
-        except Exception as e:
-            raise APIError(f"Failed to decrypt request: {str(e)}")
+        if isinstance(encrypted_payload, dict):
+            # New hybrid encryption format
+            try:
+                request_body = decode_decrypt_decompress(encrypted_payload)
+            except Exception as e:
+                raise APIError(f"Failed to decrypt request: {str(e)}")
+        elif isinstance(encrypted_payload, str):
+            # Legacy format - deprecated, will be removed
+            raise APIError("Legacy encryption format is no longer supported. Please use hybrid encryption.")
     
     if require_login:
         username = request_body.get("username", "")

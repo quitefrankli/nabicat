@@ -71,13 +71,3 @@ class ConfigManager:
         
         raise ValueError("Flask secret key is not set. Please set the 'FLASK_SECRET_KEY' environment variable.")
 
-    @property
-    def symmetric_encryption_key(self) -> bytes:
-        key = getenv('SYMMETRIC_ENCRYPTION_KEY')
-        if key:
-            return key.encode('utf-8')
-        
-        if self.debug_mode:
-            return "DEBUG_SYMMETRIC_ENCRYPTION_KEY".encode('utf-8')
-        
-        raise ValueError("Symmetric encryption key is not set. Please set the 'SYMMETRIC_ENCRYPTION_KEY' environment variable.")

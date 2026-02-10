@@ -8,11 +8,6 @@ import socket
 import signal
 import os
 from pathlib import Path
-from cryptography.fernet import Fernet
-
-# Generate a test encryption key for integration tests
-TEST_ENCRYPTION_KEY = Fernet.generate_key().decode('utf-8')
-os.environ['SYMMETRIC_ENCRYPTION_KEY'] = TEST_ENCRYPTION_KEY
 
 # Import and disable rate limiter
 import web_app.__main__ as main_module
