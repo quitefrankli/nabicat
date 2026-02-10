@@ -1,5 +1,8 @@
 {% extends "subpage_base.html" %}
 
+{% block subapp_index_url %}{{ url_for('crosswords.index') }}{% endblock %}
+{% block navbar_brand %}Crosswords{% endblock %}
+
 {% block page_icon %}
   <div class="rounded-circle d-flex align-items-center justify-content-center" 
        style="width: 56px; height: 56px; background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);">

@@ -115,6 +115,14 @@ body {
   padding: 0.5rem 1rem !important;
 }
 
+.navbar-brand-link {
+  color: var(--hw-text-primary) !important;
+}
+
+.navbar-brand-link:hover {
+  color: var(--hw-sage-dark) !important;
+}
+
 .nav-link:hover {
   color: var(--hw-sage-dark) !important;
   background: rgba(135, 168, 120, 0.1);

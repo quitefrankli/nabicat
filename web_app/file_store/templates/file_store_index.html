@@ -1,5 +1,8 @@
 {% extends "subpage_base.html" %}
 
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block navbar_brand %}File Store{% endblock %}
+
 {% block page_icon %}
   <div class="rounded-circle d-flex align-items-center justify-content-center" 
        style="width: 56px; height: 56px; background: linear-gradient(135deg, #6B8E5A 0%, #87A878 100%);">

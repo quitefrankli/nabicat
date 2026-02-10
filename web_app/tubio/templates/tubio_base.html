@@ -1,5 +1,8 @@
 {% extends "subpage_base.html" %}
 
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block navbar_brand %}Tubio{% endblock %}
+
 {% block page_icon %}
   <div class="rounded-circle d-flex align-items-center justify-content-center" 
        style="width: 56px; height: 56px; background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
@@ -26,13 +29,6 @@
 {% endblock %}
 
 {% block page_actions %}
-  <li>
-    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('.index') }}">
-      <i class="bi bi-arrow-clockwise text-sage"></i>
-      <span>Refresh</span>
-    </a>
-  </li>
-  <li><hr class="dropdown-divider"></li>
   <li>
     <button type="button" class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadAudioModal">
       <i class="bi bi-cloud-upload text-primary"></i>
