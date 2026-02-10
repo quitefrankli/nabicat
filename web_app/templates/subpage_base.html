@@ -26,7 +26,12 @@
 {% endblock %}
 
 {% block actions_menu %}
-  {% block page_actions %}{% endblock %}
+  {% set actions_content %}{% block page_actions %}{% endblock %}{% endset %}
+  {% if actions_content | trim %}
+    {{ actions_content }}
+  {% else %}
+    <li><span class="dropdown-item-text text-muted fst-italic">No actions available</span></li>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
