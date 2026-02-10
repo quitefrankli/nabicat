@@ -3,16 +3,6 @@
 {% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
 {% block navbar_brand %}File Store{% endblock %}
 
-{% block page_icon %}
-  <div class="rounded-circle d-flex align-items-center justify-content-center" 
-       style="width: 56px; height: 56px; background: linear-gradient(135deg, #6B8E5A 0%, #87A878 100%);">
-    <i class="bi bi-cloud-upload-fill text-white fs-4"></i>
-  </div>
-{% endblock %}
-
-{% block page_title %}File Store{% endblock %}
-{% block page_subtitle %}Secure cloud storage for your files{% endblock %}
-
 {% block page_actions %}
   <li>
     <button class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadModal">

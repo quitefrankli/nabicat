@@ -1,0 +1,9 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}{{ url_for('proxy.index') }}{% endblock %}
+{% block navbar_brand %}Proxy{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('proxy.static', filename='style.css') }}">
+{% endblock %}

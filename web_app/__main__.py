@@ -22,6 +22,7 @@ from web_app.account_api import account_api
 from web_app.file_store import file_store_api
 from web_app.api import api_api
 from web_app.jswipe import jswipe_api
+from web_app.proxy import proxy_api
 
 
 app.register_blueprint(todoist2_api)
@@ -32,6 +33,7 @@ app.register_blueprint(account_api)
 app.register_blueprint(file_store_api)
 app.register_blueprint(api_api)
 app.register_blueprint(jswipe_api)
+app.register_blueprint(proxy_api)
 
 @app.context_processor
 def inject_app_name():

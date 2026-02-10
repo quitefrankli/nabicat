@@ -107,6 +107,23 @@
             </div>
           </a>
         </div>
+
+        <!-- Proxy (Admin Only) -->
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        <div class="col-12 col-md-6">
+          <a href="/proxy" class="text-decoration-none">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);">
+                  <i class="bi bi-globe2"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">Proxy</h3>
+                <p class="text-muted small mb-0">Browse the web through this server</p>
+              </div>
+            </div>
+          </a>
+        </div>
+        {% endif %}
         
         <!-- Crosswords (Admin Only) -->
         {% if current_user.is_authenticated and current_user.is_admin %}

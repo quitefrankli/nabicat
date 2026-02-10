@@ -1,0 +1,81 @@
+{% extends "proxy_base.html" %}
+
+{% set active = 'Home' %}
+
+{% block page_content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-10">
+    <!-- URL Input Card -->
+    <div class="card border-0 shadow-soft mb-4">
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('proxy.browse') }}" class="d-flex gap-3">
+          <div class="flex-grow-1">
+            <div class="input-group input-group-lg">
+              <span class="input-group-text bg-white border-end-0">
+                <i class="bi bi-link-45deg text-muted"></i>
+              </span>
+              <input type="text"
+                     class="form-control border-start-0 ps-0"
+                     name="url"
+                     id="proxy-url"
+                     placeholder="Enter URL (e.g., example.com)"
+                     value="{{ url or '' }}"
+                     required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg d-flex align-items-center gap-2">
+            <i class="bi bi-arrow-right-circle"></i>
+            <span>Go</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {% if error %}
+    <!-- Error Alert -->
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-4" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% if content %}
+    <!-- Proxy Content Frame -->
+    <div class="card border-0 shadow-soft">
+      <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-3">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-globe text-sage"></i>
+          <span class="text-muted text-truncate" style="max-width: 500px;" title="{{ url }}">{{ url }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-{{ 'success' if status_code == 200 else 'warning' }}">{{ status_code }}</span>
+          <a href="{{ url }}" target="_blank" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+            <i class="bi bi-box-arrow-up-right"></i>
+            <span>Open Direct</span>
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="proxy-content-frame">
+          <iframe id="proxy-frame" srcdoc="{{ content | e }}" sandbox="allow-same-origin allow-scripts allow-forms"></iframe>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="card border-0 shadow-soft">
+      <div class="card-body p-5 text-center">
+        <div class="mb-4">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
+               style="width: 100px; height: 100px; background: rgba(91, 143, 185, 0.1);">
+            <i class="bi bi-cursor-fill" style="font-size: 3rem; color: #5B8FB9;"></i>
+          </div>
+        </div>
+        <h5 class="text-muted mb-2">Enter a URL to browse</h5>
+        <p class="text-muted mb-0">Use the input above to visit any website through this proxy</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

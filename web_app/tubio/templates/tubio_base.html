@@ -3,16 +3,6 @@
 {% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
 {% block navbar_brand %}Tubio{% endblock %}
 
-{% block page_icon %}
-  <div class="rounded-circle d-flex align-items-center justify-content-center" 
-       style="width: 56px; height: 56px; background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
-    <i class="bi bi-music-note-beamed text-white fs-4"></i>
-  </div>
-{% endblock %}
-
-{% block page_title %}Tubio{% endblock %}
-{% block page_subtitle %}Your personal music collection manager{% endblock %}
-
 {% block page_nav_items %}
   <li class="nav-item mx-1">
     <a class="nav-link d-flex align-items-center gap-2" href="#" id="playlists-nav-tab" onclick="switchTab('playlists')">

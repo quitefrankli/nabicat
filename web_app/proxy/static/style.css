@@ -1,0 +1,31 @@
+/* Proxy subpage styles */
+
+.proxy-content-frame {
+  width: 100%;
+  height: 70vh;
+  min-height: 500px;
+  overflow: hidden;
+  border-radius: 0 0 16px 16px;
+  background: white;
+}
+
+.proxy-content-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* URL input styling */
+#proxy-url:focus {
+  box-shadow: none;
+}
+
+.input-group:focus-within {
+  box-shadow: 0 0 0 0.25rem rgba(135, 168, 120, 0.25);
+  border-radius: var(--bs-border-radius-lg);
+}
+
+.input-group:focus-within .input-group-text,
+.input-group:focus-within .form-control {
+  border-color: var(--hw-sage, #87A878);
+}
