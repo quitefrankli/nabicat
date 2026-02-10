@@ -12,7 +12,7 @@ app.secret_key = ConfigManager().flask_secret_key
 
 # Session configuration for longer-lasting sessions
 # 30 days session lifetime - especially helpful for mobile/iOS users
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
 
 # Cookie settings for better mobile browser compatibility
 app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
