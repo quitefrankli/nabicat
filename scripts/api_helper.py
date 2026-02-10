@@ -78,11 +78,12 @@ def login() -> None:
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-def upload(file: Path) -> None:
+def upload(file: str) -> None:
     """
     Sends compressed base64 encoded data to the server
     """
     
+    file = Path(file)
     if file.is_dir():
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file_obj:
