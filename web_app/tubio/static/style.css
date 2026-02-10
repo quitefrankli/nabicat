@@ -244,6 +244,25 @@
   margin-left: 2px;
 }
 
+/* Playlist delete button styles */
+.btn-playlist-delete {
+  min-width: 40px;
+  font-weight: 600;
+  padding: 0.35rem 0.6rem;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 15px rgba(233, 196, 106, 0.4);
+}
+
+.btn-playlist-delete:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(233, 196, 106, 0.5);
+  color: black;
+}
+
 /* Audio player styling */
 audio {
   border-radius: 8px;

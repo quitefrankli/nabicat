@@ -37,11 +37,11 @@
                 </button>
                 {% endif %}
                 {% if playlist_name != "Favourites" %}
-                <form method="post" action="{{ url_for('.delete_playlist') }}" style="display:inline;" 
+                <form method="post" action="{{ url_for('.delete_playlist') }}" style="display:inline;"
                       onsubmit="return confirm('Are you sure you want to delete the playlist &quot;{{ playlist_name }}&quot;? All songs will remain in your Favourites.');">
                     <input type="hidden" name="playlist_name" value="{{ playlist_name }}">
-                    <button type="submit" class="btn btn-outline-light btn-sm">
-                        <i class="bi bi-trash me-1"></i>Delete
+                    <button type="submit" class="btn btn-sm btn-playlist-delete" title="Delete Playlist">
+                        <i class="bi bi-trash"></i>
                     </button>
                 </form>
                 {% endif %}
