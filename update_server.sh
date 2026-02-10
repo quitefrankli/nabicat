@@ -10,7 +10,7 @@ do
         p)
             PATCHES=$OPTARG
             echo "Applying patches..."
-            echo $PATCHES | base64 -di | gzip -d | git am
+            echo $PATCHES | base64 -di | git am
             git push
             exit 0
             ;;

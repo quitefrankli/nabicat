@@ -1,3 +1,4 @@
+import base64
 import subprocess
 import logging
 
@@ -82,7 +83,11 @@ def api_update():
     size_kb = len(patch) / 1e3
     logging.info(f"Updating with patch of size {size_kb:.2f} kB")
 
-    subprocess.Popen(f"bash update_server.sh -p \"{patch}\" &>> logs/shell_logs.log", shell=True, close_fds=True)
+    # in order to prevent any issues with piping to bash, we will convert it to base64
+    encoded_patch = base64.b64encode(patch.encode('utf-8')).decode('utf-8')
+    subprocess.Popen(f"bash update_server.sh -p \"{encoded_patch}\" &>> logs/shell_logs.log", 
+                     shell=True, 
+                     close_fds=True)
     
     return jsonify({
         "success": True, 

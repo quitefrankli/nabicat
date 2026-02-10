@@ -191,13 +191,13 @@ def update() -> None:
         print("Invalid git state detected, aborting update")
         return
 
-    raw_patch: bytes = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
+    raw_patch: str = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
     
-    if input(f"Apply update with {len(ahead_commits)} commits").strip().lower() != 'y':
+    if input(f"Apply update with {len(ahead_commits)} commits ahead? (y/n): ").strip().lower() != 'y':
         print("Update cancelled.")
         return
     
-    response = send_request("api/update", {"patch": raw_patch.decode('utf-8')})
+    response = send_request("api/update", {"patch": raw_patch})
 
     if response.status_code == 200:
         print("Update applied successfully.")
