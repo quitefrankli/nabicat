@@ -197,6 +197,29 @@
   border-color: var(--hw-sage-dark, #6B8E5A);
 }
 
+/* Playlist shuffle toggle button styles */
+.btn-shuffle-toggle {
+  min-width: 40px;
+  font-weight: 600;
+  padding: 0.35rem 0.6rem;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 15px rgba(233, 196, 106, 0.4);
+}
+
+.btn-shuffle-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(233, 196, 106, 0.5);
+  color: black;
+}
+
+.btn-shuffle-toggle.btn-shuffle-active {
+  color: black;
+}
+
 /* Playlist loop toggle button styles */
 .btn-loop-toggle {
   min-width: 40px;
@@ -283,4 +306,14 @@ audio::-webkit-media-controls-panel {
   font-size: 4rem;
   opacity: 0.3;
   margin-bottom: 1rem;
+}
+
+/* New Playlist card */
+.new-playlist-card {
+  transition: all 0.3s ease;
+}
+
+.new-playlist-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(233, 196, 106, 0.3) !important;
 }

@@ -319,6 +319,45 @@ function togglePlayTrack(crc) {
 // Loop mode for playlists: 'off', 'playlist', 'single'
 let playlistLoopModes = {};
 
+// Shuffle mode for playlists
+let playlistShuffleModes = {};
+
+function toggleShuffle(playlistName) {
+    const buttonId = `shuffle-toggle-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
+    const button = document.getElementById(buttonId);
+
+    if (!button) {
+        console.error(`Shuffle toggle button not found: ${buttonId}`);
+        return;
+    }
+
+    const isShuffled = button.dataset.shuffle === 'true';
+    const newState = !isShuffled;
+
+    // Store the shuffle mode for this playlist
+    playlistShuffleModes[playlistName] = newState;
+    button.dataset.shuffle = newState.toString();
+
+    // Update button visual state
+    if (newState) {
+        button.classList.add('btn-shuffle-active');
+        button.title = 'Shuffle: On';
+    } else {
+        button.classList.remove('btn-shuffle-active');
+        button.title = 'Shuffle: Off';
+    }
+}
+
+// Fisher-Yates shuffle algorithm
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
 function cycleLoopMode(playlistName) {
     const buttonId = `loop-toggle-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
     const button = document.getElementById(buttonId);
@@ -391,6 +430,89 @@ let currentPlaylistIndex = 0;
 let isPlayingPlaylist = false;
 let currentPlaylistName = '';
 
+function togglePlaylistPlayback(playlistName) {
+    // Check if this playlist is currently playing
+    if (isPlayingPlaylist && currentPlaylistName === playlistName) {
+        // Find the currently playing audio
+        const crc = currentPlaylistQueue[currentPlaylistIndex];
+        const audioElement = document.getElementById(`audio-${crc}`);
+
+        if (audioElement && !audioElement.paused) {
+            // Pause the playlist
+            pausePlaylist();
+        } else {
+            // Resume the playlist
+            resumePlaylist();
+        }
+    } else {
+        // Start playing this playlist
+        playAllInPlaylist(playlistName);
+    }
+}
+
+function pausePlaylist() {
+    const crc = currentPlaylistQueue[currentPlaylistIndex];
+    const audioElement = document.getElementById(`audio-${crc}`);
+    const playButton = document.getElementById(`play-btn-${crc}`);
+
+    if (audioElement) {
+        audioElement.pause();
+    }
+
+    if (playButton) {
+        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
+        playButton.classList.remove('btn-success');
+        playButton.classList.add('btn-outline-primary');
+    }
+
+    // Update playlist play button to show play icon
+    updatePlaylistPlayButton(currentPlaylistName, false);
+}
+
+function resumePlaylist() {
+    const crc = currentPlaylistQueue[currentPlaylistIndex];
+    const audioElement = document.getElementById(`audio-${crc}`);
+    const playButton = document.getElementById(`play-btn-${crc}`);
+
+    if (audioElement) {
+        audioElement.play().catch(err => {
+            console.error('Error resuming audio:', err);
+            showNotification('Error resuming playback', 'error');
+        });
+    }
+
+    if (playButton) {
+        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
+        playButton.classList.remove('btn-outline-primary');
+        playButton.classList.add('btn-success');
+    }
+
+    // Update playlist play button to show pause icon
+    updatePlaylistPlayButton(currentPlaylistName, true);
+}
+
+function updatePlaylistPlayButton(playlistName, isPlaying) {
+    const buttonId = `play-all-btn-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
+    const button = document.getElementById(buttonId);
+
+    if (button) {
+        if (isPlaying) {
+            button.innerHTML = '<i class="bi bi-pause-fill"></i>';
+            button.title = 'Pause';
+        } else {
+            button.innerHTML = '<i class="bi bi-play-fill"></i>';
+            button.title = 'Play All';
+        }
+    }
+}
+
+function resetAllPlaylistPlayButtons() {
+    document.querySelectorAll('.btn-play-all').forEach(button => {
+        button.innerHTML = '<i class="bi bi-play-fill"></i>';
+        button.title = 'Play All';
+    });
+}
+
 function playAllInPlaylist(playlistName) {
     // Find all audio items in this playlist
     const accordionId = `audioAccordion-${playlistName.replace(/ /g, '-')}`;
@@ -434,13 +556,25 @@ function playAllInPlaylist(playlistName) {
     
     // Build queue of audio CRCs
     currentPlaylistQueue = Array.from(audioItems).map(item => item.dataset.audioCrc);
+
+    // Shuffle if enabled
+    const isShuffled = playlistShuffleModes[playlistName] || false;
+    if (isShuffled) {
+        currentPlaylistQueue = shuffleArray(currentPlaylistQueue);
+    }
+
     currentPlaylistIndex = 0;
     isPlayingPlaylist = true;
     currentPlaylistName = playlistName;
 
+    // Reset all playlist play buttons, then set this one to pause
+    resetAllPlaylistPlayButtons();
+    updatePlaylistPlayButton(playlistName, true);
+
     // Show notification
-    showNotification(`Playing all ${currentPlaylistQueue.length} songs in "${playlistName}"`, 'success');
-    
+    const shuffleText = isShuffled ? ' (shuffled)' : '';
+    showNotification(`Playing all ${currentPlaylistQueue.length} songs in "${playlistName}"${shuffleText}`, 'success');
+
     // Start playing first song
     playNextInQueue();
 }
@@ -452,11 +586,17 @@ function playNextInQueue() {
     if (!isPlayingPlaylist || currentPlaylistIndex >= currentPlaylistQueue.length) {
         // Check if we should loop the playlist
         if (loopMode === 'playlist' && currentPlaylistQueue.length > 0) {
+            // Re-shuffle if shuffle is enabled
+            const isShuffled = playlistShuffleModes[currentPlaylistName] || false;
+            if (isShuffled) {
+                currentPlaylistQueue = shuffleArray(currentPlaylistQueue);
+            }
             currentPlaylistIndex = 0;
             showNotification('Looping playlist from beginning', 'info');
         } else {
             // Playlist finished
             isPlayingPlaylist = false;
+            resetAllPlaylistPlayButtons();
             showNotification('Playlist finished', 'info');
             return;
         }

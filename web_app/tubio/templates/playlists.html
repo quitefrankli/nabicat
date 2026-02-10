@@ -2,6 +2,22 @@
     {% for playlist_name, playlist_data in playlists %}
         {% include 'playlist.html' with context %}
     {% endfor %}
+
+    <!-- New Playlist Card -->
+    <div class="card mb-4 shadow-sm new-playlist-card"
+         style="border: none; border-radius: 16px; overflow: hidden; cursor: pointer;"
+         data-bs-toggle="modal"
+         data-bs-target="#newPlaylistModal">
+        <div class="card-header" style="background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%); padding: 0;">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-white text-decoration-none flex-grow-1 text-start py-3 px-3"
+                     style="font-size: 1.25rem; font-weight: bold;">
+                    <i class="bi bi-plus-circle me-3" style="font-size: 1.5rem; font-weight: bold;"></i>
+                    New Playlist
+                </div>
+            </div>
+        </div>
+    </div>
 {% else %}
     <!-- Empty state when no playlists exist -->
     <div class="container py-5">
