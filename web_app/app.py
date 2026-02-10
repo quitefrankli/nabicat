@@ -2,13 +2,7 @@ from datetime import timedelta
 from flask import Flask
 from flask_bootstrap import Bootstrap5
 
-from web_app.config import ConfigManager
-
 app = Flask(__name__)
-
-# Use a persistent secret key from environment variable
-# Generate a random one if not set (for development only - will reset on restart)
-app.secret_key = ConfigManager().flask_secret_key
 
 # Session configuration for longer-lasting sessions
 # 30 days session lifetime - especially helpful for mobile/iOS users

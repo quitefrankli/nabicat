@@ -69,7 +69,7 @@
   border: none;
   color: white;
   font-weight: 600;
-  padding: 0.75rem 1.5rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 9999px;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(233, 196, 106, 0.4);
@@ -197,17 +197,28 @@
   border-color: var(--hw-sage-dark, #6B8E5A);
 }
 
-/* Loop button states */
-.track-loop-btn.btn-warning {
+/* Playlist loop toggle button styles */
+.btn-loop-toggle {
+  min-width: 40px;
+  font-weight: 600;
+  padding: 0.35rem 0.6rem;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
   background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%);
   border: none;
   color: white;
-  font-weight: bold;
-  box-shadow: 0 0 10px rgba(233, 196, 106, 0.4);
+  box-shadow: 0 4px 15px rgba(233, 196, 106, 0.4);
 }
 
-.track-loop-btn.btn-warning:hover {
-  box-shadow: 0 0 15px rgba(233, 196, 106, 0.6);
+.btn-loop-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(233, 196, 106, 0.5);
+  color: black;
+}
+
+.btn-loop-toggle small {
+  font-size: 0.7em;
+  margin-left: 2px;
 }
 
 /* Audio player styling */

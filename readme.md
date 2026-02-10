@@ -1,10 +1,20 @@
 # Web App
 
-## Configuration
+
+## Setup
+
+### Env
 
 create a `.env` file in the root of the project with the following content:
 
 * `X_RAPID_API_KEY` - from https://rapidapi.com/hub
+* `FLASK_SECRET_KEY` - can be any random 24 char str
+
+### Conda + Other Misc Reqs
+
+* setup conda env - see `setup_server.sh:setup_conda`
+* install `ffmpeg`
+
 
 ## Running
 

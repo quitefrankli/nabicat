@@ -215,9 +215,9 @@ async function updateContent(data) {
             
             if (newPlaylistsContent && currentPlaylistsTab) {
                 currentPlaylistsTab.innerHTML = newPlaylistsContent.innerHTML;
-                
-                // Re-attach collapse event listeners for chevron animation
-                currentPlaylistsTab.querySelectorAll('[data-bs-toggle="collapse"]').forEach(button => {
+
+                // Re-attach collapse event listeners for chevron animation (only for playlist buttons)
+                currentPlaylistsTab.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {
                     const targetId = button.getAttribute('data-bs-target');
                     if (targetId) {
                         const target = document.querySelector(targetId);
@@ -231,6 +231,9 @@ async function updateContent(data) {
                         }
                     }
                 });
+
+                // Re-initialize audio event listeners for newly added tracks
+                initializeAudioEventListeners();
             }
         }
     } catch (error) {
@@ -244,12 +247,16 @@ async function updateContent(data) {
 function togglePlayTrack(crc) {
     const audioElement = document.getElementById(`audio-${crc}`);
     const playButton = document.getElementById(`play-btn-${crc}`);
-    
+    const trackItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
+
     if (!audioElement || !playButton) {
         console.error(`Audio element or button not found for crc: ${crc}`);
         return;
     }
-    
+
+    // Get the playlist name from the track's parent accordion
+    const playlistName = trackItem ? trackItem.dataset.playlist : '';
+
     if (audioElement.paused) {
         // Pause all other audio elements and reset their buttons
         document.querySelectorAll('audio').forEach(audio => {
@@ -265,13 +272,18 @@ function togglePlayTrack(crc) {
                 }
             }
         });
-        
+
+        // Update current playlist name for loop mode
+        if (playlistName) {
+            currentPlaylistName = playlistName;
+        }
+
         // Play this track
         audioElement.play().catch(err => {
             console.error('Error playing audio:', err);
             showNotification('Error playing audio. Please try again.', 'error');
         });
-        
+
         // Update button to show pause icon
         playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
         playButton.classList.remove('btn-outline-primary');
@@ -279,46 +291,78 @@ function togglePlayTrack(crc) {
     } else {
         // Pause this track
         audioElement.pause();
-        
+
         // Update button to show play icon
         playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
         playButton.classList.remove('btn-success');
         playButton.classList.add('btn-outline-primary');
     }
-    
+
     // Add event listener to reset button when track ends naturally
     audioElement.onended = function() {
-        if (!audioElement.loop) {
-            playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-            playButton.classList.remove('btn-success');
-            playButton.classList.add('btn-outline-primary');
+        // Get loop mode for current playlist
+        const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
+
+        // Handle single track looping for individual track play
+        if (loopMode === 'single') {
+            audioElement.currentTime = 0;
+            audioElement.play().catch(err => console.error('Error replaying audio:', err));
+            return;
         }
+
+        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
+        playButton.classList.remove('btn-success');
+        playButton.classList.add('btn-outline-primary');
     };
 }
 
-function toggleLoopTrack(crc) {
-    const audioElement = document.getElementById(`audio-${crc}`);
-    const loopButton = document.getElementById(`loop-btn-${crc}`);
-    
-    if (!audioElement || !loopButton) {
-        console.error(`Audio element or loop button not found for crc: ${crc}`);
+// Loop mode for playlists: 'off', 'playlist', 'single'
+let playlistLoopModes = {};
+
+function cycleLoopMode(playlistName) {
+    const buttonId = `loop-toggle-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
+    const button = document.getElementById(buttonId);
+
+    if (!button) {
+        console.error(`Loop toggle button not found: ${buttonId}`);
         return;
     }
-    
-    // Toggle loop state
-    audioElement.loop = !audioElement.loop;
-    
-    // Update button visual state
-    if (audioElement.loop) {
-        loopButton.classList.remove('btn-outline-secondary');
-        loopButton.classList.add('btn-warning');
-        loopButton.innerHTML = '<i class="bi bi-arrow-repeat" style="font-weight: bold;"></i>';
-        loopButton.title = 'Loop enabled - Click to disable';
+
+    const currentMode = button.dataset.loopMode || 'off';
+    let newMode;
+
+    // Cycle through modes: off -> playlist -> single -> off
+    if (currentMode === 'off') {
+        newMode = 'playlist';
+    } else if (currentMode === 'playlist') {
+        newMode = 'single';
     } else {
-        loopButton.classList.remove('btn-warning');
-        loopButton.classList.add('btn-outline-secondary');
-        loopButton.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-        loopButton.title = 'Loop disabled - Click to enable';
+        newMode = 'off';
+    }
+
+    // Store the loop mode for this playlist
+    playlistLoopModes[playlistName] = newMode;
+    button.dataset.loopMode = newMode;
+
+    // Update button visual state
+    updateLoopButtonUI(button, newMode);
+}
+
+function updateLoopButtonUI(button, mode) {
+    // Reset classes
+    button.classList.remove('btn-loop-playlist', 'btn-loop-single');
+
+    if (mode === 'off') {
+        button.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+        button.title = 'Loop: Off';
+    } else if (mode === 'playlist') {
+        button.classList.add('btn-loop-playlist');
+        button.innerHTML = '<i class="bi bi-arrow-repeat"></i> <small>All</small>';
+        button.title = 'Loop: Playlist (loops all songs)';
+    } else if (mode === 'single') {
+        button.classList.add('btn-loop-single');
+        button.innerHTML = '<i class="bi bi-arrow-repeat"></i> <small>1</small>';
+        button.title = 'Loop: Single (loops current song)';
     }
 }
 
@@ -345,6 +389,7 @@ function setVolume(crc, value) {
 let currentPlaylistQueue = [];
 let currentPlaylistIndex = 0;
 let isPlayingPlaylist = false;
+let currentPlaylistName = '';
 
 function playAllInPlaylist(playlistName) {
     // Find all audio items in this playlist
@@ -391,7 +436,8 @@ function playAllInPlaylist(playlistName) {
     currentPlaylistQueue = Array.from(audioItems).map(item => item.dataset.audioCrc);
     currentPlaylistIndex = 0;
     isPlayingPlaylist = true;
-    
+    currentPlaylistName = playlistName;
+
     // Show notification
     showNotification(`Playing all ${currentPlaylistQueue.length} songs in "${playlistName}"`, 'success');
     
@@ -400,11 +446,20 @@ function playAllInPlaylist(playlistName) {
 }
 
 function playNextInQueue() {
+    // Get loop mode for current playlist
+    const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
+
     if (!isPlayingPlaylist || currentPlaylistIndex >= currentPlaylistQueue.length) {
-        // Playlist finished
-        isPlayingPlaylist = false;
-        showNotification('Playlist finished', 'info');
-        return;
+        // Check if we should loop the playlist
+        if (loopMode === 'playlist' && currentPlaylistQueue.length > 0) {
+            currentPlaylistIndex = 0;
+            showNotification('Looping playlist from beginning', 'info');
+        } else {
+            // Playlist finished
+            isPlayingPlaylist = false;
+            showNotification('Playlist finished', 'info');
+            return;
+        }
     }
     
     const crc = currentPlaylistQueue[currentPlaylistIndex];
@@ -449,20 +504,30 @@ function playNextInQueue() {
     audioElement.addEventListener('ended', function onEnded() {
         // Remove this event listener
         audioElement.removeEventListener('ended', onEnded);
-        
-        // Reset button and highlight (same as togglePlayTrack)
-        if (playButton && !audioElement.loop) {
+
+        // Get loop mode for current playlist
+        const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
+
+        // Handle single track looping
+        if (loopMode === 'single') {
+            audioElement.currentTime = 0;
+            audioElement.play().catch(err => console.error('Error replaying audio:', err));
+            return;
+        }
+
+        // Reset button and highlight
+        if (playButton) {
             playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
             playButton.classList.remove('btn-success');
             playButton.classList.add('btn-outline-primary');
         }
-        
-        if (trackItem && !audioElement.loop) {
+
+        if (trackItem) {
             trackItem.classList.remove('track-playing');
         }
-        
+
         // Move to next song
-        if (isPlayingPlaylist && !audioElement.loop) {
+        if (isPlayingPlaylist) {
             currentPlaylistIndex++;
             setTimeout(() => playNextInQueue(), 500); // Small delay between songs
         }
@@ -498,10 +563,102 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
+// Sync button UI with audio element state
+function syncAudioButtonUI(crc) {
+    const audioElement = document.getElementById(`audio-${crc}`);
+    const playButton = document.getElementById(`play-btn-${crc}`);
+
+    if (!audioElement || !playButton) {
+        return;
+    }
+
+    if (audioElement.paused) {
+        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
+        playButton.classList.remove('btn-success');
+        playButton.classList.add('btn-outline-primary');
+    } else {
+        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
+        playButton.classList.remove('btn-outline-primary');
+        playButton.classList.add('btn-success');
+    }
+}
+
+// Initialize audio event listeners to sync UI
+function initializeAudioEventListeners() {
+    document.querySelectorAll('audio').forEach(audio => {
+        const crc = audio.id.replace('audio-', '');
+
+        // Remove existing listeners to avoid duplicates
+        audio.removeEventListener('play', audio._playHandler);
+        audio.removeEventListener('pause', audio._pauseHandler);
+
+        // Create and store handlers
+        audio._playHandler = () => syncAudioButtonUI(crc);
+        audio._pauseHandler = () => syncAudioButtonUI(crc);
+
+        // Add event listeners for play and pause events
+        audio.addEventListener('play', audio._playHandler);
+        audio.addEventListener('pause', audio._pauseHandler);
+    });
+}
+
+// Media Session API integration for hardware media keys
+function initializeMediaSession() {
+    if ('mediaSession' in navigator) {
+        // Set up action handlers for hardware media keys
+        navigator.mediaSession.setActionHandler('play', () => {
+            const currentlyPlaying = getCurrentlyPlayingTrack();
+            if (currentlyPlaying) {
+                // If there's a paused track, resume it
+                const audioElement = document.getElementById(`audio-${currentlyPlaying}`);
+                if (audioElement && audioElement.paused) {
+                    togglePlayTrack(currentlyPlaying);
+                }
+            }
+        });
+
+        navigator.mediaSession.setActionHandler('pause', () => {
+            const currentlyPlaying = getCurrentlyPlayingTrack();
+            if (currentlyPlaying) {
+                const audioElement = document.getElementById(`audio-${currentlyPlaying}`);
+                if (audioElement && !audioElement.paused) {
+                    togglePlayTrack(currentlyPlaying);
+                }
+            }
+        });
+    }
+}
+
+// Helper function to get the currently playing track CRC
+function getCurrentlyPlayingTrack() {
+    // Find the audio element that is currently playing
+    const playingAudio = Array.from(document.querySelectorAll('audio')).find(audio => !audio.paused);
+    if (playingAudio) {
+        return playingAudio.id.replace('audio-', '');
+    }
+
+    // If no audio is playing, find the last paused audio with currentTime > 0
+    const pausedWithProgress = Array.from(document.querySelectorAll('audio'))
+        .filter(audio => audio.currentTime > 0)
+        .sort((a, b) => b.currentTime - a.currentTime)[0];
+
+    if (pausedWithProgress) {
+        return pausedWithProgress.id.replace('audio-', '');
+    }
+
+    return null;
+}
+
 // Handle playlist collapse chevron rotation
 document.addEventListener('DOMContentLoaded', function() {
-    // Update chevron rotation when collapse events occur
-    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(button => {
+    // Initialize Media Session API
+    initializeMediaSession();
+
+    // Initialize audio event listeners for UI sync
+    initializeAudioEventListeners();
+
+    // Update chevron rotation when playlist collapse events occur (only for playlist buttons, not track accordions)
+    document.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {
         const targetId = button.getAttribute('data-bs-target');
         if (targetId) {
             const target = document.querySelector(targetId);

@@ -15,8 +15,15 @@
             </button>
             <div class="d-flex gap-2 pe-3">
                 {% if playlist_data %}
-                <button class="btn btn-light btn-sm btn-play-all" onclick="playAllInPlaylist('{{ playlist_name|replace("'", "\\'") }}')">
-                    <i class="bi bi-play-circle me-1"></i>Play All
+                <button class="btn btn-sm btn-loop-toggle"
+                        id="loop-toggle-{{ playlist_name|replace(' ', '-')|replace("'", '') }}"
+                        onclick="cycleLoopMode('{{ playlist_name|replace("'", "\\'") }}')"
+                        data-loop-mode="off"
+                        title="Loop: Off">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+                <button class="btn btn-sm btn-play-all" onclick="playAllInPlaylist('{{ playlist_name|replace("'", "\\'") }}')">
+                    <i class="bi bi-play-circle me-1"></i>
                 </button>
                 {% endif %}
                 {% if playlist_name != "Favourites" %}
@@ -49,9 +56,6 @@
                             </div>
                             <button class="btn btn-sm btn-outline-primary track-play-btn" id="play-btn-{{ crc }}" onclick="togglePlayTrack('{{ crc }}')" title="Play/Pause track" style="min-width: 40px; border-color: var(--hw-sage, #87A878); color: var(--hw-sage, #87A878);">
                                 <i class="bi bi-play-fill"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary track-loop-btn" id="loop-btn-{{ crc }}" onclick="toggleLoopTrack('{{ crc }}')" title="Toggle loop" style="min-width: 40px;">
-                                <i class="bi bi-arrow-repeat"></i>
                             </button>
                             <button class="accordion-button collapsed bg-gradient fw-semibold flex-grow-1" 
                                     type="button" 

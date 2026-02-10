@@ -1,4 +1,6 @@
 import os
+
+from os import getenv
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -30,9 +32,6 @@ class ConfigManager:
         self.tudio_max_results = 10
         self.tudio_max_video_length = timedelta(minutes=10)
         self.todoist2_default_page_size = 8
-        self.jswipe_api_key = os.environ['X_RAPID_API_KEY']
-        self.flask_secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(24)
-        self.symmetric_encryption_key: bytes = os.environ.get('SYMMETRIC_ENCRYPTION_KEY').encode('utf-8')
 
     @property
     def project_name(self) -> str:
@@ -49,3 +48,36 @@ class ConfigManager:
     @property
     def temp_dir(self) -> Path:
         return self.save_data_path / "temp"
+
+    @property
+    def jswipe_api_key(self) -> str:
+        api_key = getenv('X_RAPID_API_KEY')
+        if api_key:
+            return api_key
+        
+        if self.debug_mode:
+            return "DEBUG_X_RAPID_API_KEY"
+        
+        raise ValueError("API key for JSwipe is not set. Please set the 'X_RAPID_API_KEY' environment variable.")
+    
+    @property
+    def flask_secret_key(self) -> str:
+        key = getenv('FLASK_SECRET_KEY')
+        if key:
+            return key
+        
+        if self.debug_mode:
+            return "DEBUG_FLASK_SECRET_KEY"
+        
+        raise ValueError("Flask secret key is not set. Please set the 'FLASK_SECRET_KEY' environment variable.")
+
+    @property
+    def symmetric_encryption_key(self) -> bytes:
+        key = getenv('SYMMETRIC_ENCRYPTION_KEY')
+        if key:
+            return key.encode('utf-8')
+        
+        if self.debug_mode:
+            return "DEBUG_SYMMETRIC_ENCRYPTION_KEY".encode('utf-8')
+        
+        raise ValueError("Symmetric encryption key is not set. Please set the 'SYMMETRIC_ENCRYPTION_KEY' environment variable.")

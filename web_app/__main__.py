@@ -90,14 +90,14 @@ def cli_start(debug: bool, port: int):
     configure_logging(debug=debug)
     config = ConfigManager()
     config.debug_mode = debug
+    app.secret_key = ConfigManager().flask_secret_key
 
     # if we are in debug mode, copy the debug data to the save_data_path
     # if the save_data_path does not exist
-    if debug:
-        if not config.save_data_path.parent.exists():
-            logging.info(f"Copying debug data to {config.save_data_path.parent}")
-            debug_data_path = Path(f"tests/debug_save/.{config.project_name}")
-            shutil.copytree(debug_data_path, config.save_data_path.parent)
+    if debug and not config.save_data_path.parent.exists():
+        logging.info(f"Copying debug data to {config.save_data_path.parent}")
+        debug_data_path = Path(f"tests/debug_save/.{config.project_name}")
+        shutil.copytree(debug_data_path, config.save_data_path.parent)
 
     logging.info("Starting server")
     app.run(host='0.0.0.0', port=port, debug=debug)
@@ -105,5 +105,6 @@ def cli_start(debug: bool, port: int):
 if __name__ == '__main__':
     cli_start()
 else:
+    app.secret_key = ConfigManager().flask_secret_key
     configure_logging(debug=False)
     logging.info("Starting server")
