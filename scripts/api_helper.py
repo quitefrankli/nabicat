@@ -9,21 +9,96 @@ import io
 import sys
 import zipfile
 import json
+import os
 
 from git import Repo
 from pathlib import Path
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 KEYRING_APP_ID = "lazywombat"
 DEFAULT_BASE_URL = "https://lazywombat.site"
 
 
-def compress_encrypt_encode(data: bytes, key: bytes) -> str:
+def hybrid_encrypt(data: bytes, public_key_pem: str, session_id: str) -> dict:
+    """
+    Encrypt data using hybrid encryption (RSA + AES-GCM).
+    
+    1. Generate random 256-bit AES key
+    2. Compress and encrypt data with AES-GCM
+    3. Encrypt AES key with RSA public key
+    4. Return payload dict for server
+    """
+    # Generate random 256-bit AES key
+    aes_key = AESGCM.generate_key(bit_length=256)
+    aesgcm = AESGCM(aes_key)
+    
+    # Compress data
     compressed_data = gzip.compress(data)
-    compressed_data = Fernet(key).encrypt(compressed_data)
-    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
-    return encoded_data
+    
+    # Encrypt with AES-GCM (nonce is auto-generated)
+    nonce = os.urandom(12)  # 96-bit nonce for GCM
+    encrypted_data = aesgcm.encrypt(nonce, compressed_data, None)
+    
+    # Load RSA public key
+    public_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'))
+    
+    # Encrypt AES key with RSA-OAEP
+    encrypted_key = public_key.encrypt(
+        aes_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    
+    return {
+        "session_id": session_id,
+        "encrypted_key": base64.b64encode(encrypted_key).decode('utf-8'),
+        "encrypted_data": base64.b64encode(encrypted_data).decode('utf-8'),
+        "nonce": base64.b64encode(nonce).decode('utf-8')
+    }
+
+
+def do_handshake() -> tuple[str, str]:
+    """
+    Perform handshake with server to get ephemeral RSA public key.
+    
+    Returns:
+        tuple: (session_id, public_key_pem)
+    """
+    url = f"{get_base_url()}/api/handshake"
+    
+    try:
+        response = requests.post(url, timeout=10)
+    except requests.exceptions.SSLError as e:
+        raise ConnectionError(
+            f"SSL Error connecting to {url}. "
+            f"If using a local server, try HTTP instead of HTTPS. "
+            f"Run 'login' command to update the base URL."
+        ) from e
+    except requests.exceptions.ConnectionError as e:
+        raise ConnectionError(
+            f"Could not connect to server at {url}. "
+            f"Please check:\n"
+            f"  1. Is the server running?\n"
+            f"  2. Is the base URL correct? (run 'login' to update)\n"
+            f"  3. Is the server accessible from this network?"
+        ) from e
+    except requests.exceptions.Timeout as e:
+        raise ConnectionError(f"Connection to {url} timed out. Is the server running?") from e
+    
+    if response.status_code != 200:
+        raise ConnectionError(f"Handshake failed: {response.status_code} - {response.text}")
+    
+    data = response.json()
+    if not data.get("success"):
+        raise ConnectionError(f"Handshake failed: {data.get('error', 'Unknown error')}")
+    
+    return data["session_id"], data["public_key"]
 
 def generate_cred_payload() -> dict:
     username = keyring.get_password(KEYRING_APP_ID, "username")
@@ -39,22 +114,40 @@ def get_base_url() -> str:
     base_url = keyring.get_password(KEYRING_APP_ID, "base_url")
     return base_url if base_url else DEFAULT_BASE_URL
 
-def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
+def _send_request_internal(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
+    """Internal function that actually sends the request."""
     url = f"{get_base_url()}/{endpoint}"
     if require_cred:
         payload = generate_cred_payload() | payload
 
-    encryption_key = keyring.get_password(KEYRING_APP_ID, "encryption_key").encode('utf-8')
+    # Step 1: Handshake to get ephemeral public key
+    session_id, public_key = do_handshake()
+    
+    # Step 2: Encrypt payload with hybrid encryption
     unencrypted_payload = json.dumps(payload).encode('utf-8')
-    encrypted_payload = compress_encrypt_encode(unencrypted_payload, encryption_key)
-
-    if len(encrypted_payload) > 1e3:
-        size_kb = len(encrypted_payload) / 1e3
+    encrypted_payload = hybrid_encrypt(unencrypted_payload, public_key, session_id)
+    
+    # Calculate size for confirmation
+    payload_json = json.dumps(encrypted_payload)
+    if len(payload_json) > 1e3:
+        size_kb = len(payload_json) / 1e3
         if input(f"Payload size is {size_kb:.2f} kB. Do you want to continue? (y/n): ").strip().lower() != 'y':
             print("Request cancelled.")
             sys.exit(0)
 
     return requests.post(url, json={"req": encrypted_payload})
+
+
+def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
+    """
+    Send an encrypted request to the API.
+    Exits on connection error.
+    """
+    try:
+        return _send_request_internal(endpoint, payload, require_cred)
+    except ConnectionError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 @click.group(help="cli helper for interacting with backend all data (including credentials) are encrypted")
 def cli():
@@ -63,18 +156,17 @@ def cli():
 @cli.command()
 def login() -> None:
     """
-    Stores the username and password in the keyring for future use
-    Optionally, you can specify the base URL for the API and an encryption key
+    Stores the username and password in the keyring for future use.
+    Optionally, you can specify the base URL for the API.
     """
     
     username = input("Enter your username: ")
     password = getpass.getpass("Enter password: ")
     base_url = input(f"Enter base URL (default: {DEFAULT_BASE_URL}): ") or DEFAULT_BASE_URL
-    encryption_key = getpass.getpass("Enter encryption key (optional, press Enter to skip): ")
     keyring.set_password(KEYRING_APP_ID, "username", username)
     keyring.set_password(KEYRING_APP_ID, "password", password)
     keyring.set_password(KEYRING_APP_ID, "base_url", base_url)
-    keyring.set_password(KEYRING_APP_ID, "encryption_key", encryption_key)
+    print("Login credentials saved successfully.")
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
@@ -111,6 +203,7 @@ def upload(file: str) -> None:
         "name": base_filename,
         "data": encoded_data
     }
+    
     response = send_request("api/push", payload)
     print(f"Response: {response.status_code} - {response.text}")
 
@@ -359,8 +452,39 @@ def upload_cookies(cookies: Path) -> None:
         print(f"Failed to upload cookies: {response.status_code} - {response.text}")
 
 @cli.command()
-def generate_symmetric_key() -> None:
-    print(Fernet.generate_key().decode('utf-8'))
+def test_handshake() -> None:
+    """
+    Test the encryption handshake with the server.
+    """
+    try:
+        session_id, public_key = do_handshake()
+        print(f"Handshake successful!")
+        print(f"Session ID: {session_id}")
+        print(f"Public Key (first 100 chars): {public_key[:100]}...")
+    except ConnectionError as e:
+        print(f"Handshake failed:\n{e}")
+
+
+@cli.command(name="config")
+def show_config() -> None:
+    """
+    Show current configuration (base URL, username).
+    """
+    base_url = keyring.get_password(KEYRING_APP_ID, "base_url")
+    username = keyring.get_password(KEYRING_APP_ID, "username")
+    
+    print(f"Current configuration:")
+    print(f"  Base URL: {base_url or '(not set)'}")
+    print(f"  Username: {username or '(not set)'}")
+    
+    # Test connection
+    print(f"\nTesting connection to {base_url or DEFAULT_BASE_URL}...")
+    try:
+        session_id, public_key = do_handshake()
+        print(f"  ✓ Server is reachable")
+        print(f"  ✓ Handshake successful (session: {session_id[:8]}...)")
+    except ConnectionError as e:
+        print(f"  ✗ {e}")
 
 if __name__ == "__main__":
     cli()
