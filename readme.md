@@ -70,26 +70,9 @@ bash lazywombat/setup_server.sh
 
 ## Updating Server
 
-### Method 1: via git push
-
-Simply push from main branch, force push also works too
-
-### Method 2: via curl
-
-1. make sure you are on main branch (force pushes are NOT supported, make sure origin/main is STRICTLY behind main)
-2. `PATCH=$(git format-patch origin/main..main --stdout | gzip -c | base64 -w 0) && curl -F "username=$USER" -F "password=$PASS" -F "patch=$PATCH" https://lazywombat.site/api/update`
-
-### Method 3: manual on server
-
-`bash update_server.sh &> logs/shell_logs.log &`
-
-## Creating Backup
-
-`curl -F "username=$USERNAME" "password=$PASSWORD" https://lazywombat.site/api/backup`
-
-## Helper Scripts
-
-The above can be automated, check out `python scripts/api_helper.py`
+a. simply push from main branch, force push also works too
+b. on main branch run - `python scripts/api_helper.py update`
+c. run on server - `bash update_server.sh &> logs/shell_logs.log &`
 
 ## Renewing Cert
 

@@ -32,6 +32,7 @@ class ConfigManager:
         self.todoist2_default_page_size = 8
         self.jswipe_api_key = os.environ['X_RAPID_API_KEY']
         self.flask_secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(24)
+        self.symmetric_encryption_key: bytes = os.environ.get('SYMMETRIC_ENCRYPTION_KEY').encode('utf-8')
 
     @property
     def project_name(self) -> str:

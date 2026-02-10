@@ -8,13 +8,22 @@ import keyring
 import io
 import sys
 import zipfile
+import os
 
 from git import Repo
 from pathlib import Path
+from cryptography.fernet import Fernet
 
 
 KEYRING_APP_ID = "lazywombat"
 DEFAULT_BASE_URL = "https://lazywombat.site"
+
+
+def compress_encrypt_encode(data: bytes, key: bytes) -> str:
+    compressed_data = gzip.compress(data)
+    compressed_data = Fernet(key).encrypt(compressed_data)
+    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
+    return encoded_data
 
 def generate_cred_payload() -> dict:
     username = keyring.get_password(KEYRING_APP_ID, "username")
@@ -50,21 +59,23 @@ def cli():
 def login() -> None:
     """
     Stores the username and password in the keyring for future use
-    Optionally, you can specify the base URL for the API
+    Optionally, you can specify the base URL for the API and an encryption key
     """
     
     username = input("Enter your username: ")
     password = getpass.getpass("Enter password: ")
     base_url = input(f"Enter base URL (default: {DEFAULT_BASE_URL}): ") or DEFAULT_BASE_URL
+    encryption_key = getpass.getpass("Enter encryption key (optional, press Enter to skip): ")
     keyring.set_password(KEYRING_APP_ID, "username", username)
     keyring.set_password(KEYRING_APP_ID, "password", password)
     keyring.set_password(KEYRING_APP_ID, "base_url", base_url)
+    keyring.set_password(KEYRING_APP_ID, "encryption_key", encryption_key)
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
 def upload(file: Path) -> None:
     """
-    Sends compressed bas64 encoded data to the server
+    Sends compressed base64 encoded data to the server
     """
     
     if file.is_dir():
@@ -174,13 +185,17 @@ def update() -> None:
         return
 
     patch_data = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
-    compressed_patch = compress_and_encode(patch_data.encode('utf-8'))
+    encryption_key = keyring.get_password(KEYRING_APP_ID, "encryption_key")
+    if not encryption_key:
+        raise ValueError("No encryption key found. Please set an encryption key using the 'login' command to enable patch encryption.")
+    
+    patch_data = compress_encrypt_encode(patch_data.encode('utf-8'), encryption_key)
 
-    if input(f"Apply update with {len(ahead_commits)} commits and patch size {len(compressed_patch)/1e3}kB ? (y/n): ").strip().lower() != 'y':
+    if input(f"Apply update with {len(ahead_commits)} commits and patch size {len(patch_data)/1e3}kB ? (y/n): ").strip().lower() != 'y':
         print("Update cancelled.")
         return
 
-    response = send_request("api/update", {"patch": compressed_patch})
+    response = send_request("api/update", {"patch": patch_data})
 
     if response.status_code == 200:
         print("Update applied successfully.")
@@ -356,6 +371,10 @@ def upload_cookies(cookies: Path) -> None:
         print("Cookies uploaded successfully.")
     else:
         print(f"Failed to upload cookies: {response.status_code} - {response.text}")
+
+@cli.command()
+def generate_symmetric_key() -> None:
+    print(Fernet.generate_key().decode('utf-8'))
 
 if __name__ == "__main__":
     cli()
