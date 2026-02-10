@@ -155,6 +155,8 @@ class DataInterface:
                     if not chunk:
                         break
                     f.write(chunk)
+        # Discard original permissions - set to standard rw-r--r--
+        file_path.chmod(0o644)
         # self.data_syncer.upload_file(file_path)
 
     def atomic_delete(self, file_path: Path) -> None:
