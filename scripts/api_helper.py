@@ -8,7 +8,7 @@ import keyring
 import io
 import sys
 import zipfile
-import os
+import json
 
 from git import Repo
 from pathlib import Path
@@ -43,15 +43,20 @@ def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = Tru
     url = f"{get_base_url()}/{endpoint}"
     if require_cred:
         payload = generate_cred_payload() | payload
-    response = requests.post(url, json=payload)
-    return response
 
-def compress_and_encode(data: bytes) -> str:
-    compressed_data = gzip.compress(data)
-    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
-    return encoded_data
+    encryption_key = keyring.get_password(KEYRING_APP_ID, "encryption_key").encode('utf-8')
+    unencrypted_payload = json.dumps(payload).encode('utf-8')
+    encrypted_payload = compress_encrypt_encode(unencrypted_payload, encryption_key)
 
-@click.group()
+    if len(encrypted_payload) > 1e3:
+        size_kb = len(encrypted_payload) / 1e3
+        if input(f"Payload size is {size_kb:.2f} kB. Do you want to continue? (y/n): ").strip().lower() != 'y':
+            print("Request cancelled.")
+            sys.exit(0)
+
+    return requests.post(url, json={"req": encrypted_payload})
+
+@click.group(help="cli helper for interacting with backend all data (including credentials) are encrypted")
 def cli():
     pass
 
@@ -167,6 +172,8 @@ def backup() -> None:
 def update() -> None:
     """
     Updates the server with a patch
+
+    Make sure you are on main branch and strictly ahead of origin/main
     """
     
     repo = Repo(".")
@@ -184,22 +191,16 @@ def update() -> None:
         print("Invalid git state detected, aborting update")
         return
 
-    patch_data = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
-    encryption_key = keyring.get_password(KEYRING_APP_ID, "encryption_key")
-    if not encryption_key:
-        raise ValueError("No encryption key found. Please set an encryption key using the 'login' command to enable patch encryption.")
+    raw_patch: bytes = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
     
-    patch_data = compress_encrypt_encode(patch_data.encode('utf-8'), encryption_key)
-
-    if input(f"Apply update with {len(ahead_commits)} commits and patch size {len(patch_data)/1e3}kB ? (y/n): ").strip().lower() != 'y':
+    if input(f"Apply update with {len(ahead_commits)} commits").strip().lower() != 'y':
         print("Update cancelled.")
         return
-
-    response = send_request("api/update", {"patch": patch_data})
+    
+    response = send_request("api/update", {"patch": raw_patch.decode('utf-8')})
 
     if response.status_code == 200:
         print("Update applied successfully.")
-        print("Please restart the server to apply changes.")
     else:
         print(f"Failed to apply update: {response.status_code} - {response.text}")
 
@@ -246,22 +247,14 @@ def upload_commit_patches() -> None:
     
     zip_buffer.seek(0)
     zip_data = zip_buffer.read()
-    total_size = len(zip_data) / 1024
-    
-    print(f"Generated {len(ahead_commits)} patches ({total_size:.2f} KB)")
-    
-    # Confirm upload
+
     if input(f"Upload {len(ahead_commits)} patches? (y/n): ").strip().lower() != 'y':
         print("Upload cancelled.")
         return
     
-    # Compress and encode
-    compressed_patches = compress_and_encode(zip_data)
-    
-    # Send via API
     response = send_request("api/push", {
         "name": "_commit_patches.zip",
-        "data": compressed_patches
+        "data": zip_data.decode('utf-8')
     })
     
     if response.status_code == 200:
@@ -344,10 +337,6 @@ def apply_remote_patches() -> None:
 @cli.command()
 @click.argument("file", type=str)
 def delete_file(file: str) -> None:
-    """
-    Deletes a file from the server
-    """
-    
     response = send_request("api/delete", {"name": file})
 
     if response.status_code == 200:
@@ -358,14 +347,10 @@ def delete_file(file: str) -> None:
 @cli.command()
 @click.argument("cookies", type=click.Path(exists=True))
 def upload_cookies(cookies: Path) -> None:
-    """
-    Uploads cookies to the server
-    """
-    
     with open(cookies, 'rb') as f:
-        cookie_data = compress_and_encode(f.read())
+        cookie_data = f.read()
 
-    response = send_request("api/push_cookie", {"cookie": cookie_data})
+    response = send_request("api/push_cookie", {"cookie": cookie_data.decode('utf-8')})
 
     if response.status_code == 200:
         print("Cookies uploaded successfully.")

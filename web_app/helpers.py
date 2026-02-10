@@ -1,15 +1,21 @@
+import base64
+import gzip
+import json
 import flask
 import flask_login
 
+from io import BytesIO
 from flask import request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+from cryptography.fernet import Fernet
 
 from web_app.app import app
 from web_app.data_interface import DataInterface
 from web_app.users import User
 from web_app.errors import *
+from web_app.config import ConfigManager
 
 
 login_manager = flask_login.LoginManager()
@@ -82,6 +88,15 @@ def authenticate_user(username: str, password: str, require_admin: bool = True) 
     
     return True
 
+def decode_decrypt_decompress(encrypted_payload: str) -> dict:
+    """Decrypt, decompress and parse the encrypted request payload."""
+    key = ConfigManager().symmetric_encryption_key
+    encrypted_data = base64.b64decode(encrypted_payload)
+    compressed_data = Fernet(key).decrypt(encrypted_data)
+    with gzip.GzipFile(fileobj=BytesIO(compressed_data)) as gz:
+        json_data = gz.read()
+    return json.loads(json_data.decode('utf-8'))
+
 def parse_request(require_login: bool = True, require_admin: bool = True) -> dict:
     if require_admin:
         require_login = True
@@ -97,6 +112,15 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
         request_body = {key: value for key, value in request.form.items()}
     else:
         raise APIError("Unsupported content type")
+    
+    # Check if this is an encrypted request (new protocol)
+    # TODO: deperecate old unencrypted endpoints and remove this fallback logic in the future
+    encrypted_payload = request_body.get("req")
+    if encrypted_payload:
+        try:
+            request_body = decode_decrypt_decompress(encrypted_payload)
+        except Exception as e:
+            raise APIError(f"Failed to decrypt request: {str(e)}")
     
     if require_login:
         username = request_body.get("username", "")

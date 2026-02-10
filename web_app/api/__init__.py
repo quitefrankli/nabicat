@@ -1,12 +1,7 @@
-import base64
-import gzip
 import subprocess
 import logging
-import os
 
-from io import BytesIO
 from flask import request, jsonify, Blueprint
-from cryptography.fernet import Fernet
 
 from web_app.data_interface import DataInterface
 from web_app.api.data_interface import DataInterface as APIDataInterface
@@ -20,23 +15,6 @@ from web_app.errors import *
 
 GITHUB_EVENT_HEADER = "X-GitHub-Event"
 api_api = Blueprint("api_api", __name__, url_prefix="/api")
-
-
-def decode_decrypt(data: str) -> bytes:
-    key = ConfigManager().symmetric_encryption_key
-    encrypted_data = base64.b64decode(data)
-    compressed_data = Fernet(key).decrypt(encrypted_data)
-    return compressed_data
-
-def decompress(data: bytes) -> bytes:
-    with gzip.GzipFile(fileobj=BytesIO(data)) as gz:
-        original_data = gz.read()
-    return original_data
-
-def decode_decrypt_decompress(data: str) -> bytes:
-    decrypted_data = decode_decrypt(data)
-    original_data = decompress(decrypted_data)
-    return original_data
 
 def update_server():
     logging.info(f"Updating server...")
@@ -98,21 +76,17 @@ def api_update():
     patch = request_body.get("patch", None)
     if not patch:
         update_server()
-        return jsonify({'success': True}), 200
+        return jsonify({"success": True}), 200
     
-    try:
-        decoded_decrypted_patch = decode_decrypt(patch)
-        original_patch = decode_decrypt_decompress(patch)
-    except Exception as e:
-        return jsonify({"error": f"Failed to decode and decompress: {str(e)}"}), 400
+    patch: str
+    size_kb = len(patch) / 1e3
+    logging.info(f"Updating with patch of size {size_kb:.2f} kB")
 
-    logging.info(f"Updating with patch of size {len(original_patch)} bytes")
-
-    subprocess.Popen(f"bash update_server.sh -p \"{decoded_decrypted_patch}\" &>> logs/shell_logs.log", shell=True, close_fds=True)
+    subprocess.Popen(f"bash update_server.sh -p \"{patch}\" &>> logs/shell_logs.log", shell=True, close_fds=True)
     
     return jsonify({
         "success": True, 
-        "patch_size": len(original_patch),
+        "patch_size": f"{size_kb:.2f} kB",
     }), 200
 
 @api_api.route("/backup", methods=["POST"])
@@ -246,12 +220,8 @@ def api_upload_cookie():
     if not cookie:
         return jsonify({"error": "Missing cookie data"}), 400
 
-    # Save cookie to a file in the user's data directory
-    compressed_bytes = base64.b64decode(cookie)
-    with gzip.GzipFile(fileobj=BytesIO(compressed_bytes)) as gz:
-        cookie_bytes = gz.read()
     APIDataInterface().atomic_write(ConfigManager().tubio_cookie_path, 
-                                    data=cookie_bytes, 
+                                    data=cookie.encode('utf-8'), 
                                     mode="wb")
 
     return jsonify({"success": True, "message": "Cookies uploaded successfully"}), 200
