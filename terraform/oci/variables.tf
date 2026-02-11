@@ -1,23 +1,20 @@
-# OCI Provider Variables
-# These can be set via environment variables or terraform.tfvars
-
 variable "tenancy_ocid" {
-  description = "OCID of the OCI tenancy"
+  description = "OCID of the tenancy"
   type        = string
 }
 
 variable "user_ocid" {
-  description = "OCID of the OCI user"
+  description = "OCID of the user"
   type        = string
 }
 
 variable "fingerprint" {
-  description = "Fingerprint of the OCI API key"
+  description = "Fingerprint of the API key"
   type        = string
 }
 
 variable "private_key_path" {
-  description = "Path to the OCI API private key"
+  description = "Path to the private key file"
   type        = string
   default     = "~/.oci/oci_api_key.pem"
 }
@@ -29,42 +26,36 @@ variable "region" {
 }
 
 variable "compartment_ocid" {
-  description = "OCID of the compartment to create resources in"
+  description = "OCID of the compartment (use tenancy_ocid for root compartment)"
   type        = string
 }
 
 variable "ssh_public_key_path" {
-  description = "Path to the SSH public key for instance access"
+  description = "Path to SSH public key"
   type        = string
   default     = "~/.ssh/id_rsa.pub"
 }
 
 variable "instance_shape" {
-  description = "OCI compute instance shape"
+  description = "Shape of the compute instance"
   type        = string
-  default     = "VM.Standard.A1.Flex"  # Always Free eligible
+  default     = "VM.Standard.A1.Flex"  # ARM-based, Always Free eligible
 }
 
 variable "instance_ocpus" {
-  description = "Number of OCPUs for the instance"
+  description = "Number of OCPUs (max 4 for Always Free)"
   type        = number
-  default     = 1
+  default     = 4
 }
 
-variable "instance_memory_in_gbs" {
-  description = "Amount of memory in GBs for the instance"
+variable "instance_memory_gb" {
+  description = "Memory in GB (max 24 for Always Free)"
   type        = number
-  default     = 1
+  default     = 24
 }
 
-variable "budget_amount" {
-  description = "Monthly budget amount in USD"
+variable "boot_volume_size_gb" {
+  description = "Boot volume size in GB (max 200 total for Always Free)"
   type        = number
-  default     = 5
-}
-
-variable "notification_email" {
-  description = "Email address for budget alerts"
-  type        = string
-  default     = "quitefrankli@hotmail.com"
+  default     = 100
 }

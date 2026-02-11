@@ -1,39 +1,95 @@
-set -ex
+function run_client_side()
+(
+	set -ex
 
-function setup_conda()
-{
-	miniforge_url=https://github.com/conda-forge/miniforge/releases/latest/download/
-	installer=Miniforge3-Linux-x86_64.sh
+	# $1 - cloud provider (aws, oci)
+	if [ -z "$1" ]
+	then
+		echo "cloud provider not specified"
+		exit 1
+	fi
 
-	wget ${miniforge_url}${installer}
+	# deploy infrastructure
+	CLOUD_PROVIDER=$1
+	terraform -chdir=terraform/$CLOUD_PROVIDER init
+	terraform -chdir=terraform/$CLOUD_PROVIDER plan
+	terraform -chdir=terraform/$CLOUD_PROVIDER apply -auto-approve
+	export SERVER_IP_ADDR=$(terraform -chdir=terraform/$CLOUD_PROVIDER output server_ip_addr | sed 's/\"//g')
 
-	bash $installer -b
-	rm $installer
+	echo "Waiting for server to come online..."
+	until ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new ubuntu@$SERVER_IP_ADDR true 2>/dev/null; do
+		sleep 5
+	done
 
-	echo "source $HOME/miniforge3/bin/activate" >> ~/.bashrc
-	source ~/.bashrc
-}
+	# setup user on server
+	ssh ubuntu@$SERVER_IP_ADDR -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/$USER && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
+	# web_app needs to be able to push to github, so we need to sync ssh key across
+	scp ~/.ssh/id_rsa* $SERVER_IP_ADDR:~/.ssh/
 
-function setup_certs()
-{
-	DOMAIN=lazywombat.site
-	EMAIL="erehnimda@gmail.com"
-	
-	mamba install -y anaconda::cryptography
-	mamba install -y certbot
-	sudo $(which certbot) certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos
-	sudo cp lazywombat.conf /etc/nginx/conf.d/
-}
+	ssh $SERVER_IP_ADDR -t "ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && git clone git@github.com:quitefrankli/lazywombat.git && cd lazywombat && source setup_server.sh && run_server_side"
+)
 
-sudo apt update
-sudo apt install -y nginx gunicorn ffmpeg
-setup_conda
-mamba install -y deno
-setup_certs
-sudo systemctl start nginx
-sudo systemctl enable nginx
-# sudo systemctl status nginx
-mamba clean -a # frees up some space
+function run_server_side()
+(
+	set -ex
+
+	function setup_conda()
+	{
+		miniforge_url=https://github.com/conda-forge/miniforge/releases/latest/download/
+		arch=$(uname -m)
+		if [ "$arch" = "aarch64" ]
+		then
+			installer=Miniforge3-Linux-aarch64.sh
+		else
+			installer=Miniforge3-Linux-x86_64.sh
+		fi
+
+		wget ${miniforge_url}${installer}
+
+		bash $installer -b
+		rm $installer
+
+		echo "source $HOME/miniforge3/bin/activate" >> ~/.bashrc
+		source "$HOME/miniforge3/bin/activate"
+	}
+
+	function setup_certs()
+	{
+		DOMAIN=lazywombat.site
+		EMAIL="erehnimda@gmail.com"
+		
+		mamba install -y anaconda::cryptography
+		mamba install -y certbot
+		sudo $(which certbot) certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos
+		sudo cp lazywombat.conf /etc/nginx/conf.d/
+	}
+
+	# Setup 4GB swap file
+	if [ ! -f /swapfile ]; then
+		available_gb=$(df --output=avail / | tail -1 | awk '{printf "%.0f", $1/1024/1024}')
+		if [ "$available_gb" -lt 20 ]
+		then
+			echo "ERROR: Not enough disk space for swap. Need 20GB free, have ${available_gb}GB"
+		else
+			sudo fallocate -l 4G /swapfile
+			sudo chmod 600 /swapfile
+			sudo mkswap /swapfile
+			sudo swapon /swapfile
+			echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+		fi
+	fi
+
+	sudo apt update
+	sudo apt install -y nginx gunicorn ffmpeg
+	setup_conda
+	mamba install -y deno
+	setup_certs
+	sudo systemctl start nginx
+	sudo systemctl enable nginx
+	# sudo systemctl status nginx
+	mamba clean -a # frees up some space
+
+	bash update_server.sh &> logs/shell_logs.log &
+)
 
 
-bash update_server.sh &> logs/shell_logs.log &

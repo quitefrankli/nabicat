@@ -1,26 +1,18 @@
 # Copy this file to terraform.tfvars and fill in your values
-# Or set the values via environment variables
+# Get these from OCI Console -> Profile -> Tenancy/User Settings
 
-# Required OCI credentials
-tenancy_ocid     = "ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-user_ocid        = "ocid1.user.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+tenancy_ocid     = "ocid1.tenancy.oc1..your-tenancy-ocid"
+user_ocid        = "ocid1.user.oc1..your-user-ocid"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
 private_key_path = "~/.oci/oci_api_key.pem"
+compartment_ocid = "ocid1.tenancy.oc1..your-tenancy-ocid"  # Use tenancy OCID for root compartment
 
-# Region - OCI region identifier
 region = "ap-sydney-1"
 
-# Compartment OCID where resources will be created
-compartment_ocid = "ocid1.compartment.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Always Free tier ARM instance - max specs
+instance_shape     = "VM.Standard.A1.Flex"
+instance_ocpus     = 4   # Max 4 OCPUs for Always Free
+instance_memory_gb = 24  # Max 24 GB for Always Free
+boot_volume_size_gb = 100  # Max 200 GB total for Always Free
 
-# SSH public key path
 ssh_public_key_path = "~/.ssh/id_rsa.pub"
-
-# Instance configuration
-instance_shape         = "VM.Standard.A1.Flex"  # Always Free eligible ARM shape
-instance_ocpus         = 1
-instance_memory_in_gbs = 6  # Always Free includes up to 6GB RAM total for ARM
-
-# Budget settings
-budget_amount     = 5
-notification_email = "quitefrankli@hotmail.com"

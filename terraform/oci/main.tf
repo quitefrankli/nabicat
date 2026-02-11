@@ -15,63 +15,46 @@ provider "oci" {
   region           = var.region
 }
 
-# Get availability domains for the region
+# Fetch availability domains
 data "oci_identity_availability_domains" "ads" {
   compartment_id = var.tenancy_ocid
 }
 
-# Get the latest Oracle Linux image
-data "oci_core_images" "ubuntu_image" {
+# Get latest Ubuntu 22.04 image
+data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_ocid
   operating_system         = "Canonical Ubuntu"
-  operating_system_version = "24.04"
+  operating_system_version = "22.04"
   shape                    = var.instance_shape
   sort_by                  = "TIMECREATED"
   sort_order               = "DESC"
 }
 
-# Budget with alert rule (equivalent to AWS budget)
-resource "oci_budget_budget" "monthly_cost_budget" {
-  compartment_id = var.tenancy_ocid
-  amount         = var.budget_amount
-  reset_period   = "MONTHLY"
-  description    = "Monthly cost budget for Lazy Wombat"
-  display_name   = "monthly-cost-budget"
-  target_type    = "COMPARTMENT"
-  targets        = [var.compartment_ocid]
+locals {
+  is_flex_shape = length(regexall("Flex", var.instance_shape)) > 0
 }
 
-resource "oci_budget_alert_rule" "budget_alert" {
-  budget_id      = oci_budget_budget.monthly_cost_budget.id
-  threshold      = 100
-  threshold_type = "PERCENTAGE"
-  type           = "ACTUAL"
-  display_name   = "budget-100-percent-alert"
-  message        = "Budget has reached 100% of the monthly limit"
-  recipients     = var.notification_email
-}
-
-# Virtual Cloud Network (equivalent to AWS VPC)
+# VCN
 resource "oci_core_vcn" "lazy_wombat_vcn" {
   compartment_id = var.compartment_ocid
   cidr_blocks    = ["10.0.0.0/16"]
-  display_name   = "lazy-wombat-vcn"
+  display_name   = "lazy_wombat_vcn"
   dns_label      = "lazywombat"
 }
 
-# Internet Gateway (for public internet access)
+# Internet Gateway
 resource "oci_core_internet_gateway" "lazy_wombat_igw" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy-wombat-internet-gateway"
+  display_name   = "lazy_wombat_igw"
   enabled        = true
 }
 
-# Route Table for public subnet
-resource "oci_core_route_table" "lazy_wombat_route_table" {
+# Route Table
+resource "oci_core_route_table" "lazy_wombat_rt" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy-wombat-route-table"
+  display_name   = "lazy_wombat_rt"
 
   route_rules {
     destination       = "0.0.0.0/0"
@@ -80,87 +63,112 @@ resource "oci_core_route_table" "lazy_wombat_route_table" {
   }
 }
 
-# Public Subnet
-resource "oci_core_subnet" "lazy_wombat_subnet" {
-  compartment_id    = var.compartment_ocid
-  vcn_id            = oci_core_vcn.lazy_wombat_vcn.id
-  cidr_block        = "10.0.1.0/24"
-  display_name      = "lazy-wombat-public-subnet"
-  dns_label         = "public"
-  route_table_id    = oci_core_route_table.lazy_wombat_route_table.id
-  security_list_ids = [oci_core_security_list.lazy_wombat_security_list.id]
-}
-
-# Security List (equivalent to AWS Security Group)
-resource "oci_core_security_list" "lazy_wombat_security_list" {
+# Security List
+resource "oci_core_security_list" "lazy_wombat_sl" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy-wombat-security-list"
+  display_name   = "lazy_wombat_sl"
 
-  # Allow all outbound traffic (egress)
+  # Allow all egress
   egress_security_rules {
-    protocol    = "all"
     destination = "0.0.0.0/0"
-    description = "Allow all outbound traffic"
+    protocol    = "all"
+    stateless   = false
   }
 
-  # SSH (port 22)
+  # SSH
   ingress_security_rules {
-    protocol    = "6" # TCP
-    source      = "0.0.0.0/0"
-    description = "SSH access"
+    source    = "0.0.0.0/0"
+    protocol  = "6" # TCP
+    stateless = false
     tcp_options {
       min = 22
       max = 22
     }
   }
 
-  # HTTP (port 80)
+  # HTTP
   ingress_security_rules {
-    protocol    = "6" # TCP
-    source      = "0.0.0.0/0"
-    description = "HTTP access"
+    source    = "0.0.0.0/0"
+    protocol  = "6" # TCP
+    stateless = false
     tcp_options {
       min = 80
       max = 80
     }
   }
 
-  # HTTPS (port 443)
+  # HTTPS
   ingress_security_rules {
-    protocol    = "6" # TCP
-    source      = "0.0.0.0/0"
-    description = "HTTPS access"
+    source    = "0.0.0.0/0"
+    protocol  = "6" # TCP
+    stateless = false
     tcp_options {
       min = 443
       max = 443
     }
   }
+
+  # ICMP (ping)
+  ingress_security_rules {
+    source    = "0.0.0.0/0"
+    protocol  = "1" # ICMP
+    stateless = false
+    icmp_options {
+      type = 3
+      code = 4
+    }
+  }
+
+  ingress_security_rules {
+    source    = "10.0.0.0/16"
+    protocol  = "1" # ICMP
+    stateless = false
+    icmp_options {
+      type = 3
+    }
+  }
 }
 
-# Compute Instance (equivalent to AWS EC2)
+# Subnet
+resource "oci_core_subnet" "lazy_wombat_subnet" {
+  compartment_id             = var.compartment_ocid
+  vcn_id                     = oci_core_vcn.lazy_wombat_vcn.id
+  cidr_block                 = "10.0.1.0/24"
+  display_name               = "lazy_wombat_subnet"
+  dns_label                  = "subnet"
+  prohibit_public_ip_on_vnic = false
+  route_table_id             = oci_core_route_table.lazy_wombat_rt.id
+  security_list_ids          = [oci_core_security_list.lazy_wombat_sl.id]
+  availability_domain        = data.oci_identity_availability_domains.ads.availability_domains[0].name
+}
+
+# Compute Instance
 resource "oci_core_instance" "lazy_wombat" {
   compartment_id      = var.compartment_ocid
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
-  display_name        = "lazy-wombat-server"
+  display_name        = "lazy_wombat_server"
   shape               = var.instance_shape
 
-  shape_config {
-    ocpus         = var.instance_ocpus
-    memory_in_gbs = var.instance_memory_in_gbs
+  dynamic "shape_config" {
+    for_each = local.is_flex_shape ? [1] : []
+    content {
+      ocpus         = var.instance_ocpus
+      memory_in_gbs = var.instance_memory_gb
+    }
   }
 
   source_details {
-    source_type = "image"
-    source_id   = data.oci_core_images.ubuntu_image.images[0].id
+    source_type             = "image"
+    source_id               = data.oci_core_images.ubuntu.images[0].id
+    boot_volume_size_in_gbs = var.boot_volume_size_gb
   }
 
   create_vnic_details {
-    subnet_id                 = oci_core_subnet.lazy_wombat_subnet.id
-    assign_public_ip          = false  # We'll use a reserved public IP instead
-    display_name              = "lazy-wombat-vnic"
-    assign_private_dns_record = true
-    hostname_label            = "lazywombat"
+    subnet_id        = oci_core_subnet.lazy_wombat_subnet.id
+    assign_public_ip = false
+    display_name     = "lazy_wombat_vnic"
+    hostname_label   = "lazywombat"
   }
 
   metadata = {
@@ -170,37 +178,31 @@ resource "oci_core_instance" "lazy_wombat" {
   preserve_boot_volume = false
 }
 
-# Reserved Public IP (equivalent to AWS Elastic IP)
+# Get VNIC attachment
+data "oci_core_vnic_attachments" "lazy_wombat_vnic_attachments" {
+  compartment_id = var.compartment_ocid
+  instance_id    = oci_core_instance.lazy_wombat.id
+}
+
+# Get private IP
+data "oci_core_private_ips" "lazy_wombat_private_ips" {
+  vnic_id = data.oci_core_vnic_attachments.lazy_wombat_vnic_attachments.vnic_attachments[0].vnic_id
+}
+
+# Reserved Public IP
 resource "oci_core_public_ip" "lazy_wombat_public_ip" {
   compartment_id = var.compartment_ocid
-  display_name   = "lazy-wombat-public-ip"
   lifetime       = "RESERVED"
+  display_name   = "lazy_wombat_public_ip"
   private_ip_id  = data.oci_core_private_ips.lazy_wombat_private_ips.private_ips[0].id
 }
 
-# Get private IP of the instance for reserved public IP association
-data "oci_core_private_ips" "lazy_wombat_private_ips" {
-  ip_address = oci_core_instance.lazy_wombat.private_ip
-  subnet_id  = oci_core_subnet.lazy_wombat_subnet.id
-}
-
-# Outputs (matching AWS output names where applicable)
-output "elastic_ip" {
-  description = "The public IP address of the instance"
+output "server_ip_addr" {
   value       = oci_core_public_ip.lazy_wombat_public_ip.ip_address
+  description = "Reserved public IP of the instance"
 }
 
-output "instance_private_ip" {
-  description = "Private IP address of the instance"
-  value       = oci_core_instance.lazy_wombat.private_ip
-}
-
-output "instance_id" {
-  description = "OCID of the compute instance"
+output "instance_ocid" {
   value       = oci_core_instance.lazy_wombat.id
-}
-
-output "availability_domain" {
-  description = "Availability domain where the instance is deployed"
-  value       = oci_core_instance.lazy_wombat.availability_domain
+  description = "OCID of the instance"
 }

@@ -14,7 +14,7 @@ create a `.env` file in the root of the project with the following content:
 
 * setup conda env - see `setup_server.sh:setup_conda`
 * install `ffmpeg`
-
+* install `terraform`
 
 ## Running
 
@@ -48,50 +48,21 @@ to see the UI in the test
 
 ## Cloud Setup
 
-### AWS (Default)
+first register host .ssh creds as github ssh key
 
-1. install terraform
-2. `terraform -chdir=terraform/aws init`
-3. `terraform -chdir=terraform/aws plan`
-4. `terraform -chdir=terraform/aws apply -auto-approve`
+then run client side setup
 
-terraform should output something like
+`source setup_server.sh && run_client_side $CLOUD_PROVIDER`
 
-> elastic_ip = "12.12.123.123"
+CLOUD_PROVIDER is either aws or oci
 
-with the generated ip, the "A Record" would need to be updated via the appropriate domain provider
+to ssh onto the server use the below ip address
 
-### Oracle Cloud Infrastructure (OCI)
+`export SERVER_IP_ADDR=$(terraform -chdir=terraform/$CLOUD_PROVIDER output server_ip_addr | sed 's/\"//g')`
 
-An equivalent OCI setup is available in `terraform/oci/` directory.
+to bring down the server
 
-```bash
-cd terraform/oci
-terraform init
-terraform plan
-terraform apply -auto-approve
-```
-
-See `terraform/oci/README.md` for detailed OCI-specific setup instructions.
-
-### Setup EC2
-
-```bash
-export ELASTIC_IP=$(terraform -chdir=terraform/aws output elastic_ip | sed 's/\"//g')
-
-ssh ubuntu@$ELASTIC_IP -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/$USER && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
-
-# assuming ssh key has been added to GitHub already
-scp ~/.ssh/id_rsa.pub $ELASTIC_IP:~/.ssh/
-scp ~/.ssh/id_rsa $ELASTIC_IP:~/.ssh/
-```
-
-```bash
-ssh $ELASTIC_IP
-git clone git@github.com:quitefrankli/lazywombat.git
-cd lazywombat
-bash lazywombat/setup_server.sh
-```
+`terraform -chdir=terraform/$CLOUD_PROVIDER destroy`
 
 ## Updating Server
 

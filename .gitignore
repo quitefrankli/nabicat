@@ -14,7 +14,4 @@ ios_app/
 desktop_app/
 cookies.txt
 
-terraform/*/
-!terraform/aws/
-!terraform/oci/
 .env
