@@ -50,7 +50,6 @@ function run_server_side()
 		rm $installer
 
 		echo "source $HOME/miniforge3/bin/activate" >> ~/.bashrc
-		source "$HOME/miniforge3/bin/activate"
 	}
 
 	function setup_certs()
@@ -60,6 +59,7 @@ function run_server_side()
 		
 		mamba install -y anaconda::cryptography
 		mamba install -y certbot
+		sudo systemctl stop nginx
 		sudo $(which certbot) certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos
 		sudo cp lazywombat.conf /etc/nginx/conf.d/
 	}
@@ -82,6 +82,7 @@ function run_server_side()
 	sudo apt update
 	sudo apt install -y nginx gunicorn ffmpeg
 	setup_conda
+	source "$HOME/miniforge3/bin/activate"
 	mamba install -y deno
 	setup_certs
 	sudo systemctl start nginx

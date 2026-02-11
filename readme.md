@@ -54,7 +54,7 @@ then run client side setup
 
 `source setup_server.sh && run_client_side $CLOUD_PROVIDER`
 
-CLOUD_PROVIDER is either aws or oci
+CLOUD_PROVIDER is either aws or oci (aws doesn't work atm as the instance doesnt have enough storage)
 
 to ssh onto the server use the below ip address
 
