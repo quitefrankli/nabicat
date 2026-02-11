@@ -48,10 +48,12 @@ to see the UI in the test
 
 ## Cloud Setup
 
+### AWS (Default)
+
 1. install terraform
-2. `terraform -chdir terraform init`
-3. `terraform -chdir terraform plan`
-4. `terraform -chdir terraform apply -auto-approve`
+2. `terraform -chdir=terraform/aws init`
+3. `terraform -chdir=terraform/aws plan`
+4. `terraform -chdir=terraform/aws apply -auto-approve`
 
 terraform should output something like
 
@@ -59,10 +61,23 @@ terraform should output something like
 
 with the generated ip, the "A Record" would need to be updated via the appropriate domain provider
 
+### Oracle Cloud Infrastructure (OCI)
+
+An equivalent OCI setup is available in `terraform/oci/` directory.
+
+```bash
+cd terraform/oci
+terraform init
+terraform plan
+terraform apply -auto-approve
+```
+
+See `terraform/oci/README.md` for detailed OCI-specific setup instructions.
+
 ### Setup EC2
 
 ```bash
-export ELASTIC_IP=$(terraform -chdir=terraform output elastic_ip | sed 's/\"//g')
+export ELASTIC_IP=$(terraform -chdir=terraform/aws output elastic_ip | sed 's/\"//g')
 
 ssh ubuntu@$ELASTIC_IP -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/ereh && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
 

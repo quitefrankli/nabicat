@@ -1,0 +1,26 @@
+# Copy this file to terraform.tfvars and fill in your values
+# Or set the values via environment variables
+
+# Required OCI credentials
+tenancy_ocid     = "ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+user_ocid        = "ocid1.user.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+
+# Region - OCI region identifier
+region = "ap-sydney-1"
+
+# Compartment OCID where resources will be created
+compartment_ocid = "ocid1.compartment.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# SSH public key path
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Instance configuration
+instance_shape         = "VM.Standard.A1.Flex"  # Always Free eligible ARM shape
+instance_ocpus         = 1
+instance_memory_in_gbs = 6  # Always Free includes up to 6GB RAM total for ARM
+
+# Budget settings
+budget_amount     = 5
+notification_email = "quitefrankli@hotmail.com"
