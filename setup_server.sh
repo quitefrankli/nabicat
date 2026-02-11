@@ -25,8 +25,9 @@ function run_client_side()
 	ssh ubuntu@$SERVER_IP_ADDR -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/$USER && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
 	# web_app needs to be able to push to github, so we need to sync ssh key across
 	scp ~/.ssh/id_rsa* $SERVER_IP_ADDR:~/.ssh/
+	# assuming the local .env file is appropriately populated
+	scp .env $SERVER_IP_ADDR:~/.env
 
-	ssh $SERVER_IP_ADDR -t "ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && git clone git@github.com:quitefrankli/lazywombat.git && cd lazywombat && source setup_server.sh && run_server_side"
 )
 
 function run_server_side()
@@ -57,6 +58,12 @@ function run_server_side()
 		DOMAIN=lazywombat.site
 		EMAIL="erehnimda@gmail.com"
 		
+		# OCI Ubuntu images ship with iptables rules that block incoming traffic at the OS level (separate from the security list)
+	  	sudo apt install -y iptables-persistent
+  		sudo netfilter-persistent save
+		sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT                        
+		sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+
 		mamba install -y anaconda::cryptography
 		mamba install -y certbot
 		sudo systemctl stop nginx
@@ -88,9 +95,8 @@ function run_server_side()
 	sudo systemctl start nginx
 	sudo systemctl enable nginx
 	# sudo systemctl status nginx
-	mamba clean -a # frees up some space
+	mamba clean -a -y # frees up some space
 
+	mkdir logs
 	bash update_server.sh &> logs/shell_logs.log &
 )
-
-
