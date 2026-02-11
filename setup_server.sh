@@ -28,9 +28,12 @@ function setup_certs()
 sudo apt update
 sudo apt install -y nginx gunicorn ffmpeg
 setup_conda
+mamba install -y deno
 setup_certs
 sudo systemctl start nginx
 sudo systemctl enable nginx
 # sudo systemctl status nginx
+mamba clean -a # frees up some space
+
 
 bash update_server.sh &> logs/shell_logs.log &

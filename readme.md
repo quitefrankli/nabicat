@@ -79,7 +79,7 @@ See `terraform/oci/README.md` for detailed OCI-specific setup instructions.
 ```bash
 export ELASTIC_IP=$(terraform -chdir=terraform/aws output elastic_ip | sed 's/\"//g')
 
-ssh ubuntu@$ELASTIC_IP -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/ereh && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
+ssh ubuntu@$ELASTIC_IP -t "sudo useradd -m $USER && sudo adduser $USER sudo && sudo cp -r ~/.ssh /home/$USER/ && sudo chown -R $USER:$USER /home/$USER && sudo chsh $USER -s /bin/bash && echo \"$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee -a /etc/sudoers"
 
 # assuming ssh key has been added to GitHub already
 scp ~/.ssh/id_rsa.pub $ELASTIC_IP:~/.ssh/
