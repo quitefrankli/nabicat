@@ -57,5 +57,5 @@ variable "instance_memory_gb" {
 variable "boot_volume_size_gb" {
   description = "Boot volume size in GB (max 200 total for Always Free)"
   type        = number
-  default     = 100
+  default     = 200
 }
