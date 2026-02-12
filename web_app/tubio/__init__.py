@@ -41,7 +41,7 @@ def get_cached_yt_vid_ids(user: User|None = None) -> Set[str]:
         user_metadata = DataInterface().get_user_metadata(user)
         return {metadata.audios[crc].yt_video_id for crc in user_metadata.get_playlist().audio_crcs}
 
-def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool]]]]:
+def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool, str]]]]:
     user_metadata = DataInterface().get_user_metadata(user)
     playlists = []
     metadata = DataInterface().get_metadata()
@@ -51,7 +51,7 @@ def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool]
             if crc in metadata.audios:
                 audio = metadata.audios[crc]
                 has_thumbnail = DataInterface().has_thumbnail(crc)
-                playlist_data.append((crc, audio.title, has_thumbnail))
+                playlist_data.append((crc, audio.title, has_thumbnail, audio.source_url))
         playlists.append((playlist.name, playlist_data))
 
     return playlists

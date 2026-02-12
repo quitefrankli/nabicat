@@ -54,6 +54,7 @@ class AudioMetadata(BaseModel):
     title: str
     yt_video_id: str = ''  # optional, if the audio is from YouTube
     is_cached: bool = False
+    source_url: str = ''  # original source URL (e.g. YouTube URL)
 
 class Metadata(BaseModel):
     # username -> UserMetadata

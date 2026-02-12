@@ -250,7 +250,8 @@ class AudioDownloader:
         AudioDownloader.download_thumbnail(video_id, crc)
 
         DataInterface().save_audio_metadata(AudioMetadata(
-            crc=crc, title=title, yt_video_id=video_id, is_cached=True
+            crc=crc, title=title, yt_video_id=video_id, is_cached=True,
+            source_url=f"https://www.youtube.com/watch?v={video_id}"
         ))
         user_metadata = DataInterface().get_user_metadata(user)
         user_metadata.add_to_playlist(crc)

@@ -57,7 +57,7 @@
             </div>
             {% else %}
             <div class="accordion" id="audioAccordion-{{ playlist_name|replace(' ', '-') }}" data-playlist-name="{{ playlist_name }}">
-                {% for crc, title, has_thumbnail in playlist_data %}
+                {% for crc, title, has_thumbnail, source_url in playlist_data %}
                 <div class="accordion-item mb-3 border-0 shadow-sm" data-audio-crc="{{ crc }}" data-playlist="{{ playlist_name }}" style="border-radius: 12px; overflow: hidden;">
                     <h2 class="accordion-header">
                         <div class="d-flex align-items-center gap-2">
@@ -96,6 +96,13 @@
                                         <h6 class="mb-2" style="color: var(--hw-sage-dark, #6B8E5A);">Full Title:</h6>
                                         <p class="text-dark fw-medium">{{ title }}</p>
                                     </div>
+                                    {% if source_url %}
+                                    <div>
+                                        <a href="{{ source_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-box-arrow-up-right me-1"></i>View Source
+                                        </a>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                             <div class="d-flex flex-column align-items-center">
