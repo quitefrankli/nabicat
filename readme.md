@@ -1,5 +1,8 @@
-# Web App
+# NabiCat
 
+![cat ico](web_app/static/cat.ico)
+
+A cozy collection of misc web apps [visit](https://nabicat.site)
 
 ## Setup
 

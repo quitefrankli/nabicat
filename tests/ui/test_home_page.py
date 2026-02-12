@@ -1,6 +1,7 @@
 """
 UI tests for the home page using Playwright.
 """
+import time
 import pytest
 
 pytest.importorskip("playwright")
@@ -64,12 +65,15 @@ def test_logout_button_present(logged_in_page):
 
 def test_admin_only_apps_hidden_for_non_admin(page, test_server):
     """Test that admin-only apps are hidden for non-admin users."""
-    # Log in as non-admin user
+    # Register and log in as a fresh non-admin user (self-contained test)
+    username = f"ui_non_admin_{int(time.time() * 1000)}"
+    password = "testpass123"
+
     page.goto(f"{test_server}/account/login")
     page.wait_for_load_state("networkidle")
-    page.fill("input#username", "jacky")
-    page.fill("input#password", "chen")
-    page.click("button:has-text('Sign In')")
+    page.fill("input#username", username)
+    page.fill("input#password", password)
+    page.click("button:has-text('Create Account')")
     page.wait_for_url(f"{test_server}/", timeout=10000)
     page.wait_for_load_state("networkidle")
     
