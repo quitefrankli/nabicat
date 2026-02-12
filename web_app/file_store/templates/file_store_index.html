@@ -63,9 +63,9 @@
                  style="width: 80px; height: 80px; background: rgba(135, 168, 120, 0.1);">
               <i class="bi bi-cloud-arrow-up text-sage" style="font-size: 2.5rem;"></i>
             </div>
-            <p class="text-muted mb-0">Select a file to upload to your storage</p>
+            <p class="text-muted mb-0">Select or drag and drop files to upload to your storage</p>
           </div>
-          <input class="form-control form-control-lg" type="file" name="file" id="fileInput" required
+          <input class="form-control form-control-lg" type="file" name="file" id="fileInput" required multiple
                  data-max-size="{{ storage_info.remaining if storage_info else 0 }}"
                  data-max-formatted="{{ storage_info.remaining_formatted if storage_info else '0 B' }}">
           <div class="alert alert-danger mt-3 d-none" id="fileSizeError">

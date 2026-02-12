@@ -12,22 +12,42 @@ function setupFileSizeValidation() {
     const fileInput = document.getElementById('fileInput');
     if (!fileInput) return;
 
-    fileInput.addEventListener('change', function() {
-        const file = this.files[0];
-        const maxSize = parseInt(this.dataset.maxSize);
-        const maxFormatted = this.dataset.maxFormatted;
+    const validateSelection = () => {
+        const files = Array.from(fileInput.files || []);
+        const maxSize = parseInt(fileInput.dataset.maxSize, 10);
+        const maxFormatted = fileInput.dataset.maxFormatted;
         const errorDiv = document.getElementById('fileSizeError');
         const errorText = document.getElementById('fileSizeErrorText');
         const uploadBtn = document.getElementById('uploadBtn');
+        const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
-        if (file && file.size > maxSize) {
-            const fileSize = formatFileSize(file.size);
-            errorText.textContent = `File size (${fileSize}) exceeds available storage (${maxFormatted})`;
+        if (files.length > 0 && totalSize > maxSize) {
+            errorText.textContent = `Selected files (${formatFileSize(totalSize)}) exceed available storage (${maxFormatted})`;
             errorDiv.classList.remove('d-none');
             uploadBtn.disabled = true;
         } else {
             errorDiv.classList.add('d-none');
             uploadBtn.disabled = false;
+        }
+    };
+
+    fileInput.addEventListener('change', validateSelection);
+
+    fileInput.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        fileInput.classList.add('border-primary');
+    });
+
+    fileInput.addEventListener('dragleave', function() {
+        fileInput.classList.remove('border-primary');
+    });
+
+    fileInput.addEventListener('drop', function(e) {
+        e.preventDefault();
+        fileInput.classList.remove('border-primary');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            validateSelection();
         }
     });
 }
@@ -39,62 +59,76 @@ function resetUploadForm() {
     document.getElementById('cancelBtn').disabled = false;
     document.getElementById('fileInput').disabled = false;
     document.getElementById('uploadProgressBar').style.width = '0%';
+    document.getElementById('uploadPercent').textContent = '0%';
+    document.getElementById('uploadStats').textContent = '';
 }
 
 function setupAsyncUpload() {
     const uploadForm = document.getElementById('uploadForm');
     if (!uploadForm) return;
 
-    uploadForm.addEventListener('submit', function(e) {
+    uploadForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         const fileInput = document.getElementById('fileInput');
-        const file = fileInput.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const xhr = new XMLHttpRequest();
-        const startTime = Date.now();
+        const files = Array.from(fileInput.files || []);
+        if (files.length === 0) return;
 
         // Show progress UI
         document.getElementById('uploadIcon').classList.add('d-none');
         document.getElementById('uploadProgress').classList.remove('d-none');
-        document.getElementById('uploadFileName').textContent = file.name;
         document.getElementById('uploadBtn').disabled = true;
         document.getElementById('cancelBtn').disabled = true;
         fileInput.disabled = true;
 
-        xhr.upload.addEventListener('progress', function(e) {
-            if (e.lengthComputable) {
-                const percent = Math.round((e.loaded / e.total) * 100);
-                const elapsed = (Date.now() - startTime) / 1000;
-                const speed = e.loaded / elapsed;
-                const remaining = (e.total - e.loaded) / speed;
+        const uploadSingleFile = (file, fileIndex, totalFiles) => new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('file', file);
 
-                document.getElementById('uploadProgressBar').style.width = percent + '%';
-                document.getElementById('uploadPercent').textContent = percent + '%';
-                document.getElementById('uploadStats').textContent =
-                    `${formatFileSize(e.loaded)} / ${formatFileSize(e.total)} · ${formatFileSize(speed)}/s · ${Math.ceil(remaining)}s left`;
-            }
+            const xhr = new XMLHttpRequest();
+            const startTime = Date.now();
+
+            document.getElementById('uploadFileName').textContent = `${file.name} (${fileIndex + 1}/${totalFiles})`;
+
+            xhr.upload.addEventListener('progress', function(progressEvent) {
+                if (progressEvent.lengthComputable) {
+                    const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                    const elapsed = Math.max((Date.now() - startTime) / 1000, 0.1);
+                    const speed = progressEvent.loaded / elapsed;
+                    const remaining = speed > 0 ? (progressEvent.total - progressEvent.loaded) / speed : 0;
+
+                    document.getElementById('uploadProgressBar').style.width = percent + '%';
+                    document.getElementById('uploadPercent').textContent = percent + '%';
+                    document.getElementById('uploadStats').textContent =
+                        `${formatFileSize(progressEvent.loaded)} / ${formatFileSize(progressEvent.total)} · ${formatFileSize(speed)}/s · ${Math.ceil(remaining)}s left`;
+                }
+            });
+
+            xhr.addEventListener('load', function() {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve();
+                } else {
+                    reject(new Error(xhr.statusText || `HTTP ${xhr.status}`));
+                }
+            });
+
+            xhr.addEventListener('error', function() {
+                reject(new Error('Network error'));
+            });
+
+            xhr.open('POST', uploadForm.action);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send(formData);
         });
 
-        xhr.addEventListener('load', function() {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                window.location.reload();
-            } else {
-                alert('Upload failed: ' + xhr.statusText);
-                resetUploadForm();
+        try {
+            for (let i = 0; i < files.length; i++) {
+                await uploadSingleFile(files[i], i, files.length);
             }
-        });
-
-        xhr.addEventListener('error', function() {
-            alert('Upload failed: Network error');
+            window.location.reload();
+        } catch (error) {
+            alert('Upload failed: ' + error.message);
             resetUploadForm();
-        });
-
-        xhr.open('POST', uploadForm.action);
-        xhr.send(formData);
+        }
     });
 }
 

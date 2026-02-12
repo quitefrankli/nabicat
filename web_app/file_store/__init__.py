@@ -3,8 +3,10 @@ import logging
 from werkzeug.datastructures import FileStorage
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash
 from flask_login import login_required
+import flask_login
 
 from web_app.helpers import cur_user
+from web_app.helpers import limiter
 from web_app.file_store.data_interface import DataInterface, format_file_size, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
 
 
@@ -56,12 +58,19 @@ def index():
 
 
 @file_store_api.route('/upload', methods=['POST'])
+@limiter.limit("10/second", key_func=lambda: flask_login.current_user.id)
 def upload_file():
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if 'file' not in request.files:
+        if is_ajax:
+            return {'error': 'No file part'}, 400
         flash('No file part', 'error')
         return redirect(url_for('.index'))
     file: FileStorage = request.files['file']
     if not file.filename:
+        if is_ajax:
+            return {'error': 'No selected file'}, 400
         flash('No selected file', 'error')
         return redirect(url_for('.index'))
     
@@ -79,13 +88,20 @@ def upload_file():
     
     if current_size + file_size > max_storage:
         max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.is_admin else f'{max_storage / (1024*1024):.0f}MB'
-        flash(f'Upload failed: Storage limit of {max_label} exceeded. '
-              f'Current usage: {format_file_size(current_size)}, '
-              f'File size: {format_file_size(file_size)}', 'error')
+        error_msg = (f'Upload failed: Storage limit of {max_label} exceeded. '
+                     f'Current usage: {format_file_size(current_size)}, '
+                     f'File size: {format_file_size(file_size)}')
+        if is_ajax:
+            return {'error': error_msg}, 413
+        flash(error_msg, 'error')
         return redirect(url_for('.index'))
     
     data_interface.save_file(file, user)
     logging.info(f"user {user.id} uploaded file: {file.filename}")
+
+    if is_ajax:
+        return {'ok': True}, 200
+
     flash('File uploaded successfully!', 'success')
     return redirect(url_for('.index'))
 
@@ -97,6 +113,7 @@ def download_file(filename: str):
 
 
 @file_store_api.route('/thumbnail/<filename>')
+@limiter.limit("30/second", key_func=lambda: flask_login.current_user.id)
 def thumbnail(filename: str):
     """Serve a thumbnail for an image file."""
     data_interface = DataInterface()
