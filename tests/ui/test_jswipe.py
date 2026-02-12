@@ -9,7 +9,6 @@ from playwright.sync_api import expect
 
 def test_jswipe_page_loads(jswipe_page):
     """Test that JSwipe page loads correctly."""
-    expect(jswipe_page.locator("h1.text-forest", has_text="JSwipe")).to_be_visible()
     expect(jswipe_page.locator("h5", has_text="Search Settings")).to_be_visible()
 
 

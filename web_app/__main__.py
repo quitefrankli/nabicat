@@ -37,7 +37,7 @@ app.register_blueprint(proxy_api)
 
 @app.context_processor
 def inject_app_name():
-    return dict(app_name="LazyWombat")
+    return dict(app_name="NabiCat")
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)

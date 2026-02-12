@@ -35,39 +35,39 @@ locals {
 }
 
 # VCN
-resource "oci_core_vcn" "lazy_wombat_vcn" {
+resource "oci_core_vcn" "nabicat_vcn" {
   compartment_id = var.compartment_ocid
   cidr_blocks    = ["10.0.0.0/16"]
-  display_name   = "lazy_wombat_vcn"
-  dns_label      = "lazywombat"
+  display_name   = "nabicat_vcn"
+  dns_label      = "nabicat"
 }
 
 # Internet Gateway
-resource "oci_core_internet_gateway" "lazy_wombat_igw" {
+resource "oci_core_internet_gateway" "nabicat_igw" {
   compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy_wombat_igw"
+  vcn_id         = oci_core_vcn.nabicat_vcn.id
+  display_name   = "nabicat_igw"
   enabled        = true
 }
 
 # Route Table
-resource "oci_core_route_table" "lazy_wombat_rt" {
+resource "oci_core_route_table" "nabicat_rt" {
   compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy_wombat_rt"
+  vcn_id         = oci_core_vcn.nabicat_vcn.id
+  display_name   = "nabicat_rt"
 
   route_rules {
     destination       = "0.0.0.0/0"
     destination_type  = "CIDR_BLOCK"
-    network_entity_id = oci_core_internet_gateway.lazy_wombat_igw.id
+    network_entity_id = oci_core_internet_gateway.nabicat_igw.id
   }
 }
 
 # Security List
-resource "oci_core_security_list" "lazy_wombat_sl" {
+resource "oci_core_security_list" "nabicat_sl" {
   compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.lazy_wombat_vcn.id
-  display_name   = "lazy_wombat_sl"
+  vcn_id         = oci_core_vcn.nabicat_vcn.id
+  display_name   = "nabicat_sl"
 
   # Allow all egress
   egress_security_rules {
@@ -131,23 +131,23 @@ resource "oci_core_security_list" "lazy_wombat_sl" {
 }
 
 # Subnet
-resource "oci_core_subnet" "lazy_wombat_subnet" {
+resource "oci_core_subnet" "nabicat_subnet" {
   compartment_id             = var.compartment_ocid
-  vcn_id                     = oci_core_vcn.lazy_wombat_vcn.id
+  vcn_id                     = oci_core_vcn.nabicat_vcn.id
   cidr_block                 = "10.0.1.0/24"
-  display_name               = "lazy_wombat_subnet"
+  display_name               = "nabicat_subnet"
   dns_label                  = "subnet"
   prohibit_public_ip_on_vnic = false
-  route_table_id             = oci_core_route_table.lazy_wombat_rt.id
-  security_list_ids          = [oci_core_security_list.lazy_wombat_sl.id]
+  route_table_id             = oci_core_route_table.nabicat_rt.id
+  security_list_ids          = [oci_core_security_list.nabicat_sl.id]
   availability_domain        = data.oci_identity_availability_domains.ads.availability_domains[0].name
 }
 
 # Compute Instance
-resource "oci_core_instance" "lazy_wombat" {
+resource "oci_core_instance" "nabicat" {
   compartment_id      = var.compartment_ocid
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
-  display_name        = "lazy_wombat_server"
+  display_name        = "nabicat_server"
   shape               = var.instance_shape
 
   dynamic "shape_config" {
@@ -165,10 +165,10 @@ resource "oci_core_instance" "lazy_wombat" {
   }
 
   create_vnic_details {
-    subnet_id        = oci_core_subnet.lazy_wombat_subnet.id
+    subnet_id        = oci_core_subnet.nabicat_subnet.id
     assign_public_ip = false
-    display_name     = "lazy_wombat_vnic"
-    hostname_label   = "lazywombat"
+    display_name     = "nabicat_vnic"
+    hostname_label   = "nabicat"
   }
 
   metadata = {
@@ -179,30 +179,30 @@ resource "oci_core_instance" "lazy_wombat" {
 }
 
 # Get VNIC attachment
-data "oci_core_vnic_attachments" "lazy_wombat_vnic_attachments" {
+data "oci_core_vnic_attachments" "nabicat_vnic_attachments" {
   compartment_id = var.compartment_ocid
-  instance_id    = oci_core_instance.lazy_wombat.id
+  instance_id    = oci_core_instance.nabicat.id
 }
 
 # Get private IP
-data "oci_core_private_ips" "lazy_wombat_private_ips" {
-  vnic_id = data.oci_core_vnic_attachments.lazy_wombat_vnic_attachments.vnic_attachments[0].vnic_id
+data "oci_core_private_ips" "nabicat_private_ips" {
+  vnic_id = data.oci_core_vnic_attachments.nabicat_vnic_attachments.vnic_attachments[0].vnic_id
 }
 
 # Reserved Public IP
-resource "oci_core_public_ip" "lazy_wombat_public_ip" {
+resource "oci_core_public_ip" "nabicat_public_ip" {
   compartment_id = var.compartment_ocid
   lifetime       = "RESERVED"
-  display_name   = "lazy_wombat_public_ip"
-  private_ip_id  = data.oci_core_private_ips.lazy_wombat_private_ips.private_ips[0].id
+  display_name   = "nabicat_public_ip"
+  private_ip_id  = data.oci_core_private_ips.nabicat_private_ips.private_ips[0].id
 }
 
 output "server_ip_addr" {
-  value       = oci_core_public_ip.lazy_wombat_public_ip.ip_address
+  value       = oci_core_public_ip.nabicat_public_ip.ip_address
   description = "Reserved public IP of the instance"
 }
 
 output "instance_ocid" {
-  value       = oci_core_instance.lazy_wombat.id
+  value       = oci_core_instance.nabicat.id
   description = "OCID of the instance"
 }

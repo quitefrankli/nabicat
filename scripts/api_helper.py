@@ -18,8 +18,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-KEYRING_APP_ID = "lazywombat"
-DEFAULT_BASE_URL = "https://lazywombat.site"
+KEYRING_APP_ID = "nabicat"
+DEFAULT_BASE_URL = "https://nabicat.site"
 
 
 def hybrid_encrypt(data: bytes, public_key_pem: str, session_id: str) -> dict:

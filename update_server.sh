@@ -24,6 +24,6 @@ shift $((OPTIND-1))
 
 pip install -r requirements.txt --quiet
 pkill gunicorn || true
-sudo cp lazywombat.conf /etc/nginx/conf.d/
+sudo cp nabicat.conf /etc/nginx/conf.d/
 sudo systemctl reload nginx
 gunicorn -b 127.0.0.1:5000 web_app.__main__:app &

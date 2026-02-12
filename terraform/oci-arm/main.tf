@@ -44,21 +44,21 @@ data "oci_core_images" "ubuntu" {
 resource "oci_core_vcn" "arm_vcn" {
   compartment_id = var.compartment_ocid
   cidr_blocks    = ["10.1.0.0/16"]
-  display_name   = "lazy_wombat_arm_vcn"
+  display_name   = "nabicat_arm_vcn"
   dns_label      = "lwarm"
 }
 
 resource "oci_core_internet_gateway" "arm_igw" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.arm_vcn.id
-  display_name   = "lazy_wombat_arm_igw"
+  display_name   = "nabicat_arm_igw"
   enabled        = true
 }
 
 resource "oci_core_route_table" "arm_rt" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.arm_vcn.id
-  display_name   = "lazy_wombat_arm_rt"
+  display_name   = "nabicat_arm_rt"
 
   route_rules {
     destination       = "0.0.0.0/0"
@@ -70,7 +70,7 @@ resource "oci_core_route_table" "arm_rt" {
 resource "oci_core_security_list" "arm_sl" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.arm_vcn.id
-  display_name   = "lazy_wombat_arm_sl"
+  display_name   = "nabicat_arm_sl"
 
   egress_security_rules {
     destination = "0.0.0.0/0"
@@ -113,7 +113,7 @@ resource "oci_core_subnet" "arm_subnet" {
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.arm_vcn.id
   cidr_block                 = "10.1.1.0/24"
-  display_name               = "lazy_wombat_arm_subnet"
+  display_name               = "nabicat_arm_subnet"
   dns_label                  = "armsubnet"
   prohibit_public_ip_on_vnic = false
   route_table_id             = oci_core_route_table.arm_rt.id
@@ -124,7 +124,7 @@ resource "oci_core_subnet" "arm_subnet" {
 resource "oci_core_instance" "arm_instance" {
   compartment_id      = var.compartment_ocid
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
-  display_name        = "lazy_wombat_arm_server"
+  display_name        = "nabicat_arm_server"
   shape               = "VM.Standard.A1.Flex"
 
   shape_config {
@@ -141,7 +141,7 @@ resource "oci_core_instance" "arm_instance" {
   create_vnic_details {
     subnet_id        = oci_core_subnet.arm_subnet.id
     assign_public_ip = false
-    display_name     = "lazy_wombat_arm_vnic"
+    display_name     = "nabicat_arm_vnic"
     hostname_label   = "lwarm"
   }
 
@@ -164,7 +164,7 @@ data "oci_core_private_ips" "arm_private_ips" {
 resource "oci_core_public_ip" "arm_public_ip" {
   compartment_id = var.compartment_ocid
   lifetime       = "RESERVED"
-  display_name   = "lazy_wombat_arm_public_ip"
+  display_name   = "nabicat_arm_public_ip"
   private_ip_id  = data.oci_core_private_ips.arm_private_ips.private_ips[0].id
 }
 

@@ -23,7 +23,7 @@ def test_actions_dropdown(metrics_page):
     expect(metrics_page.locator("button:has-text('Actions')")).to_be_visible()
 
 
-def test_metrics_has_content(metrics_page):
-    """Test that Metrics page has some content loaded."""
-    # Check for main content area
-    expect(metrics_page.locator(".card").first).to_be_visible()
+def test_new_metric_button_present(metrics_page):
+    """Test that New Metric button is available in actions dropdown."""
+    metrics_page.click("button:has-text('Actions')")
+    expect(metrics_page.locator("button", has_text="New Metric")).to_be_visible()

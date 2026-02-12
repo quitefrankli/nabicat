@@ -55,7 +55,7 @@ function run_server_side()
 
 	function setup_certs()
 	{
-		DOMAIN=lazywombat.site
+		DOMAIN=nabicat.site
 		EMAIL="erehnimda@gmail.com"
 		
 		# OCI Ubuntu images ship with iptables rules that block incoming traffic at the OS level (separate from the security list)
@@ -68,7 +68,7 @@ function run_server_side()
 		mamba install -y certbot
 		sudo systemctl stop nginx
 		sudo $(which certbot) certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos
-		sudo cp lazywombat.conf /etc/nginx/conf.d/
+		sudo cp nabicat.conf /etc/nginx/conf.d/
 	}
 
 	# Setup 4GB swap file

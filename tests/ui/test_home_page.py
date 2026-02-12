@@ -9,7 +9,7 @@ from playwright.sync_api import expect
 
 def test_home_page_loads(logged_in_page, test_server):
     """Test that the home page loads successfully."""
-    expect(logged_in_page).to_have_title("LazyWombat")
+    expect(logged_in_page).to_have_title("NabiCat")
     welcome_heading = logged_in_page.locator("h1", has_text="Welcome to")
     expect(welcome_heading).to_be_visible()
 
@@ -53,7 +53,7 @@ def test_version_badge_displayed(logged_in_page):
 def test_navbar_present(logged_in_page):
     """Test that the navigation bar is present with key elements."""
     expect(logged_in_page.locator("nav")).to_be_visible()
-    expect(logged_in_page.locator("a[href='/']", has_text="LazyWombat")).to_be_visible()
+    expect(logged_in_page.locator("a[href='/']", has_text="NabiCat")).to_be_visible()
     expect(logged_in_page.locator("button:has-text('Actions')")).to_be_visible()
 
 

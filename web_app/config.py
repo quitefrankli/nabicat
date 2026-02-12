@@ -35,7 +35,7 @@ class ConfigManager:
 
     @property
     def project_name(self) -> str:
-        return "lazywombat" if not self.debug_mode else "lazywombat_debug"
+        return "nabicat" if not self.debug_mode else "nabicat_debug"
 
     @property
     def save_data_path(self) -> Path:

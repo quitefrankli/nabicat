@@ -9,8 +9,8 @@ from playwright.sync_api import expect
 
 def test_crosswords_page_loads(crosswords_page):
     """Test that Crosswords page loads correctly (admin only)."""
-    # Crosswords uses the default app title "LazyWombat"
-    expect(crosswords_page).to_have_title("LazyWombat")
+    # Crosswords uses the default app title "NabiCat"
+    expect(crosswords_page).to_have_title("NabiCat")
 
 
 def test_generate_button_present(crosswords_page):
@@ -20,8 +20,8 @@ def test_generate_button_present(crosswords_page):
 
 def test_crosswords_icon_visible(crosswords_page):
     """Test that the crosswords icon/illustration is visible."""
-    # Check for grid icon or similar
-    expect(crosswords_page.locator("i.bi-grid-3x3, i.bi-grid-3x3-gap").first).to_be_visible()
+    # Check for grid icon
+    expect(crosswords_page.locator("i.bi-grid-3x3-gap-fill").first).to_be_visible()
 
 
 def test_actions_dropdown(crosswords_page):

@@ -28,8 +28,8 @@ resource "aws_budgets_budget" "monthly_cost_budget" {
   }
 }
 
-resource "aws_security_group" "lazy_wombat_sg" {
-  name = "lazy_wombat_sg"
+resource "aws_security_group" "nabicat_sg" {
+  name = "nabicat_sg"
   egress = [
     {
       description      = ""
@@ -82,7 +82,7 @@ resource "aws_security_group" "lazy_wombat_sg" {
   tags_all = {}
 }
 
-resource "aws_instance" "lazy_wombat" {
+resource "aws_instance" "nabicat" {
   ami                         = "ami-0279a86684f669718" # Ubuntu amd64
   associate_public_ip_address = true
   availability_zone           = "ap-southeast-2c"
@@ -92,32 +92,32 @@ resource "aws_instance" "lazy_wombat" {
   get_password_data           = false
   hibernation                 = false
   instance_type               = "t2.micro"
-  key_name                    = "lazy_wombat_key_pair"
+  key_name                    = "nabicat_key_pair"
   monitoring                  = false
-  vpc_security_group_ids      = [aws_security_group.lazy_wombat_sg.id]
+  vpc_security_group_ids      = [aws_security_group.nabicat_sg.id]
   source_dest_check           = true
   tags = {
-    Name = "lazy_wombat_server"
+    Name = "nabicat_server"
   }
   tags_all = {}
 }
 
-resource "aws_key_pair" "lazy_wombat_key_pair" {
-  key_name   = "lazy_wombat_key_pair"
+resource "aws_key_pair" "nabicat_key_pair" {
+  key_name   = "nabicat_key_pair"
   public_key = file("~/.ssh/id_rsa.pub")
 }
 
-resource "aws_eip" "lazy_wombat_eip" {
+resource "aws_eip" "nabicat_eip" {
   tags = {
-    Name = "lazy_wombat_eip"
+    Name = "nabicat_eip"
   }
 }
 
 resource "aws_eip_association" "eip_assoc" {
-  instance_id   = aws_instance.lazy_wombat.id
-  allocation_id = aws_eip.lazy_wombat_eip.id
+  instance_id   = aws_instance.nabicat.id
+  allocation_id = aws_eip.nabicat_eip.id
 }
 
 output "server_ip_addr" {
-  value = aws_eip.lazy_wombat_eip.public_ip
+  value = aws_eip.nabicat_eip.public_ip
 }
