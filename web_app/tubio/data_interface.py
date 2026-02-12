@@ -54,6 +54,7 @@ class AudioMetadata(BaseModel):
     title: str
     yt_video_id: str = ''  # optional, if the audio is from YouTube
     is_cached: bool = False
+    thumbnail_url: str = ''  # YouTube thumbnail URL (cached locally)
 
 class Metadata(BaseModel):
     # username -> UserMetadata
@@ -66,6 +67,7 @@ class DataInterface(BaseDataInterface):
         super().__init__()
         self.app_dir = ConfigManager().save_data_path / "tubio"
         self.app_audio_dir = self.app_dir / "audio"
+        self.app_thumbnails_dir = self.app_dir / "thumbnails"
         self.app_metadata_file = self.app_dir / "metadata.json"
 
     def delete_audio(self, crc: int) -> None:
@@ -152,9 +154,21 @@ class DataInterface(BaseDataInterface):
         metadata = self.get_metadata() if metadata is None else metadata
         if crc not in metadata.audios:
             raise ValueError(f"Audio with crc {crc} does not exist.")
-        
+
         return self.app_audio_dir / f"{crc}.m4a"
-    
+
+    def get_thumbnail_path(self, crc: int) -> Path:
+        return self.app_thumbnails_dir / f"{crc}.jpg"
+
+    def save_thumbnail(self, crc: int, thumbnail_data: bytes) -> None:
+        self.app_thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        thumbnail_path = self.get_thumbnail_path(crc)
+        with open(thumbnail_path, 'wb') as f:
+            f.write(thumbnail_data)
+
+    def has_thumbnail(self, crc: int) -> bool:
+        return self.get_thumbnail_path(crc).exists()
+
     def cleanup_unused_tracks(self) -> None:
         metadata = self.get_metadata()
         used_crcs = set()

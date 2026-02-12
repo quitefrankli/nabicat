@@ -39,15 +39,15 @@ function displaySearchResults(results) {
     results.forEach((video, index) => {
         const isDisabled = video.cached ? 'disabled style="background-color: #adb5bd; border-color: #adb5bd;"' : '';
         const truncatedTitle = video.title.length > 60 ? video.title.substring(0, 60) + '...' : video.title;
-        
+
         html += `
             <div class="accordion-item mb-3 border-0 shadow-sm">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed bg-gradient text-primary fw-semibold" 
-                            type="button" 
-                            data-bs-toggle="collapse" 
-                            data-bs-target="#collapse-search-${index}" 
-                            aria-expanded="false" 
+                    <button class="accordion-button collapsed bg-gradient text-primary fw-semibold"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapse-search-${index}"
+                            aria-expanded="false"
                             aria-controls="collapse-search-${index}"
                             style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
                         <i class="bi bi-youtube me-2"></i>
@@ -57,20 +57,25 @@ function displaySearchResults(results) {
                         </div>
                     </button>
                 </h2>
-                <div id="collapse-search-${index}" 
-                     class="accordion-collapse collapse" 
+                <div id="collapse-search-${index}"
+                     class="accordion-collapse collapse"
                      data-bs-parent="#searchResultsAccordion">
                     <div class="accordion-body bg-light">
-                        <div class="mb-3">
-                            <h6 class="text-primary mb-2">Full Title:</h6>
-                            <p class="text-dark fw-medium">${video.title}</p>
-                        </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <h6 class="text-primary mb-2">Description:</h6>
-                                <p class="text-muted small" style="max-height: 100px; overflow-y: auto;">${video.description}</p>
+                            <div class="col-md-4 mb-3 text-center">
+                                ${video.thumbnail_url ? `<img src="${video.thumbnail_url}" alt="Thumbnail" class="img-fluid rounded shadow-sm" style="max-height: 180px;">` : ''}
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <h6 class="text-primary mb-2">Full Title:</h6>
+                                    <p class="text-dark fw-medium">${video.title}</p>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <h6 class="text-primary mb-2">Description:</h6>
+                                        <p class="text-muted small" style="max-height: 100px; overflow-y: auto;">${video.description}</p>
+                                    </div>
+                                </div>
                                 <div class="row">
                                     <div class="col-6">
                                         <h6 class="text-primary mb-2">Views:</h6>
@@ -83,8 +88,8 @@ function displaySearchResults(results) {
                                 </div>
                             </div>
                         </div>
-                        <div class="text-center">
-                            <button onclick="downloadVideo('${video.video_id}', '${video.title.replace(/'/g, "\\'")}', this)" 
+                        <div class="text-center mt-3">
+                            <button onclick="downloadVideo('${video.video_id}', '${video.title.replace(/'/g, "\\'")}', this)"
                                     class="btn btn-primary" ${isDisabled} id="download-btn-${index}">
                                 <i class="bi bi-download me-1"></i>Add To Favourites
                             </button>
@@ -125,14 +130,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
                 
+                const data = await response.json();
                 if (response.ok) {
-                    const data = await response.json();
                     displaySearchResults(data.results);
                 } else {
-                    console.error('Search failed');
+                    console.error('Search failed:', data.error);
                     const resultsDiv = document.getElementById('search-results');
                     if (resultsDiv) {
-                        resultsDiv.innerHTML = '<div class="text-center py-5"><h5 class="text-danger">Search failed. Please try again.</h5></div>';
+                        const errorMsg = data.error || 'Search failed. Please try again.';
+                        resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${errorMsg}</h5></div>`;
                     }
                 }
             } catch (error) {

@@ -26,4 +26,4 @@ pip install -r requirements.txt --quiet
 pkill gunicorn || true
 sudo cp nabicat.conf /etc/nginx/conf.d/
 sudo systemctl reload nginx
-gunicorn -b 127.0.0.1:5000 web_app.__main__:app &
+gunicorn -b 127.0.0.1:5000 --timeout 300 web_app.__main__:app &

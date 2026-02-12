@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, send_file, redirect, url_
 from flask_login import login_required
 
 from web_app.tubio.data_interface import DataInterface, AudioMetadata
-from web_app.tubio.audio_downloader import AudioDownloader
+from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError
 from web_app.config import ConfigManager
 from web_app.helpers import cur_user, parse_request
 from web_app.users import User
@@ -41,7 +41,7 @@ def get_cached_yt_vid_ids(user: User|None = None) -> Set[str]:
         user_metadata = DataInterface().get_user_metadata(user)
         return {metadata.audios[crc].yt_video_id for crc in user_metadata.get_playlist().audio_crcs}
 
-def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str]]]]:
+def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool]]]]:
     user_metadata = DataInterface().get_user_metadata(user)
     playlists = []
     metadata = DataInterface().get_metadata()
@@ -49,10 +49,11 @@ def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str]]]]:
         playlist_data = []
         for crc in playlist.audio_crcs:
             if crc in metadata.audios:
-                title = metadata.audios[crc].title
-                playlist_data.append((crc, title))
+                audio = metadata.audios[crc]
+                has_thumbnail = DataInterface().has_thumbnail(crc)
+                playlist_data.append((crc, audio.title, has_thumbnail))
         playlists.append((playlist.name, playlist_data))
-    
+
     return playlists
 
 @tubio_api.route('/')
@@ -75,7 +76,11 @@ def search():
             results = AudioDownloader.search_youtube(decorated_query, user_favourites)
             # assume AJAX POST request
             return {'results': results, 'query': query}
-        
+
+        except VideoTooLongError as e:
+            max_mins = int(e.max_duration.total_seconds() // 60)
+            return {'error': f'Video exceeds maximum length of {max_mins} minutes', 'query': query}, 400
+
         except Exception:
             logging.exception("Error searching YouTube")
             flash("Error: Search Failed!", 'error')
@@ -265,6 +270,16 @@ def serve_audio(crc: int):
     response.headers.set("Content-Length", str(length))
 
     return response
+
+
+@tubio_api.route('/thumbnail/<int:crc>')
+def serve_thumbnail(crc: int):
+    thumbnail_path = DataInterface().get_thumbnail_path(crc)
+    if not thumbnail_path.exists():
+        # Return a placeholder or 404
+        return '', 404
+    return send_file(thumbnail_path, mimetype='image/jpeg')
+
 
 @tubio_api.route('/delete_audio/<int:crc>', methods=['POST'])
 def delete_audio(crc: int):
