@@ -57,6 +57,9 @@ class AudioDownloader:
             'skip_download': True,
         }
 
+        if ConfigManager().tubio_cookie_path.exists():
+            ydl_opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
