@@ -27,40 +27,6 @@ from web_app.tubio.data_interface import DataInterface as TubioDataInterface
 from web_app.tubio.audio_downloader import AudioDownloader
 
 
-def backfill_tubio_metadata():
-    """Backfill thumbnails and source URLs for existing YouTube-sourced audio tracks."""
-    try:
-        di = TubioDataInterface()
-        metadata = di.get_metadata()
-        thumb_count = 0
-        url_count = 0
-        for crc, audio in metadata.audios.items():
-            if not audio.yt_video_id:
-                continue
-
-            modified = False
-
-            # Backfill source_url
-            if not audio.source_url:
-                audio.source_url = f"https://www.youtube.com/watch?v={audio.yt_video_id}"
-                modified = True
-                url_count += 1
-
-            # Backfill thumbnail
-            if not di.has_thumbnail(crc):
-                logging.info(f"Backfilling thumbnail for {audio.title} ({audio.yt_video_id})")
-                if AudioDownloader.download_thumbnail(audio.yt_video_id, crc):
-                    thumb_count += 1
-
-            if modified:
-                di.save_audio_metadata(audio)
-
-        if thumb_count or url_count:
-            logging.info(f"Backfilled {thumb_count} thumbnails, {url_count} source URLs")
-    except Exception:
-        logging.exception("Error backfilling tubio metadata")
-
-
 app.register_blueprint(todoist2_api)
 app.register_blueprint(crosswords_api)
 app.register_blueprint(tubio_api)
@@ -138,7 +104,6 @@ def cli_start(debug: bool, port: int):
         shutil.copytree(debug_data_path, config.save_data_path.parent)
 
     logging.info("Starting server")
-    backfill_tubio_metadata()
     app.run(host='0.0.0.0', port=port, debug=debug)
 
 if __name__ == '__main__':
@@ -146,5 +111,4 @@ if __name__ == '__main__':
 else:
     app.secret_key = ConfigManager().flask_secret_key
     configure_logging(debug=False)
-    backfill_tubio_metadata()
     logging.info("Starting server")
