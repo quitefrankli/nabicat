@@ -33,8 +33,9 @@ def inject_app_name():
 def index():
     user = cur_user()
     data_interface = DataInterface()
+    mode = request.args.get('mode', 'list')
     files = data_interface.list_files_with_metadata(user) if user else []
-    
+
     # Calculate storage info for all users
     storage_info = None
     if user:
@@ -50,8 +51,8 @@ def index():
             'remaining': max_storage - total_used,
             'remaining_formatted': format_file_size(max(0, max_storage - total_used))
         }
-    
-    return render_template("file_store_index.html", files=files, storage_info=storage_info)
+
+    return render_template("file_store_index.html", files=files, storage_info=storage_info, mode=mode)
 
 
 @file_store_api.route('/upload', methods=['POST'])
@@ -93,6 +94,24 @@ def upload_file():
 def download_file(filename: str):
     file_path = DataInterface().get_file_path(filename, cur_user())
     return send_file(file_path, as_attachment=True)
+
+
+@file_store_api.route('/thumbnail/<filename>')
+def thumbnail(filename: str):
+    """Serve a thumbnail for an image file."""
+    data_interface = DataInterface()
+    thumbnail_path = data_interface.get_thumbnail_for_file(filename, cur_user())
+
+    if thumbnail_path and thumbnail_path.exists():
+        return send_file(thumbnail_path, mimetype='image/jpeg')
+
+    # If thumbnail generation failed, return the original file
+    try:
+        file_path = data_interface.get_file_path(filename, cur_user())
+        return send_file(file_path)
+    except FileNotFoundError:
+        flash('File not found', 'error')
+        return redirect(url_for('.index'))
 
 
 @file_store_api.route('/files_list')

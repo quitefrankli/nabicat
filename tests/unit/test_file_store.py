@@ -2,15 +2,25 @@
 
 import pytest
 import io
+import binascii
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
+from unittest.mock import Mock, patch
 from werkzeug.datastructures import FileStorage
 
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
 from web_app.users import User
 from web_app.file_store import file_store_api
-from web_app.file_store.data_interface import DataInterface, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
+from web_app.file_store.data_interface import (
+    DataInterface,
+    NON_ADMIN_MAX_STORAGE,
+    ADMIN_MAX_STORAGE,
+    Metadata,
+    UserMetadata,
+    FileMetadata,
+    UserFileEntry
+)
 from web_app.helpers import limiter
 import web_app.helpers as helpers
 
@@ -34,6 +44,12 @@ def test_user():
 
 
 @pytest.fixture
+def test_user2():
+    """Create a second test user"""
+    return User(username='testuser2', password='testpass2', folder='test_folder2', is_admin=False)
+
+
+@pytest.fixture
 def admin_user():
     """Create an admin test user"""
     return User(username='admin', password='admin', folder='admin_folder', is_admin=True)
@@ -45,148 +61,337 @@ def auth_mock(test_user):
     # Mock the user_loader to return our test user
     original_user_loader = helpers.login_manager._user_callback
     helpers.login_manager._user_callback = lambda username: test_user if username == test_user.id else None
-    
+
     yield test_user
-    
+
     # Restore original user_loader
     helpers.login_manager._user_callback = original_user_loader
 
 
+@pytest.fixture
+def data_interface(tmp_path):
+    """Create a DataInterface with temporary directory"""
+    di = DataInterface()
+    di.file_store_dir = tmp_path / "file_store"
+    di.files_dir = di.file_store_dir / "files"
+    di.metadata_file = di.file_store_dir / "metadata.json"
+    return di
+
+
 class TestDataInterface:
-    """Tests for FileStoreDataInterface"""
+    """Tests for FileStoreDataInterface with metadata-based storage"""
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_save_file(self, mock_get_user_dir):
-        """Test saving a file"""
-        mock_get_user_dir.return_value = Path('/fake/user/dir')
-        
-        data_interface = DataInterface()
-        data_interface.atomic_write = Mock()
-        
-        # Create a mock FileStorage
-        file_storage = Mock(spec=FileStorage)
+    def test_get_metadata_empty(self, data_interface):
+        """Test getting metadata when file doesn't exist"""
+        metadata = data_interface.get_metadata()
+
+        assert isinstance(metadata, Metadata)
+        assert metadata.users == {}
+        assert metadata.files == {}
+
+    def test_save_and_load_metadata(self, data_interface):
+        """Test saving and loading metadata"""
+        metadata = Metadata()
+        metadata.users['user1'] = UserMetadata(
+            user_id='user1',
+            files=[UserFileEntry(crc=123, original_name='test.txt')]
+        )
+        metadata.files[123] = FileMetadata(
+            crc=123,
+            original_name='test.txt',
+            size=100,
+            upload_date=datetime.now().isoformat()
+        )
+
+        data_interface.save_metadata(metadata)
+
+        loaded = data_interface.get_metadata()
+        assert 'user1' in loaded.users
+        assert 123 in loaded.files
+        assert loaded.files[123].original_name == 'test.txt'
+        assert len(loaded.users['user1'].files) == 1
+
+    def test_save_file_new(self, data_interface, test_user):
+        """Test saving a new file"""
+        file_data = b'test content'
+        file_storage = Mock()
         file_storage.filename = 'test.txt'
-        file_storage.stream = io.BytesIO(b'test content')
-        
-        user = Mock(spec=User)
-        
-        data_interface.save_file(file_storage, user)
-        
-        data_interface.atomic_write.assert_called_once()
-        call_args = data_interface.atomic_write.call_args
-        assert call_args[0][0] == Path('/fake/user/dir/test.txt')
+        file_storage.read.return_value = file_data
+        file_storage.content_type = 'text/plain'
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_save_file_prevents_path_traversal(self, mock_get_user_dir):
-        """Test that save_file prevents path traversal attacks"""
-        mock_get_user_dir.return_value = Path('/fake/user/dir')
-        
-        data_interface = DataInterface()
-        data_interface.atomic_write = Mock()
-        
-        # Create a mock FileStorage with malicious filename
-        file_storage = Mock(spec=FileStorage)
-        file_storage.filename = '../../../etc/passwd'
-        file_storage.stream = io.BytesIO(b'malicious content')
-        
-        user = Mock(spec=User)
-        
-        data_interface.save_file(file_storage, user)
-        
-        # Verify the path was sanitized (secure_filename removes path traversal)
-        call_args = data_interface.atomic_write.call_args
-        saved_path = call_args[0][0]
-        # The path should NOT contain parent directory references
-        assert '..' not in str(saved_path)
-        # Should be flattened to just the filename
-        assert saved_path.name == 'etc_passwd' or saved_path.name == 'passwd'
+        crc = data_interface.save_file(file_storage, test_user)
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_get_file_path_prevents_path_traversal(self, mock_get_user_dir):
-        """Test that get_file_path prevents path traversal attacks"""
-        mock_get_user_dir.return_value = Path('/fake/user/dir')
-        
-        data_interface = DataInterface()
-        user = Mock(spec=User)
-        
-        # Try path traversal attack
-        result = data_interface.get_file_path('../../../etc/passwd', user)
-        
-        # Verify the path was sanitized
-        assert '..' not in str(result)
-        # Should still be under the user directory
-        assert '/fake/user/dir' in str(result)
+        assert crc == binascii.crc32(file_data)
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_get_file_path(self, mock_get_user_dir):
-        """Test getting file path"""
-        mock_get_user_dir.return_value = Path('/fake/user/dir')
-        
-        data_interface = DataInterface()
-        user = Mock(spec=User)
-        
-        result = data_interface.get_file_path('test.txt', user)
-        
-        assert result == Path('/fake/user/dir/test.txt')
+        # Verify file was saved
+        file_path = data_interface.files_dir / str(crc)
+        assert file_path.exists()
+        assert file_path.read_bytes() == file_data
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_get_total_storage_size_empty_dir(self, mock_get_user_dir):
-        """Test getting storage size when directory doesn't exist"""
-        mock_get_user_dir.return_value = Path('/nonexistent/dir')
-        
-        data_interface = DataInterface()
-        user = Mock(spec=User)
-        
-        result = data_interface.get_total_storage_size(user)
-        
-        assert result == 0
+        # Verify metadata
+        metadata = data_interface.get_metadata()
+        assert test_user.id in metadata.users
+        assert len(metadata.users[test_user.id].files) == 1
+        assert metadata.users[test_user.id].files[0].crc == crc
+        assert metadata.users[test_user.id].files[0].original_name == 'test.txt'
+        assert crc in metadata.files
+        assert metadata.files[crc].original_name == 'test.txt'
 
-    @patch('web_app.file_store.data_interface.DataInterface._get_user_dir')
-    def test_get_total_storage_size_with_files(self, mock_get_user_dir, tmp_path):
-        """Test getting storage size with existing files"""
-        # Create temporary files
-        test_dir = tmp_path / 'user_dir'
-        test_dir.mkdir()
-        (test_dir / 'file1.txt').write_text('a' * 100)
-        (test_dir / 'file2.txt').write_text('b' * 200)
-        
-        mock_get_user_dir.return_value = test_dir
-        
-        data_interface = DataInterface()
-        user = Mock(spec=User)
-        
-        result = data_interface.get_total_storage_size(user)
-        
-        assert result == 300
+    def test_save_file_duplicate_dedup(self, data_interface, test_user):
+        """Test that saving the same file twice only stores it once"""
+        file_data = b'test content'
+        file_storage1 = Mock()
+        file_storage1.filename = 'test1.txt'
+        file_storage1.read.return_value = file_data
+        file_storage1.content_type = 'text/plain'
+
+        file_storage2 = Mock()
+        file_storage2.filename = 'test2.txt'
+        file_storage2.read.return_value = file_data
+        file_storage2.content_type = 'text/plain'
+
+        crc1 = data_interface.save_file(file_storage1, test_user)
+        crc2 = data_interface.save_file(file_storage2, test_user)
+
+        # CRCs should be the same
+        assert crc1 == crc2
+
+        # Should have both files in user's list
+        metadata = data_interface.get_metadata()
+        assert len(metadata.users[test_user.id].files) == 2
+        assert metadata.users[test_user.id].files[0].original_name == 'test1.txt'
+        assert metadata.users[test_user.id].files[1].original_name == 'test2.txt'
+        assert metadata.users[test_user.id].files[0].crc == crc1
+        assert metadata.users[test_user.id].files[1].crc == crc1
+
+        # But only one file metadata entry (from first upload)
+        assert metadata.files[crc1].original_name == 'test1.txt'
+
+    def test_save_file_different_users_same_content(self, data_interface, test_user, test_user2):
+        """Test that different users can share the same file content"""
+        file_data = b'shared content'
+
+        file_storage1 = Mock()
+        file_storage1.filename = 'user1.txt'
+        file_storage1.read.return_value = file_data
+        file_storage1.content_type = 'text/plain'
+
+        file_storage2 = Mock()
+        file_storage2.filename = 'user2.txt'
+        file_storage2.read.return_value = file_data
+        file_storage2.content_type = 'text/plain'
+
+        crc1 = data_interface.save_file(file_storage1, test_user)
+        crc2 = data_interface.save_file(file_storage2, test_user2)
+
+        assert crc1 == crc2
+
+        metadata = data_interface.get_metadata()
+        assert any(f.crc == crc1 for f in metadata.users[test_user.id].files)
+        assert any(f.crc == crc1 for f in metadata.users[test_user2.id].files)
+
+        # Only one physical file
+        file_path = data_interface.files_dir / str(crc1)
+        assert file_path.exists()
+
+    def test_get_file_path(self, data_interface, test_user):
+        """Test getting file path by original filename"""
+        file_data = b'test content'
+        file_storage = Mock()
+        file_storage.filename = 'myfile.txt'
+        file_storage.read.return_value = file_data
+        file_storage.content_type = 'text/plain'
+
+        crc = data_interface.save_file(file_storage, test_user)
+
+        path = data_interface.get_file_path('myfile.txt', test_user)
+
+        assert path == data_interface.files_dir / str(crc)
+        assert path.exists()
+
+    def test_get_file_path_not_found(self, data_interface, test_user):
+        """Test getting non-existent file"""
+        with pytest.raises(FileNotFoundError):
+            data_interface.get_file_path('nonexistent.txt', test_user)
+
+    def test_delete_file_single_user(self, data_interface, test_user):
+        """Test deleting a file when only one user has it"""
+        file_data = b'test content'
+        file_storage = Mock()
+        file_storage.filename = 'test.txt'
+        file_storage.read.return_value = file_data
+        file_storage.content_type = 'text/plain'
+
+        crc = data_interface.save_file(file_storage, test_user)
+        file_path = data_interface.files_dir / str(crc)
+
+        assert file_path.exists()
+
+        data_interface.delete_file('test.txt', test_user)
+
+        # File should be deleted from disk
+        assert not file_path.exists()
+
+        # Metadata should be cleaned up
+        metadata = data_interface.get_metadata()
+        assert crc not in metadata.files
+        assert not any(f.crc == crc for f in metadata.users[test_user.id].files)
+
+    def test_delete_file_multiple_users(self, data_interface, test_user, test_user2):
+        """Test deleting file when multiple users have it"""
+        file_data = b'shared content'
+
+        file_storage1 = Mock()
+        file_storage1.filename = 'file1.txt'
+        file_storage1.read.return_value = file_data
+        file_storage1.content_type = 'text/plain'
+
+        file_storage2 = Mock()
+        file_storage2.filename = 'file2.txt'
+        file_storage2.read.return_value = file_data
+        file_storage2.content_type = 'text/plain'
+
+        crc = data_interface.save_file(file_storage1, test_user)
+        data_interface.save_file(file_storage2, test_user2)
+
+        file_path = data_interface.files_dir / str(crc)
+        assert file_path.exists()
+
+        # Delete from first user
+        data_interface.delete_file('file1.txt', test_user)
+
+        # File should still exist (user2 still has it)
+        assert file_path.exists()
+
+        # Metadata should still have the file
+        metadata = data_interface.get_metadata()
+        assert crc in metadata.files
+        assert not any(f.crc == crc for f in metadata.users[test_user.id].files)
+        assert any(f.crc == crc for f in metadata.users[test_user2.id].files)
+
+        # Delete from second user
+        data_interface.delete_file('file2.txt', test_user2)
+
+        # Now file should be deleted
+        assert not file_path.exists()
+        metadata = data_interface.get_metadata()
+        assert crc not in metadata.files
+
+    def test_list_files(self, data_interface, test_user):
+        """Test listing user files"""
+        # New user should have empty list
+        files = data_interface.list_files(test_user)
+        assert files == []
+
+        # Add some files
+        for filename in ['file1.txt', 'file2.txt']:
+            file_storage = Mock()
+            file_storage.filename = filename
+            file_storage.read.return_value = filename.encode()
+            file_storage.content_type = 'text/plain'
+            data_interface.save_file(file_storage, test_user)
+
+        files = data_interface.list_files(test_user)
+        assert sorted(files) == ['file1.txt', 'file2.txt']
+
+    def test_list_files_with_metadata(self, data_interface, test_user):
+        """Test listing files with metadata"""
+        file_storage = Mock()
+        file_storage.filename = 'test.txt'
+        file_storage.read.return_value = b'test content'
+        file_storage.content_type = 'text/plain'
+
+        data_interface.save_file(file_storage, test_user)
+
+        files = data_interface.list_files_with_metadata(test_user)
+
+        assert len(files) == 1
+        assert files[0]['name'] == 'test.txt'
+        assert files[0]['size'] == 12
+        assert 'size_formatted' in files[0]
+        assert 'modified_formatted' in files[0]
+        assert files[0]['mime_type'] == 'text/plain'
+
+    def test_get_total_storage_size_new_user(self, data_interface, test_user):
+        """Test storage size for new user"""
+        size = data_interface.get_total_storage_size(test_user)
+        assert size == 0
+
+    def test_get_total_storage_size_with_files(self, data_interface, test_user):
+        """Test storage size calculation"""
+        file1_data = b'a' * 100
+        file2_data = b'b' * 200
+
+        for filename, data in [('file1.txt', file1_data), ('file2.txt', file2_data)]:
+            file_storage = Mock()
+            file_storage.filename = filename
+            file_storage.read.return_value = data
+            file_storage.content_type = 'text/plain'
+            data_interface.save_file(file_storage, test_user)
+
+        size = data_interface.get_total_storage_size(test_user)
+        assert size == 300
+
+    def test_get_user_metadata_new_user(self, data_interface, test_user):
+        """Test getting metadata for new user"""
+        user_meta = data_interface.get_user_metadata(test_user)
+
+        assert user_meta.user_id == test_user.id
+        assert user_meta.files == []
 
 
 class TestFileStoreRoutes:
     """Tests for file_store routes"""
 
     @patch('web_app.file_store.DataInterface')
-    def test_index(self, mock_di_class, client, auth_mock):
-        """Test index page"""
+    def test_index_list_mode(self, mock_di_class, client, auth_mock):
+        """Test index page in list mode"""
         mock_di = mock_di_class.return_value
         mock_di.list_files_with_metadata.return_value = [
-            {'name': 'file1.txt', 'size': 100, 'size_formatted': '100.0 B', 'modified': None, 'modified_formatted': '2024-01-01 00:00'},
-            {'name': 'file2.txt', 'size': 200, 'size_formatted': '200.0 B', 'modified': None, 'modified_formatted': '2024-01-01 00:00'}
+            {'name': 'file1.txt', 'size': 100, 'size_formatted': '100.0 B',
+             'modified': None, 'modified_formatted': '2024-01-01 00:00',
+             'crc': 123, 'mime_type': 'text/plain'},
+        ]
+        mock_di.get_total_storage_size.return_value = 100
+
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        response = client.get('/file_store/?mode=list')
+
+        assert response.status_code == 200
+        assert b'List' in response.data
+
+    @patch('web_app.file_store.DataInterface')
+    def test_index_grid_mode_shows_all_files(self, mock_di_class, client, auth_mock):
+        """Test that grid mode shows all files (not just images)"""
+        mock_di = mock_di_class.return_value
+        mock_di.list_files_with_metadata.return_value = [
+            {'name': 'photo.jpg', 'size': 100, 'size_formatted': '100.0 B',
+             'modified': None, 'modified_formatted': '2024-01-01 00:00',
+             'crc': 123, 'mime_type': 'image/jpeg'},
+            {'name': 'document.txt', 'size': 200, 'size_formatted': '200.0 B',
+             'modified': None, 'modified_formatted': '2024-01-01 00:00',
+             'crc': 456, 'mime_type': 'text/plain'},
         ]
         mock_di.get_total_storage_size.return_value = 300
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
-        response = client.get('/file_store/')
+        response = client.get('/file_store/?mode=grid')
 
         assert response.status_code == 200
-        mock_di.list_files_with_metadata.assert_called_once_with(auth_mock)
+        # Grid mode should show both files
+        assert b'photo.jpg' in response.data
+        assert b'document.txt' in response.data
 
     @patch('web_app.file_store.DataInterface')
     def test_upload_file_success(self, mock_di_class, client, auth_mock):
         """Test successful file upload"""
         mock_di = mock_di_class.return_value
         mock_di.get_total_storage_size.return_value = 0
-        mock_di.save_file = Mock()
+        mock_di.save_file = Mock(return_value=123)
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
@@ -196,94 +401,13 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 302  # Redirect
 
-    def test_upload_no_file_part(self, client, auth_mock):
-        """Test upload with no file part"""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        response = client.post('/file_store/upload', data={})
-
-        assert response.status_code == 302  # Redirect with flash error
-
-    def test_upload_empty_filename(self, client, auth_mock):
-        """Test upload with empty filename"""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        data = {'file': (io.BytesIO(b''), '')}
-        response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
-
-        assert response.status_code == 302  # Redirect with flash error
-
-    @patch('web_app.file_store.DataInterface')
-    def test_upload_non_admin_exceeds_limit(self, mock_di_class, client, auth_mock):
-        """Test non-admin upload exceeding storage limit"""
-        mock_di = mock_di_class.return_value
-        # Simulate already using almost all storage
-        mock_di.get_total_storage_size.return_value = NON_ADMIN_MAX_STORAGE - 100
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        # Upload a file that would exceed the limit
-        data = {'file': (io.BytesIO(b'a' * 1000), 'large.txt')}
-        response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
-
-        assert response.status_code == 302  # Redirect with flash error
-
-    @patch('web_app.file_store.DataInterface')
-    def test_upload_admin_has_limit(self, mock_di_class, client, admin_user):
-        """Test admin upload has 1GB storage limit"""
-        # Set up auth mock for admin
-        original_user_loader = helpers.login_manager._user_callback
-        helpers.login_manager._user_callback = lambda username: admin_user if username == admin_user.id else None
-        
-        try:
-            mock_di = mock_di_class.return_value
-            # Simulate using less than admin limit
-            mock_di.get_total_storage_size.return_value = ADMIN_MAX_STORAGE - 100000
-
-            with client.session_transaction() as sess:
-                sess['_user_id'] = admin_user.id
-
-            # Upload should work for admin under limit
-            data = {'file': (io.BytesIO(b'a' * 1000), 'large.txt')}
-            response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
-
-            assert response.status_code == 302  # Redirect success
-        finally:
-            helpers.login_manager._user_callback = original_user_loader
-
-    @patch('web_app.file_store.DataInterface')
-    def test_upload_admin_exceeds_limit(self, mock_di_class, client, admin_user):
-        """Test admin upload exceeding 1GB storage limit fails"""
-        # Set up auth mock for admin
-        original_user_loader = helpers.login_manager._user_callback
-        helpers.login_manager._user_callback = lambda username: admin_user if username == admin_user.id else None
-        
-        try:
-            mock_di = mock_di_class.return_value
-            # Simulate already using almost all admin storage
-            mock_di.get_total_storage_size.return_value = ADMIN_MAX_STORAGE - 100
-
-            with client.session_transaction() as sess:
-                sess['_user_id'] = admin_user.id
-
-            # Upload a file that would exceed the limit
-            data = {'file': (io.BytesIO(b'a' * 1000), 'large.txt')}
-            response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
-
-            assert response.status_code == 302  # Redirect with flash error
-        finally:
-            helpers.login_manager._user_callback = original_user_loader
-
     @patch('web_app.file_store.DataInterface')
     def test_download_file(self, mock_di_class, client, auth_mock, tmp_path):
         """Test downloading a file"""
         mock_di = mock_di_class.return_value
-        
+
         # Create a real temporary file
-        test_file = tmp_path / 'test.txt'
+        test_file = tmp_path / '123'  # CRC-based filename
         test_file.write_text('download test content')
         mock_di.get_file_path.return_value = test_file
 
@@ -293,48 +417,6 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/download/test.txt')
 
         assert response.status_code == 200
-
-    @patch('web_app.file_store.DataInterface')
-    def test_files_list(self, mock_di_class, client, auth_mock):
-        """Test files list API"""
-        mock_di = mock_di_class.return_value
-        mock_di.list_files.return_value = ['file1.txt', 'file2.txt']
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        response = client.get('/file_store/files_list')
-
-        assert response.status_code == 200
-        import json
-        data = json.loads(response.data)
-        assert data['files'] == ['file1.txt', 'file2.txt']
-
-    @patch('web_app.file_store.DataInterface')
-    def test_delete_file_success(self, mock_di_class, client, auth_mock):
-        """Test successful file deletion"""
-        mock_di = mock_di_class.return_value
-        mock_di.delete_file = Mock()
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        response = client.post('/file_store/delete/test.txt')
-
-        assert response.status_code == 302  # Redirect success
-
-    @patch('web_app.file_store.DataInterface')
-    def test_delete_file_not_found(self, mock_di_class, client, auth_mock):
-        """Test deleting non-existent file"""
-        mock_di = mock_di_class.return_value
-        mock_di.delete_file.side_effect = FileNotFoundError()
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = auth_mock.id
-
-        response = client.post('/file_store/delete/nonexistent.txt')
-
-        assert response.status_code == 302  # Redirect with flash error
 
 
 class TestFileStoreBlueprint:

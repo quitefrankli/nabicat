@@ -158,10 +158,37 @@ function setupAsyncDownload() {
     });
 }
 
+function setupImageModal() {
+    const imageModal = document.getElementById('imageModal');
+    if (!imageModal) return;
+
+    // Handle clicks on grid items
+    document.querySelectorAll('.file-grid-item[data-bs-toggle="modal"]').forEach(item => {
+        item.addEventListener('click', function() {
+            const imageUrl = this.getAttribute('data-image-url');
+            const imageName = this.getAttribute('data-image-name');
+
+            const modalImage = document.getElementById('modalImage');
+            const modalImageName = document.getElementById('modalImageName');
+
+            modalImage.src = imageUrl;
+            modalImage.alt = imageName;
+            modalImageName.textContent = imageName;
+        });
+    });
+
+    // Reset image when modal is hidden
+    imageModal.addEventListener('hidden.bs.modal', function() {
+        const modalImage = document.getElementById('modalImage');
+        modalImage.src = '';
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     setupFileSizeValidation();
     setupAsyncUpload();
     setupAsyncDownload();
+    setupImageModal();
 
     function setupFileModal({modalId, listId, searchId, actionType}) {
         const modal = document.getElementById(modalId);

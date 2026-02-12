@@ -3,6 +3,21 @@
 {% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
 {% block navbar_brand %}File Store{% endblock %}
 
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link {{'active' if mode == 'list' else ''}} d-flex align-items-center gap-2" href="{{ url_for('.index', mode='list') }}">
+      <i class="bi bi-list-ul"></i>
+      <span>List</span>
+    </a>
+  </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link {{'active' if mode == 'grid' else ''}} d-flex align-items-center gap-2" href="{{ url_for('.index', mode='grid') }}">
+      <i class="bi bi-grid-3x3-gap"></i>
+      <span>Grid</span>
+    </a>
+  </li>
+{% endblock %}
+
 {% block page_actions %}
   <li>
     <button class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadModal">
@@ -13,6 +28,23 @@
 {% endblock %}
 
 {% block actions_modal %}
+<!-- Image Preview Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content border-0 bg-transparent">
+      <div class="modal-header border-0 position-absolute top-0 end-0 z-3">
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="min-height: 70vh;">
+        <img src="" id="modalImage" class="img-fluid rounded-3" alt="" style="max-height: 85vh; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+      </div>
+      <div class="modal-footer border-0 bg-dark bg-opacity-75 justify-content-center">
+        <p class="text-white mb-0 text-truncate" id="modalImageName"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Upload Modal -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -88,11 +120,11 @@
 </div>
 
 <div class="row justify-content-center">
-  <div class="col-12 col-lg-8">
+  <div class="col-12 {% if mode == 'grid' %}col-xl-11{% else %}col-lg-8{% endif %}">
     <div class="card border-0 shadow-soft">
       <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-4">
         <h5 class="mb-0 d-flex align-items-center gap-2">
-          <i class="bi bi-folder-fill text-sage"></i>
+          <i class="bi bi-{% if mode == 'grid' %}grid-fill{% else %}folder-fill{% endif %} text-sage"></i>
           Your Files
         </h5>
         {% if files %}
@@ -126,6 +158,7 @@
       
       <div class="card-body p-4 pt-2">
         {% if files %}
+          {% if mode == 'list' %}
           <div class="list-group list-group-flush">
             {% for file in files %}
             <div class="list-group-item file-list-item px-0 py-0 border-0 mb-3" style="border-radius: 12px; overflow: hidden;">
@@ -176,6 +209,33 @@
             </div>
             {% endfor %}
           </div>
+          {% else %}
+          <!-- Grid View -->
+          <div class="file-grid">
+            {% for file in files %}
+            <div class="file-grid-item"
+                 {% if file.mime_type.startswith('image/') %}
+                 data-bs-toggle="modal"
+                 data-bs-target="#imageModal"
+                 data-image-url="{{ url_for('.download_file', filename=file.name) }}"
+                 data-image-name="{{ file.name }}"
+                 style="cursor: pointer;"
+                 {% endif %}>
+              <div class="file-thumbnail">
+                {% if file.mime_type.startswith('image/') %}
+                  <img src="{{ url_for('.thumbnail', filename=file.name) }}" alt="{{ file.name }}" loading="lazy">
+                {% else %}
+                  <div class="file-icon-display">
+                    <i class="bi bi-file-earmark text-sage" style="font-size: 3rem;"></i>
+                  </div>
+                {% endif %}
+              </div>
+              <div class="file-grid-name text-truncate" title="{{ file.name }}">{{ file.name }}</div>
+              <div class="file-grid-meta">{{ file.size_formatted }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
         {% else %}
           <!-- Empty State -->
           <div class="text-center py-5">
