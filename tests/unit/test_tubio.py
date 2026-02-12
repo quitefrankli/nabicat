@@ -184,17 +184,20 @@ class TestDownloadThumbnail:
     @patch('web_app.tubio.audio_downloader.DataInterface')
     @patch('web_app.tubio.audio_downloader.requests.get')
     def test_download_thumbnail_success(self, mock_get, mock_di):
+        from pathlib import Path
         mock_response = Mock()
         mock_response.content = b'fake_image_data'
         mock_response.raise_for_status = Mock()
         mock_get.return_value = mock_response
 
         mock_di_instance = Mock()
+        mock_thumbnail_path = Path('/fake/path/12345.jpg')
+        mock_di_instance.get_thumbnail_path.return_value = mock_thumbnail_path
         mock_di.return_value = mock_di_instance
 
         result = AudioDownloader.download_thumbnail('dQw4w9WgXcQ', 12345)
 
-        assert result == 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'
+        assert result == mock_thumbnail_path
         mock_di_instance.save_thumbnail.assert_called_once_with(12345, b'fake_image_data')
 
     @patch('web_app.tubio.audio_downloader.DataInterface')
@@ -204,7 +207,7 @@ class TestDownloadThumbnail:
 
         result = AudioDownloader.download_thumbnail('dQw4w9WgXcQ', 12345)
 
-        assert result == ''
+        assert result is None
 
     @patch('web_app.tubio.audio_downloader.DataInterface')
     @patch('web_app.tubio.audio_downloader.requests.get')
@@ -215,7 +218,7 @@ class TestDownloadThumbnail:
 
         result = AudioDownloader.download_thumbnail('invalidid', 12345)
 
-        assert result == ''
+        assert result is None
 
 
 class TestSearchYoutubeWithDirectUrl:

@@ -240,6 +240,9 @@ async function updateContent(data) {
 
                 // Re-initialize audio event listeners for newly added tracks
                 initializeAudioEventListeners();
+
+                // Re-initialize lazy loading for thumbnails
+                initializeLazyThumbnails();
             }
         }
     } catch (error) {
@@ -795,6 +798,18 @@ function getCurrentlyPlayingTrack() {
     return null;
 }
 
+// Lazy load thumbnails when track accordion is expanded
+function initializeLazyThumbnails() {
+    document.querySelectorAll('.accordion-collapse').forEach(collapse => {
+        collapse.addEventListener('show.bs.collapse', function() {
+            const lazyImg = this.querySelector('.lazy-thumbnail[data-src]');
+            if (lazyImg && !lazyImg.src) {
+                lazyImg.src = lazyImg.dataset.src;
+            }
+        }, { once: true });
+    });
+}
+
 // Handle playlist collapse chevron rotation
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize Media Session API
@@ -802,6 +817,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize audio event listeners for UI sync
     initializeAudioEventListeners();
+
+    // Initialize lazy loading for thumbnails
+    initializeLazyThumbnails();
 
     // Update chevron rotation when playlist collapse events occur (only for playlist buttons, not track accordions)
     document.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {

@@ -23,6 +23,29 @@ from web_app.file_store import file_store_api
 from web_app.api import api_api
 from web_app.jswipe import jswipe_api
 from web_app.proxy import proxy_api
+from web_app.tubio.data_interface import DataInterface as TubioDataInterface
+from web_app.tubio.audio_downloader import AudioDownloader
+
+
+def backfill_tubio_thumbnails():
+    """Backfill thumbnails for existing YouTube-sourced audio tracks."""
+    try:
+        di = TubioDataInterface()
+        metadata = di.get_metadata()
+        count = 0
+        for crc, audio in metadata.audios.items():
+            if not audio.yt_video_id:
+                continue
+            if di.has_thumbnail(crc):
+                continue
+
+            logging.info(f"Backfilling thumbnail for {audio.title} ({audio.yt_video_id})")
+            if AudioDownloader.download_thumbnail(audio.yt_video_id, crc):
+                count += 1
+        if count:
+            logging.info(f"Backfilled {count} thumbnails")
+    except Exception:
+        logging.exception("Error backfilling tubio thumbnails")
 
 
 app.register_blueprint(todoist2_api)
@@ -109,4 +132,5 @@ if __name__ == '__main__':
 else:
     app.secret_key = ConfigManager().flask_secret_key
     configure_logging(debug=False)
+    backfill_tubio_thumbnails()
     logging.info("Starting server")

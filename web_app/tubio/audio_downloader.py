@@ -197,19 +197,19 @@ class AudioDownloader:
         return results
 
     @staticmethod
-    def download_thumbnail(video_id: str, crc: int) -> str:
-        """Download and cache the video thumbnail. Returns the thumbnail URL or empty string on failure."""
-        # Use standard YouTube thumbnail URL (medium quality)
-        thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    def download_thumbnail(video_id: str, crc: int) -> Path | None:
+        """Download and cache the video thumbnail. Returns the local path or None on failure."""
+        # Use small YouTube thumbnail (320x180) - sufficient for our UI
+        thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
         try:
             response = requests.get(thumbnail_url, timeout=10)
             response.raise_for_status()
             DataInterface().save_thumbnail(crc, response.content)
             logging.info(f"Cached thumbnail for video {video_id}")
-            return thumbnail_url
+            return DataInterface().get_thumbnail_path(crc)
         except Exception:
             logging.exception(f"Failed to download thumbnail for {video_id}")
-            return ''
+            return None
 
     @staticmethod
     def download_youtube_audio(video_id: str, title: str, user: User, crc: int|None = None) -> None:
@@ -247,10 +247,10 @@ class AudioDownloader:
                 crc = binascii.crc32(f.read())
 
         # Download and cache thumbnail
-        thumbnail_url = AudioDownloader.download_thumbnail(video_id, crc)
+        AudioDownloader.download_thumbnail(video_id, crc)
 
         DataInterface().save_audio_metadata(AudioMetadata(
-            crc=crc, title=title, yt_video_id=video_id, is_cached=True, thumbnail_url=thumbnail_url
+            crc=crc, title=title, yt_video_id=video_id, is_cached=True
         ))
         user_metadata = DataInterface().get_user_metadata(user)
         user_metadata.add_to_playlist(crc)
