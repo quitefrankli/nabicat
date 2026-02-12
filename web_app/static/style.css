@@ -665,13 +665,22 @@ body {
     border-radius: var(--hw-radius-md);
     padding: 0.5rem 1rem !important;
   }
-  
+
   .card {
     border-radius: var(--hw-radius-md);
   }
-  
+
   .home-btn {
     padding: 0.875rem 1.5rem !important;
+  }
+}
+
+/* Make navbar buttons full width on small screens */
+@media (max-width: 991.98px) {
+  .navbar .d-flex.flex-column .btn,
+  .navbar .d-flex.flex-column .dropdown > .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 

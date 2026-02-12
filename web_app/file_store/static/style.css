@@ -5,19 +5,28 @@
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(135, 168, 120, 0.1);
   border-radius: 12px;
-  padding: 1rem 1.25rem;
-  margin-bottom: 0.75rem;
   transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  box-shadow: 0 2px 8px rgba(45, 74, 62, 0.04);
 }
 
 .file-list-item:hover {
   background: rgba(255, 255, 255, 0.95);
   border-color: rgba(135, 168, 120, 0.3);
-  transform: translateX(4px);
   box-shadow: 0 4px 15px rgba(45, 74, 62, 0.08);
+}
+
+/* File expand button */
+.file-list-item .btn-link {
+  transition: all 0.2s ease;
+}
+
+.file-list-item .btn-link:hover {
+  color: var(--hw-sage-dark, #6B8E5A) !important;
+}
+
+.file-list-item .btn-link:focus {
+  box-shadow: none;
+  outline: none;
 }
 
 /* File icon container */
