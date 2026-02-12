@@ -29,6 +29,22 @@
   outline: none;
 }
 
+.file-list-row {
+  min-width: 0;
+}
+
+.file-list-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding-right: 0.25rem;
+}
+
+.file-list-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 /* File icon container */
 .file-icon {
   width: 48px;
@@ -63,6 +79,10 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-size {

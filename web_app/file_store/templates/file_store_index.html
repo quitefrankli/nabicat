@@ -162,12 +162,12 @@
           <div class="list-group list-group-flush">
             {% for file in files %}
             <div class="list-group-item file-list-item px-0 py-0 border-0 mb-3" style="border-radius: 12px; overflow: hidden;">
-              <div class="d-flex align-items-center gap-3 py-3 px-0">
+              <div class="d-flex align-items-center gap-3 py-3 px-0 file-list-row">
                 <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
                      style="width: 44px; height: 44px; background: rgba(135, 168, 120, 0.1);">
                   <i class="bi bi-file-earmark text-sage"></i>
                 </div>
-                <button class="btn btn-link text-decoration-none flex-grow-1 text-start p-0 min-width-0"
+                <button class="btn btn-link text-decoration-none flex-grow-1 text-start p-0 min-width-0 file-list-main"
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#file-{{ loop.index }}"
@@ -181,7 +181,7 @@
                     <span class="file-date">{{ file.modified_formatted }}</span>
                   </div>
                 </button>
-                <div class="d-flex gap-2 flex-shrink-0">
+                <div class="d-flex gap-2 flex-shrink-0 file-list-actions">
                   <button type="button"
                      class="btn btn-success btn-sm d-flex align-items-center gap-1 download-btn"
                      data-url="{{ url_for('.download_file', filename=file.name) }}"
