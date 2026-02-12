@@ -292,3 +292,23 @@ class DataInterface(BaseDataInterface):
     def backup_data(self, backup_dir: Path) -> None:
         """Backup file store data to the backup directory."""
         shutil.copytree(self.file_store_dir, backup_dir / self.data_sub_dirname)
+
+    def delete_user_data(self, user: User) -> None:
+        metadata = self.get_metadata()
+        user_metadata = metadata.users.pop(user.id, None)
+        if user_metadata is None:
+            return
+
+        user_crcs = {user_file.crc for user_file in user_metadata.files}
+        referenced_crcs = {
+            user_file.crc
+            for other_user_metadata in metadata.users.values()
+            for user_file in other_user_metadata.files
+        }
+
+        for crc in user_crcs - referenced_crcs:
+            self.atomic_delete(self.files_dir / str(crc))
+            self.atomic_delete(self.get_thumbnail_path(crc))
+            metadata.files.pop(crc, None)
+
+        self.save_metadata(metadata)

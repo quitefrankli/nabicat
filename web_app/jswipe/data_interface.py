@@ -128,6 +128,9 @@ class DataInterface(BaseDataInterface):
         jobs = self.load_user_jobs(user)
         return [job for job in jobs.values() if job.state == state]
 
+    def delete_user_data(self, user: User) -> None:
+        shutil.rmtree(self.data_dir / user.folder, ignore_errors=True)
+
     def has_user_seen_job(self, user: User, job_id: str) -> bool:
         """Check if user has interacted with a specific job."""
         jobs = self.load_user_jobs(user)

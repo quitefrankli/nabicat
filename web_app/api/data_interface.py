@@ -48,5 +48,8 @@ class DataInterface(BaseDataInterface):
         shutil.copytree(ConfigManager().save_data_path / self.data_sub_dirname,
                         backup_dir / self.data_sub_dirname)
 
+    def delete_user_data(self, user: User) -> None:
+        shutil.rmtree(self._get_user_dir(user), ignore_errors=True)
+
     def _get_user_dir(self, user: User) -> Path:
         return ConfigManager().save_data_path / self.data_sub_dirname / user.folder

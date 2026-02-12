@@ -34,5 +34,8 @@ class DataInterface(BaseDataInterface):
     def backup_data(self, backup_dir: Path) -> None:
         shutil.copytree(self.metrics_data_directory, backup_dir / "metrics")
 
+    def delete_user_data(self, user: User) -> None:
+        shutil.rmtree(self.metrics_data_directory / user.folder, ignore_errors=True)
+
     def _get_data_file(self, user: User) -> Path:
         return self.metrics_data_directory / user.folder / "data.json"

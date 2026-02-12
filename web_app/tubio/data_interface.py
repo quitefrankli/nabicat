@@ -182,6 +182,26 @@ class DataInterface(BaseDataInterface):
         for crc in unused_crcs:
             self.delete_audio(crc)
             logging.info(f"Deleted unused audio with crc {crc}.")
+
+    def delete_user_data(self, user: User) -> None:
+        metadata = self.get_metadata()
+        if user.id not in metadata.users:
+            return
+
+        metadata.users.pop(user.id)
+        self.save_metadata(metadata)
+        self.cleanup_unused_tracks()
+        self.cleanup_unused_thumbnails()
+
+    def cleanup_unused_thumbnails(self) -> None:
+        if not self.app_thumbnails_dir.exists():
+            return
+
+        metadata = self.get_metadata()
+        used_crcs = {str(crc) for crc in metadata.audios.keys()}
+        for thumbnail_path in self.app_thumbnails_dir.glob("*.jpg"):
+            if thumbnail_path.stem not in used_crcs:
+                self.atomic_delete(thumbnail_path)
     
     def backup_data(self, backup_dir: Path) -> None:
         tubio_backup_dir = backup_dir / "tubio"

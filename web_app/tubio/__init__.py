@@ -402,6 +402,7 @@ def delete_selected_songs():
         DataInterface().save_user_metadata(user, user_metadata)
         
         DataInterface().cleanup_unused_tracks()
+        DataInterface().cleanup_unused_thumbnails()
     except Exception as e:
         logging.exception("Error deleting selected songs", exc_info=e)
         flash('Error deleting songs.', 'error')
