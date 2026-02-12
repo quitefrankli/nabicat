@@ -71,20 +71,20 @@ function run_server_side()
 		sudo cp nabicat.conf /etc/nginx/conf.d/
 	}
 
-	# Setup 4GB swap file
-	if [ ! -f /swapfile ]; then
-		available_gb=$(df --output=avail / | tail -1 | awk '{printf "%.0f", $1/1024/1024}')
-		if [ "$available_gb" -lt 20 ]
-		then
-			echo "ERROR: Not enough disk space for swap. Need 20GB free, have ${available_gb}GB"
-		else
-			sudo fallocate -l 4G /swapfile
-			sudo chmod 600 /swapfile
-			sudo mkswap /swapfile
-			sudo swapon /swapfile
-			echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-		fi
-	fi
+	# Setup 4GB swap file, only if not enough ram
+	# if [ ! -f /swapfile ]; then
+	# 	available_gb=$(df --output=avail / | tail -1 | awk '{printf "%.0f", $1/1024/1024}')
+	# 	if [ "$available_gb" -lt 20 ]
+	# 	then
+	# 		echo "ERROR: Not enough disk space for swap. Need 20GB free, have ${available_gb}GB"
+	# 	else
+	# 		sudo fallocate -l 4G /swapfile
+	# 		sudo chmod 600 /swapfile
+	# 		sudo mkswap /swapfile
+	# 		sudo swapon /swapfile
+	# 		echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+	# 	fi
+	# fi
 
 	sudo apt update
 	sudo apt install -y nginx gunicorn ffmpeg
