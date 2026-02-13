@@ -230,7 +230,10 @@
                  {% endif %}>
               <div class="file-thumbnail">
                 {% if file.mime_type.startswith('image/') %}
-                  <img src="{{ url_for('.thumbnail', filename=file.name) }}" alt="{{ file.name }}" loading="lazy">
+                  <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+                       data-thumbnail-src="{{ url_for('.thumbnail', filename=file.name) }}"
+                       alt="{{ file.name }}"
+                       loading="lazy">
                 {% else %}
                   <div class="file-icon-display">
                     <i class="bi bi-file-earmark text-sage" style="font-size: 3rem;"></i>

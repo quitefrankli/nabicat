@@ -225,10 +225,104 @@ function setupImageModal() {
     });
 }
 
+function setupStaggeredThumbnails() {
+    const THUMBNAIL_STAGGER_MS = 200;
+    const THUMBNAIL_MAX_RETRIES = 3;
+    const THUMBNAIL_RETRY_DELAY_MS = 1000;
+    const thumbnailImages = Array.from(document.querySelectorAll('img[data-thumbnail-src]'));
+    if (thumbnailImages.length === 0) return;
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const loadImageAttempt = (img, url) => new Promise((resolve, reject) => {
+        const onLoad = () => {
+            img.removeEventListener('load', onLoad);
+            img.removeEventListener('error', onError);
+            resolve();
+        };
+
+        const onError = () => {
+            img.removeEventListener('load', onLoad);
+            img.removeEventListener('error', onError);
+            reject(new Error('thumbnail load failed'));
+        };
+
+        img.addEventListener('load', onLoad);
+        img.addEventListener('error', onError);
+        img.src = url;
+    });
+
+    const loadWithRetries = async (img, thumbnailSrc) => {
+        for (let attempt = 0; attempt <= THUMBNAIL_MAX_RETRIES; attempt++) {
+            const attemptSuffix = attempt > 0
+                ? `${thumbnailSrc.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}`
+                : '';
+            const attemptUrl = `${thumbnailSrc}${attemptSuffix}`;
+
+            try {
+                await loadImageAttempt(img, attemptUrl);
+                return;
+            } catch (_) {
+                if (attempt >= THUMBNAIL_MAX_RETRIES) {
+                    return;
+                }
+                await sleep(THUMBNAIL_RETRY_DELAY_MS * (attempt + 1));
+            }
+        }
+    };
+
+    const queue = [];
+    const pending = new Set(thumbnailImages);
+    let isProcessing = false;
+
+    const processQueue = async () => {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        while (queue.length > 0) {
+            const img = queue.shift();
+            if (!img) continue;
+            const thumbnailSrc = img.dataset.thumbnailSrc;
+            if (!thumbnailSrc) continue;
+
+            await loadWithRetries(img, thumbnailSrc);
+            await sleep(THUMBNAIL_STAGGER_MS);
+        }
+
+        isProcessing = false;
+    };
+
+    const enqueueImage = (img) => {
+        if (!pending.has(img)) return;
+        pending.delete(img);
+        queue.push(img);
+        processQueue();
+    };
+
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                observer.unobserve(entry.target);
+                enqueueImage(entry.target);
+            }
+        }, {
+            root: null,
+            rootMargin: '200px 0px',
+            threshold: 0.01,
+        });
+
+        thumbnailImages.forEach((img) => observer.observe(img));
+    } else {
+        thumbnailImages.forEach((img) => enqueueImage(img));
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     setupFileSizeValidation();
     setupAsyncUpload();
     setupAsyncDownload();
+    setupStaggeredThumbnails();
     setupImageModal();
 
     function setupFileModal({modalId, listId, searchId, actionType}) {
