@@ -3,10 +3,8 @@
 import pytest
 import io
 import binascii
-from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
-from werkzeug.datastructures import FileStorage
 
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
@@ -138,15 +136,15 @@ class TestDataInterface:
         assert metadata.files[crc].original_name == 'test.txt'
 
     def test_save_file_duplicate_dedup(self, data_interface, test_user):
-        """Test that saving the same file twice only stores it once"""
-        file_data = b'test content'
+        """Test that duplicate content upload is ignored for the same user"""
+        file_data = b'exact same bytes for dedup check'
         file_storage1 = Mock()
-        file_storage1.filename = 'test1.txt'
+        file_storage1.filename = 'first_name.txt'
         file_storage1.read.return_value = file_data
         file_storage1.content_type = 'text/plain'
 
         file_storage2 = Mock()
-        file_storage2.filename = 'test2.txt'
+        file_storage2.filename = 'second_name.txt'
         file_storage2.read.return_value = file_data
         file_storage2.content_type = 'text/plain'
 
@@ -156,16 +154,19 @@ class TestDataInterface:
         # CRCs should be the same
         assert crc1 == crc2
 
-        # Should have both files in user's list
+        # Duplicate upload should not create another user entry
         metadata = data_interface.get_metadata()
-        assert len(metadata.users[test_user.id].files) == 2
-        assert metadata.users[test_user.id].files[0].original_name == 'test1.txt'
-        assert metadata.users[test_user.id].files[1].original_name == 'test2.txt'
+        assert len(metadata.users[test_user.id].files) == 1
+        assert metadata.users[test_user.id].files[0].original_name == 'first_name.txt'
         assert metadata.users[test_user.id].files[0].crc == crc1
-        assert metadata.users[test_user.id].files[1].crc == crc1
 
         # But only one file metadata entry (from first upload)
-        assert metadata.files[crc1].original_name == 'test1.txt'
+        assert metadata.files[crc1].original_name == 'first_name.txt'
+
+        stored_blobs = [file for file in data_interface.files_dir.iterdir() if file.is_file()]
+        assert len(stored_blobs) == 1
+        assert stored_blobs[0].name == str(crc1)
+        assert stored_blobs[0].read_bytes() == file_data
 
     def test_save_file_different_users_same_content(self, data_interface, test_user, test_user2):
         """Test that different users can share the same file content"""
@@ -417,6 +418,20 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/download/test.txt')
 
         assert response.status_code == 200
+
+    @patch('web_app.file_store.DataInterface')
+    def test_delete_all_files(self, mock_di_class, client, auth_mock):
+        """Test deleting all files for current user"""
+        mock_di = mock_di_class.return_value
+        mock_di.list_files.return_value = ['file1.txt', 'file2.txt']
+
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        response = client.post('/file_store/delete_all')
+
+        assert response.status_code == 302
+        assert mock_di.delete_file.call_count == 2
 
 
 class TestFileStoreBlueprint:

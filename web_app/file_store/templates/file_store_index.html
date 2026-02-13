@@ -25,6 +25,16 @@
       <span>Upload File</span>
     </button>
   </li>
+  <li><hr class="dropdown-divider"></li>
+  <li>
+    <form method="post" action="{{ url_for('.delete_all_files') }}"
+          onsubmit="return confirm('Are you sure you want to delete all files? This cannot be undone.');">
+      <button type="submit" class="dropdown-item d-flex align-items-center gap-2 text-danger">
+        <i class="bi bi-trash3"></i>
+        <span>Delete All Files</span>
+      </button>
+    </form>
+  </li>
 {% endblock %}
 
 {% block actions_modal %}

@@ -58,7 +58,11 @@ def index():
 
 
 @file_store_api.route('/upload', methods=['POST'])
-@limiter.limit("10/second", key_func=lambda: flask_login.current_user.id)
+@limiter.limit(
+    "10/second",
+    key_func=lambda: flask_login.current_user.id,
+    exempt_when=lambda: flask_login.current_user.is_admin,
+)
 def upload_file():
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
@@ -147,4 +151,17 @@ def delete_file(filename):
     
     flash('File deleted successfully!', 'success')
 
+    return redirect(url_for('.index'))
+
+
+@file_store_api.route('/delete_all', methods=['POST'])
+def delete_all_files():
+    user = cur_user()
+    data_interface = DataInterface()
+    filenames = data_interface.list_files(user)
+
+    for filename in filenames:
+        data_interface.delete_file(filename, user)
+
+    flash('All files deleted successfully!', 'success')
     return redirect(url_for('.index'))

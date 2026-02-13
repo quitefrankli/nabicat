@@ -3,6 +3,7 @@
 import pytest
 import requests
 import io
+import uuid
 
 
 USERNAME = "admin"
@@ -122,6 +123,50 @@ class TestFileStoreIntegration:
         response = requests.get(list_url)
         files = response.json()['files']
         assert test_file not in files
+
+    def test_delete_all_files(self, server_url):
+        """Test deleting all files for a logged-in user session"""
+        username = f"fs_integration_{uuid.uuid4().hex[:8]}"
+        password = "integration_pass_123"
+        file_a = f"delete_all_a_{uuid.uuid4().hex[:6]}.txt"
+        file_b = f"delete_all_b_{uuid.uuid4().hex[:6]}.txt"
+
+        session = requests.Session()
+
+        register_response = session.post(
+            f"{server_url}/account/register",
+            data={"username": username, "password": password},
+            allow_redirects=False,
+        )
+        assert register_response.status_code == 302
+
+        upload_url = f"{server_url}/file_store/upload"
+        response = session.post(
+            upload_url,
+            files={'file': (file_a, io.BytesIO(b'file a content'), 'text/plain')},
+            allow_redirects=False,
+        )
+        assert response.status_code == 302
+
+        response = session.post(
+            upload_url,
+            files={'file': (file_b, io.BytesIO(b'file b content'), 'text/plain')},
+            allow_redirects=False,
+        )
+        assert response.status_code == 302
+
+        list_url = f"{server_url}/file_store/files_list"
+        files_before_delete = session.get(list_url).json()['files']
+        assert file_a in files_before_delete
+        assert file_b in files_before_delete
+
+        delete_all_url = f"{server_url}/file_store/delete_all"
+        delete_all_response = session.post(delete_all_url, allow_redirects=False)
+        assert delete_all_response.status_code == 302
+        assert '/file_store' in delete_all_response.headers.get('Location', '')
+
+        files_after_delete = session.get(list_url).json()['files']
+        assert files_after_delete == []
 
 
 if __name__ == '__main__':

@@ -97,6 +97,10 @@ class DataInterface(BaseDataInterface):
         metadata = self.get_metadata()
         user_metadata = metadata.users.get(user.id, UserMetadata(user_id=user.id))
 
+        # Ignore duplicate uploads for the same user when content matches.
+        if any(existing_file.crc == crc for existing_file in user_metadata.files):
+            return crc
+
         # Check if file content already exists on disk
         if crc not in metadata.files:
             # Save the raw file with CRC as filename using atomic write
@@ -114,7 +118,7 @@ class DataInterface(BaseDataInterface):
             )
             metadata.files[crc] = file_metadata
 
-        # Add to user's file list (always, even if same CRC, different filename)
+        # Add to user's file list for new user content entry.
         user_file_entry = UserFileEntry(crc=crc, original_name=file_storage.filename)
         user_metadata.files.append(user_file_entry)
         metadata.users[user.id] = user_metadata
