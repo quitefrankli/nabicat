@@ -157,39 +157,17 @@ function setupAsyncDownload() {
             progressBar.style.width = '0%';
             percentEl.textContent = '0%';
 
-            const startTime = Date.now();
-
             try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Download failed');
-
-                const reader = response.body.getReader();
-                const chunks = [];
-                let received = 0;
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    chunks.push(value);
-                    received += value.length;
-
-                    const percent = Math.round((received / expectedSize) * 100);
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = received / elapsed;
-
-                    progressBar.style.width = Math.min(percent, 100) + '%';
-                    percentEl.textContent = Math.min(percent, 100) + '%';
-                    statsEl.textContent = `${formatFileSize(received)} / ${formatFileSize(expectedSize)} · ${formatFileSize(speed)}/s`;
-                }
-
-                const blob = new Blob(chunks);
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(blobUrl);
+                // Use cache manager if available
+                await window.cacheManager.downloadWithCache(
+                    url,
+                    filename,
+                    (percent, received, total, speed) => {
+                        progressBar.style.width = Math.min(percent, 100) + '%';
+                        percentEl.textContent = Math.min(percent, 100) + '%';
+                        statsEl.textContent = `${formatFileSize(received)} / ${formatFileSize(total)} · ${formatFileSize(speed)}/s`;
+                    }
+                );
             } catch (err) {
                 alert('Download failed: ' + err.message);
             } finally {

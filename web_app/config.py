@@ -24,7 +24,7 @@ class ConfigManager:
         # but the configuration loading logic should only run once.
         if hasattr(self, '_initialized'):
             return
-        
+
         self._initialized = True
         self.use_offline_syncer = True
         self.debug_mode = False
@@ -32,6 +32,7 @@ class ConfigManager:
         self.tudio_max_results = 10
         self.tudio_max_video_length = timedelta(minutes=10)
         self.todoist2_default_page_size = 8
+        self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
 
     @property
     def project_name(self) -> str:
@@ -65,9 +66,8 @@ class ConfigManager:
         key = getenv('FLASK_SECRET_KEY')
         if key:
             return key
-        
+
         if self.debug_mode:
             return "DEBUG_FLASK_SECRET_KEY"
-        
-        raise ValueError("Flask secret key is not set. Please set the 'FLASK_SECRET_KEY' environment variable.")
 
+        raise ValueError("Flask secret key is not set. Please set the 'FLASK_SECRET_KEY' environment variable.")

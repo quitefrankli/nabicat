@@ -6,7 +6,7 @@ import shutil
 from git import Repo
 from typing import * # type: ignore
 from pathlib import Path
-from flask import render_template, request
+from flask import render_template, request, send_from_directory
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
 
@@ -76,6 +76,11 @@ def before_request():
 def home():
     commit_hash = Repo(".").head.commit.hexsha
     return render_template('home.html', commit_hash=commit_hash)
+
+@app.route('/service-worker.js')
+def service_worker():
+    """Serve service worker from root for proper scope"""
+    return send_from_directory('static', 'service-worker.js', mimetype='application/javascript')
 
 def configure_logging(debug: bool) -> None:
     log_path = Path("logs/web_app.log")

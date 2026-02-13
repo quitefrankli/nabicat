@@ -229,6 +229,12 @@ def serve_audio(crc: int):
         response.headers['Accept-Ranges'] = 'bytes'
         response.headers['Content-Range'] = f'bytes 0-1/{file_size}'
         response.headers['Content-Length'] = '2'
+
+        # Cache audio files
+        response.cache_control.max_age = ConfigManager().cache_max_age
+        response.cache_control.public = True
+        response.set_etag(str(crc))
+
         return response
 
     # Example: "Range: bytes=12345-"
@@ -269,6 +275,11 @@ def serve_audio(crc: int):
     )
     response.headers.set("Content-Length", str(length))
 
+    # Cache audio ranges
+    response.cache_control.max_age = ConfigManager().cache_max_age
+    response.cache_control.public = True
+    response.set_etag(str(crc))
+
     return response
 
 
@@ -278,7 +289,15 @@ def serve_thumbnail(crc: int):
     if not thumbnail_path.exists():
         # Return a placeholder or 404
         return '', 404
-    return send_file(thumbnail_path, mimetype='image/jpeg')
+
+    response = send_file(thumbnail_path, mimetype='image/jpeg')
+
+    # Cache thumbnails
+    response.cache_control.max_age = ConfigManager().cache_max_age
+    response.cache_control.public = True
+    response.set_etag(str(crc))
+
+    return response
 
 
 @tubio_api.route('/delete_audio/<int:crc>', methods=['POST'])

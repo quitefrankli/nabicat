@@ -7,6 +7,7 @@ import flask_login
 
 from web_app.helpers import cur_user
 from web_app.helpers import limiter
+from web_app.config import ConfigManager
 from web_app.file_store.data_interface import DataInterface, format_file_size, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
 
 
@@ -113,7 +114,17 @@ def upload_file():
 @file_store_api.route('/download/<filename>')
 def download_file(filename: str):
     file_path = DataInterface().get_file_path(filename, cur_user())
-    return send_file(file_path, as_attachment=True)
+    response = send_file(file_path, as_attachment=True)
+
+    # Cache files (immutable, identified by CRC)
+    response.cache_control.max_age = ConfigManager().cache_max_age
+    response.cache_control.public = True
+
+    # ETag using CRC for cache validation
+    crc = file_path.name  # filename is the CRC
+    response.set_etag(crc)
+
+    return response
 
 
 @file_store_api.route('/thumbnail/<filename>')
@@ -123,16 +134,17 @@ def thumbnail(filename: str):
     data_interface = DataInterface()
     thumbnail_path = data_interface.get_thumbnail_for_file(filename, cur_user())
 
-    if thumbnail_path and thumbnail_path.exists():
-        return send_file(thumbnail_path, mimetype='image/jpeg')
-
-    # If thumbnail generation failed, return the original file
-    try:
-        file_path = data_interface.get_file_path(filename, cur_user())
-        return send_file(file_path)
-    except FileNotFoundError:
-        flash('File not found', 'error')
+    if not thumbnail_path or not thumbnail_path.exists():
+        flash('Thumbnail not available', 'error')
         return redirect(url_for('.index'))
+    
+    response = send_file(thumbnail_path, mimetype='image/jpeg')
+
+    # Cache thumbnails
+    response.cache_control.max_age = ConfigManager().cache_max_age
+    response.cache_control.public = True
+
+    return response
 
 
 @file_store_api.route('/files_list')
