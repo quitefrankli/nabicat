@@ -13,6 +13,7 @@ import os
 
 from git import Repo
 from pathlib import Path
+from yt_dlp.cookies import extract_cookies_from_browser
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -72,24 +73,7 @@ def do_handshake() -> tuple[str, str]:
     """
     url = f"{get_base_url()}/api/handshake"
     
-    try:
-        response = requests.post(url, timeout=10)
-    except requests.exceptions.SSLError as e:
-        raise ConnectionError(
-            f"SSL Error connecting to {url}. "
-            f"If using a local server, try HTTP instead of HTTPS. "
-            f"Run 'login' command to update the base URL."
-        ) from e
-    except requests.exceptions.ConnectionError as e:
-        raise ConnectionError(
-            f"Could not connect to server at {url}. "
-            f"Please check:\n"
-            f"  1. Is the server running?\n"
-            f"  2. Is the base URL correct? (run 'login' to update)\n"
-            f"  3. Is the server accessible from this network?"
-        ) from e
-    except requests.exceptions.Timeout as e:
-        raise ConnectionError(f"Connection to {url} timed out. Is the server running?") from e
+    response = requests.post(url, timeout=10)
     
     if response.status_code != 200:
         raise ConnectionError(f"Handshake failed: {response.status_code} - {response.text}")
@@ -115,7 +99,6 @@ def get_base_url() -> str:
     return base_url if base_url else DEFAULT_BASE_URL
 
 def _send_request_internal(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
-    """Internal function that actually sends the request."""
     url = f"{get_base_url()}/{endpoint}"
     if require_cred:
         payload = generate_cred_payload() | payload
@@ -139,10 +122,6 @@ def _send_request_internal(endpoint: str, payload: dict = dict(), require_cred: 
 
 
 def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
-    """
-    Send an encrypted request to the API.
-    Exits on connection error.
-    """
     try:
         return _send_request_internal(endpoint, payload, require_cred)
     except ConnectionError as e:
@@ -386,47 +365,40 @@ def apply_remote_patches() -> None:
     # Extract patches from zip
     zip_buffer = io.BytesIO(decompressed_data)
     patch_files = []
-    try:
-        with zipfile.ZipFile(zip_buffer, 'r') as zip_file_obj:
-            patch_files = sorted(zip_file_obj.namelist())
-            print(f"Found {len(patch_files)} patches to apply.")
-            
-            if len(patch_files) == 0:
-                print("No patches found in archive.")
-                return
-            
-            # Confirm before applying
-            if input(f"Apply {len(patch_files)} patches? (y/n): ").strip().lower() != 'y':
-                print("Apply cancelled.")
-                return
-            
-            # Apply each patch
-            for patch_filename in patch_files:
-                patch_data = zip_file_obj.read(patch_filename).decode('utf-8')
+    with zipfile.ZipFile(zip_buffer, 'r') as zip_file_obj:
+        patch_files = sorted(zip_file_obj.namelist())
+        print(f"Found {len(patch_files)} patches to apply.")
+        
+        if len(patch_files) == 0:
+            print("No patches found in archive.")
+            return
+        
+        # Confirm before applying
+        if input(f"Apply {len(patch_files)} patches? (y/n): ").strip().lower() != 'y':
+            print("Apply cancelled.")
+            return
+        
+        # Apply each patch
+        for patch_filename in patch_files:
+            patch_data = zip_file_obj.read(patch_filename).decode('utf-8')
+            try:
+                run_result = subprocess.run(['git', 'am'], 
+                                input=patch_data, 
+                                check=True, 
+                                capture_output=True,
+                                text=True)
+                print(run_result.stderr, run_result.stdout)
+                print(f"✓ Applied {patch_filename}")
+            except Exception as e:
+                print(f"✗ Failed to apply {patch_filename}: {e}")
+                # Optionally abort the am process on first failure
                 try:
-                    run_result = subprocess.run(['git', 'am'], 
-                                   input=patch_data, 
-                                   check=True, 
-                                   capture_output=True,
-                                   text=True)
-                    print(run_result.stderr, run_result.stdout)
-                    print(f"✓ Applied {patch_filename}")
-                except Exception as e:
-                    print(f"✗ Failed to apply {patch_filename}: {e}")
-                    # Optionally abort the am process on first failure
-                    try:
-                        repo.git.am(abort=True)
-                    except:
-                        pass
-                    return
-            
-            print(f"Successfully applied all {len(patch_files)} patches.")
-    except zipfile.BadZipFile:
-        print("Failed to extract patch archive: Invalid zip file.")
-        return
-    except Exception as e:
-        print(f"Error processing patches: {e}")
-        return
+                    repo.git.am(abort=True)
+                except:
+                    pass
+                return
+        
+        print(f"Successfully applied all {len(patch_files)} patches.")
 
 @cli.command()
 @click.argument("file", type=str)
@@ -439,17 +411,71 @@ def delete_file(file: str) -> None:
         print(f"Failed to delete file: {response.status_code} - {response.text}")
 
 @cli.command()
-@click.argument("cookies", type=click.Path(exists=True))
-def upload_cookies(cookies: Path) -> None:
-    with open(cookies, 'rb') as f:
-        cookie_data = f.read()
+@click.option(
+    "--browser",
+    default="chrome",
+    show_default=True,
+    help="Browser name (chrome, firefox, edge, etc.)",
+)
+@click.option(
+    "--profile",
+    default="Profile 1",
+    show_default=True,
+    help="Browser profile name",
+)
+def sync_cookies(browser: str, profile: str | None) -> None:
+    """
+    Export YouTube cookies from the specified browser and upload to the server.
+    """
 
-    response = send_request("api/push_cookie", {"cookie": cookie_data.decode('utf-8')})
+    YOUTUBE_DOMAINS = {
+        ".youtube.com",
+        "youtube.com",
+        ".google.com",
+        "google.com",
+        ".googlevideo.com",
+    }
+
+    def cookie_to_netscape(cookie) -> str:
+        secure = "TRUE" if cookie.secure else "FALSE"
+        domain_initial_dot = "TRUE" if cookie.domain.startswith(".") else "FALSE"
+        expires = str(int(cookie.expires)) if cookie.expires else "0"
+        return f"{cookie.domain}\t{domain_initial_dot}\t{cookie.path}\t{secure}\t{expires}\t{cookie.name}\t{cookie.value}"
+
+    def export_yt_cookies_from_browser(browser: str, profile: str | None) -> tuple[str, int]:
+        jar = extract_cookies_from_browser(browser, profile=profile)
+        lines = [
+            "# Netscape HTTP Cookie File",
+            "# https://curl.haxx.se/docs/http-cookies.html",
+            "# This file was generated by api_helper.py",
+            "",
+        ]
+        filtered_count = 0
+
+        for cookie in jar:
+            domain = cookie.domain.lower()
+            if any(domain.endswith(yt) or domain == yt.lstrip(".") for yt in YOUTUBE_DOMAINS):
+                lines.append(cookie_to_netscape(cookie))
+                filtered_count += 1
+
+        return "\n".join(lines) + "\n", filtered_count
+
+    
+    cookie_text, filtered_count = export_yt_cookies_from_browser(browser, profile)
+
+    if filtered_count <= 0:
+        print("No YouTube cookies found to export.", file=sys.stderr)
+        return
+
+    response = send_request("api/push_cookie", {"cookie": cookie_text})
 
     if response.status_code == 200:
-        print("Cookies uploaded successfully.")
+        print(f"Exported {filtered_count} YouTube cookies and uploaded to server.")
     else:
-        print(f"Failed to upload cookies: {response.status_code} - {response.text}")
+        print(
+            f"Exported {filtered_count} YouTube cookies but upload failed: "
+            f"{response.status_code} - {response.text}"
+        )
 
 @cli.command()
 def test_handshake() -> None:
