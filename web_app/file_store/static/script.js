@@ -67,6 +67,10 @@ function setupAsyncUpload() {
     const uploadForm = document.getElementById('uploadForm');
     if (!uploadForm) return;
 
+    const UPLOAD_STAGGER_MS = 150;
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     uploadForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         const fileInput = document.getElementById('fileInput');
@@ -123,6 +127,9 @@ function setupAsyncUpload() {
         try {
             for (let i = 0; i < files.length; i++) {
                 await uploadSingleFile(files[i], i, files.length);
+                if (i < files.length - 1 && UPLOAD_STAGGER_MS > 0) {
+                    await sleep(UPLOAD_STAGGER_MS);
+                }
             }
             window.location.reload();
         } catch (error) {
