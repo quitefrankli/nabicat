@@ -1,7 +1,8 @@
 import click
 import logging
 import flask_login
-import shutil
+import http.cookiejar
+import urllib.request
 
 from git import Repo
 from typing import * # type: ignore
@@ -9,10 +10,11 @@ from pathlib import Path
 from flask import render_template, request, send_from_directory
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
+from apscheduler.schedulers.base import SchedulerAlreadyRunningError
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
-from web_app.helpers import get_ip, register_all_blueprints
+from web_app.helpers import get_ip, get_all_data_interfaces, register_all_blueprints
 from web_app.app import app
 
 
@@ -26,13 +28,44 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 scheduler = APScheduler()
+
+
 @scheduler.task('cron', id='scheduled_backup', day_of_week='sun', hour=0, minute=0, misfire_grace_time=3600)
 def scheduled_backup():
     logging.info("Running scheduled backup")
-    instance = DataInterface()
-    instance.backup_data()
+    backup_dir = DataInterface().generate_backup_dir()
+    DataInterface().backup_data(backup_dir)
+    for data_interface_class in get_all_data_interfaces():
+        data_interface_class().backup_data(backup_dir)
     logging.info("Backup complete")
-scheduler.start()
+
+
+@scheduler.task('cron', id='scheduled_cookie_keepalive', day='*/2', hour=4, minute=0, misfire_grace_time=3600)
+def run_cookie_keepalive() -> None:
+    logging.info("Running scheduled cookie keepalive")
+    cookie_path = ConfigManager().tubio_cookie_path
+
+    jar = http.cookiejar.MozillaCookieJar(cookie_path)
+    jar.load(ignore_discard=True, ignore_expires=True)
+
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    opener.addheaders = [
+        ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    ]
+
+    try:
+        response = opener.open("https://www.youtube.com/feed/subscriptions", timeout=30)
+        jar.save(ignore_discard=True, ignore_expires=True)
+        logging.info(f"Cookie keepalive OK - status {response.status}")
+    except Exception:
+        logging.exception("Cookie keepalive failed")
+
+
+def start_scheduler() -> None:
+    scheduler.init_app(app)
+    if scheduler.running:
+        return
+    scheduler.start()
 
 @app.before_request
 def before_request():
@@ -90,4 +123,5 @@ if __name__ == '__main__':
 else:
     app.secret_key = ConfigManager().flask_secret_key
     configure_logging(debug=False)
+    start_scheduler()
     logging.info("Starting server")

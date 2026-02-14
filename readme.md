@@ -1,6 +1,6 @@
 # NabiCat
 
-![cat ico](web_app/static/cat.ico)
+![cat ico](web_app/static/nabicat.png)
 
 A cozy collection of misc web apps [visit](https://nabicat.site)
 

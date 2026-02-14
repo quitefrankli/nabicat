@@ -21,9 +21,7 @@
       <!-- Welcome Section -->
       <div class="text-center mb-5">
         <h1 class="display-4 mb-3" style="color: var(--hw-forest);">
-          Nabi
-          <img src="/static/cat.ico" alt="Logo" class="mb-1" style="height: 48px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));">
-          Cat
+          <img src="{{ url_for('static', filename='nabicat.png') }}" class="home-logo" alt="Nabicat">
         </h1>
       </div>
       
@@ -192,6 +190,13 @@
 </div>
 
 <style>
+  .home-logo {
+    width: clamp(180px, 55vw, 420px);
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+  }
+
   .home-app-card {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     background: rgba(255, 255, 255, 0.9);
