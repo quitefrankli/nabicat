@@ -12,30 +12,11 @@ from logging.handlers import RotatingFileHandler
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
-from web_app.helpers import get_ip
+from web_app.helpers import get_ip, register_all_blueprints
 from web_app.app import app
-from web_app.crosswords import crosswords_api
-from web_app.todoist2 import todoist2_api
-from web_app.tubio import tubio_api
-from web_app.metrics import metrics_api
-from web_app.account_api import account_api
-from web_app.file_store import file_store_api
-from web_app.api import api_api
-from web_app.jswipe import jswipe_api
-from web_app.proxy import proxy_api
-from web_app.tubio.data_interface import DataInterface as TubioDataInterface
-from web_app.tubio.audio_downloader import AudioDownloader
 
 
-app.register_blueprint(todoist2_api)
-app.register_blueprint(crosswords_api)
-app.register_blueprint(tubio_api)
-app.register_blueprint(metrics_api)
-app.register_blueprint(account_api)
-app.register_blueprint(file_store_api)
-app.register_blueprint(api_api)
-app.register_blueprint(jswipe_api)
-app.register_blueprint(proxy_api)
+register_all_blueprints(app)
 
 @app.context_processor
 def inject_app_name():
@@ -100,13 +81,6 @@ def cli_start(debug: bool, port: int):
     config = ConfigManager()
     config.debug_mode = debug
     app.secret_key = ConfigManager().flask_secret_key
-
-    # if we are in debug mode, copy the debug data to the save_data_path
-    # if the save_data_path does not exist
-    if debug and not config.save_data_path.parent.exists():
-        logging.info(f"Copying debug data to {config.save_data_path.parent}")
-        debug_data_path = Path(f"tests/debug_save/.{config.project_name}")
-        shutil.copytree(debug_data_path, config.save_data_path.parent)
 
     logging.info("Starting server")
     app.run(host='0.0.0.0', port=port, debug=debug)

@@ -4,31 +4,16 @@ import logging
 import re
 
 from typing import * # type: ignore
-from datetime import timedelta
 from flask import request, Blueprint, render_template
 
 from web_app.data_interface import DataInterface
-from web_app.api.data_interface import DataInterface as APIDataInterface
-from web_app.todoist2.data_interface import DataInterface as Todoist2DataInterface
-from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
-from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
-from web_app.tubio.data_interface import DataInterface as TubioDataInterface
-from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
-from web_app.helpers import limiter, from_req
+from web_app.helpers import limiter, from_req, get_all_data_interfaces
 
 
 account_api = Blueprint('account_api', __name__, url_prefix='/account')
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('.login'))
-
-def _delete_user_data(user) -> None:
-    APIDataInterface().delete_user_data(user)
-    Todoist2DataInterface().delete_user_data(user)
-    MetricsDataInterface().delete_user_data(user)
-    JSwipeDataInterface().delete_user_data(user)
-    TubioDataInterface().delete_user_data(user)
-    FileStoreDataInterface().delete_user_data(user)
 
 @account_api.route('/login', methods=["GET", "POST"])
 @limiter.limit("2/second")
@@ -85,7 +70,8 @@ def delete_account():
 
     del existing_users[current_user_id]
     DataInterface().save_users(list(existing_users.values()))
-    _delete_user_data(user)
+    for data_interface_class in get_all_data_interfaces():
+        data_interface_class().delete_user_data(user)
 
     flask_login.logout_user()
     flask.flash('Your account has been deleted', category='info')

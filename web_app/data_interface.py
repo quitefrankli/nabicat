@@ -86,6 +86,15 @@ class DataInterface:
         self.users_file = ConfigManager().save_data_path / "users.json"
         self.metadata_filename = "metadata.json"
     
+    def delete_user_data(self, user: User) -> None:
+        raise NotImplementedError("Method not overriden")
+    
+    def backup_data(self, backup_dir: Path) -> None:
+        if type(self) != DataInterface:
+            raise NotImplementedError("Meothd not overriden")
+        self.generate_metadata_file(backup_dir)
+        shutil.copy2(self.users_file, backup_dir / "users.json")
+
     def load_users(self) -> Dict[str, User]:
         self.data_syncer.download_file(self.users_file)
 
@@ -134,12 +143,6 @@ class DataInterface:
         new_backup = self.backups_directory / timestamp
         new_backup.mkdir(parents=True, exist_ok=True)
         return new_backup
-
-    def backup_data(self, backup_dir: Path) -> None:
-        self.generate_metadata_file(backup_dir)
-        shutil.copy2(self.users_file, backup_dir / "users.json")
-        shutil.copy2(ConfigManager().tubio_cookie_path, backup_dir / "cookies.txt")
-        # shutil.copytree(ConfigManager().save_data_path, new_backup)
 
     def atomic_write(self, file_path: Path, data: bytes|str|None=None, stream: IO|None=None, **kwargs) -> None:
         if stream is None and data is None:

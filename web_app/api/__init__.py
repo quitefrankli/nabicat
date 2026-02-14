@@ -7,11 +7,9 @@ from functools import wraps
 from flask import request, jsonify, Blueprint
 
 from web_app.data_interface import DataInterface
+from web_app.helpers import get_ip, parse_request, authenticate_user, \
+    generate_ephemeral_keypair, get_all_data_interfaces
 from web_app.api.data_interface import DataInterface as APIDataInterface
-from web_app.todoist2.data_interface import DataInterface as Todoist2DataInterface
-from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
-from web_app.tubio.data_interface import DataInterface as TubioDataInterface
-from web_app.helpers import get_ip, parse_request, authenticate_user, generate_ephemeral_keypair
 from web_app.config import ConfigManager
 from web_app.errors import APIError
 
@@ -118,17 +116,15 @@ def api_update():
 @_handle_api_error
 def api_backup():
     logging.info(f"Received backup request from {get_ip()}")
-
     parse_request()
+
+    backup_dir = DataInterface().generate_backup_dir()
+    DataInterface().backup_data(backup_dir)
+    for data_interface_class in get_all_data_interfaces():
+        data_interface_class().backup_data(backup_dir)
 
     # TODO: zip the backup and upload to s3
     # self.data_syncer.upload_file(new_backup)
-    backup_dir = DataInterface().generate_backup_dir()
-    DataInterface().backup_data(backup_dir)
-    Todoist2DataInterface().backup_data(backup_dir)
-    MetricsDataInterface().backup_data(backup_dir)
-    TubioDataInterface().backup_data(backup_dir)
-    APIDataInterface().backup_data(backup_dir)
 
     logging.info("Backup complete")
 

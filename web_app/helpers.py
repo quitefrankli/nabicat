@@ -22,6 +22,51 @@ from web_app.users import User
 from web_app.errors import *
 
 
+def get_all_data_interfaces() -> list[DataInterface]:
+    from web_app.api.data_interface import DataInterface as APIDataInterface
+    from web_app.todoist2.data_interface import DataInterface as Todoist2DataInterface
+    from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
+    from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
+    from web_app.tubio.data_interface import DataInterface as TubioDataInterface
+    from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
+
+    return [
+        APIDataInterface,
+        Todoist2DataInterface,
+        MetricsDataInterface,
+        JSwipeDataInterface,
+        TubioDataInterface,
+        FileStoreDataInterface,
+    ]
+
+
+def register_all_blueprints(app):
+    from web_app.crosswords import crosswords_api
+    from web_app.todoist2 import todoist2_api
+    from web_app.tubio import tubio_api
+    from web_app.metrics import metrics_api
+    from web_app.account_api import account_api
+    from web_app.file_store import file_store_api
+    from web_app.api import api_api
+    from web_app.jswipe import jswipe_api
+    from web_app.proxy import proxy_api
+
+    blueprints = [
+        todoist2_api,
+        crosswords_api,
+        tubio_api,
+        metrics_api,
+        account_api,
+        file_store_api,
+        api_api,
+        jswipe_api,
+        proxy_api,
+    ]
+
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
+
+
 class TimedDict:
     """Thread-safe dict with TTL for ephemeral key storage."""
     

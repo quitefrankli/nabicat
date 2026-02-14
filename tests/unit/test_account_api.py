@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch
+from unittest.mock import Mock
 
 import web_app.__main__ as main_module
 import web_app.helpers as helpers
@@ -50,23 +51,18 @@ class TestDeleteAccountRoute:
         assert response.status_code == 302
         assert '/account/login' in response.location
 
-    @patch('web_app.account_api.FileStoreDataInterface')
-    @patch('web_app.account_api.TubioDataInterface')
-    @patch('web_app.account_api.JSwipeDataInterface')
-    @patch('web_app.account_api.MetricsDataInterface')
-    @patch('web_app.account_api.Todoist2DataInterface')
-    @patch('web_app.account_api.APIDataInterface')
+    @patch('web_app.account_api.get_all_data_interfaces')
     @patch('web_app.account_api.DataInterface')
     def test_delete_account_success(self,
                                     mock_data_interface,
-                                    mock_api_data_interface,
-                                    mock_todoist2_data_interface,
-                                    mock_metrics_data_interface,
-                                    mock_jswipe_data_interface,
-                                    mock_tubio_data_interface,
-                                    mock_file_store_data_interface,
+                                    mock_get_all_data_interfaces,
                                     logged_in_user,
                                     regular_user):
+        mock_subapp_data_interface_class = Mock()
+        mock_subapp_data_interface = Mock()
+        mock_subapp_data_interface_class.return_value = mock_subapp_data_interface
+        mock_get_all_data_interfaces.return_value = [mock_subapp_data_interface_class]
+
         mock_data_interface.return_value.load_users.return_value = {
             regular_user.id: regular_user,
             'admin2': User(username='admin2', password='admin2pass', folder='folder2', is_admin=True),
@@ -77,12 +73,7 @@ class TestDeleteAccountRoute:
         assert response.status_code == 302
         assert response.location.endswith('/')
         mock_data_interface.return_value.save_users.assert_called_once()
-        mock_api_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
-        mock_todoist2_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
-        mock_metrics_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
-        mock_jswipe_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
-        mock_tubio_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
-        mock_file_store_data_interface.return_value.delete_user_data.assert_called_once_with(regular_user)
+        mock_subapp_data_interface.delete_user_data.assert_called_once_with(regular_user)
 
         saved_users = mock_data_interface.return_value.save_users.call_args[0][0]
         assert all(user.id != regular_user.id for user in saved_users)

@@ -150,10 +150,6 @@ def login() -> None:
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
 def upload(file: str) -> None:
-    """
-    Sends compressed base64 encoded data to the server
-    """
-    
     file = Path(file)
     if file.is_dir():
         zip_buffer = io.BytesIO()
@@ -190,10 +186,6 @@ def upload(file: str) -> None:
 @click.argument("file", type=str)
 @click.option("--raw", is_flag=True, default=False, help="print to stdout instead of saving to a file")
 def download(file: str, raw: bool) -> None:
-    """
-    Downloads a file from the server and decompresses it
-    """
-    
     response = send_request("api/pull", { "name": file })
 
     if response.status_code == 200:
@@ -214,10 +206,6 @@ def download(file: str, raw: bool) -> None:
 
 @cli.command()
 def list_files() -> None:
-    """
-    Lists files available for the logged-in user
-    """
-    
     response = send_request("api/list")
 
     if response.status_code == 200:
@@ -230,12 +218,7 @@ def list_files() -> None:
 
 @cli.command()
 def backup() -> None:
-    """
-    Creates a backup of the server data
-    """
-    
     response = send_request("api/backup")
-
     if response.status_code == 200:
         print("Backup completed successfully.")
     else:
