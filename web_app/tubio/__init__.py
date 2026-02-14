@@ -1,4 +1,6 @@
 import logging
+import json
+import time
 
 from typing import *
 from pathlib import Path
@@ -6,7 +8,7 @@ from flask import Blueprint, render_template, request, send_file, redirect, url_
 from flask_login import login_required
 
 from web_app.tubio.data_interface import DataInterface, AudioMetadata
-from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError
+from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, get_download_progress, clear_download_progress
 from web_app.config import ConfigManager
 from web_app.helpers import cur_user, parse_request
 from web_app.users import User
@@ -132,6 +134,33 @@ def youtube_download():
     except Exception:
         logging.exception("Error downloading audio")
         return {'error': 'Error downloading audio'}, 500
+
+
+@tubio_api.route('/download_progress/<video_id>')
+def download_progress(video_id: str):
+    def generate():
+        while True:
+            progress = get_download_progress(video_id)
+            if progress is None:
+                yield f"data: {json.dumps({'status': 'not_found'})}\n\n"
+                break
+
+            data = {
+                'status': progress.status,
+                'percent': round(progress.percent, 1),
+                'error': progress.error
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+
+            if progress.status in ('complete', 'error'):
+                clear_download_progress(video_id)
+                break
+
+            time.sleep(0.3)
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
 
 @tubio_api.route('/upload', methods=['POST'])
 @limiter.limit("20 per minute")

@@ -3,7 +3,7 @@
  * Handles Cache API for heavy downloads and resources
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v1';
 const CACHE_NAME = `nabicat-cache-${CACHE_VERSION}`;
 const MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024; // 10GB limit
 
@@ -41,8 +41,18 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Only handle same-origin requests
-    if (url.origin !== location.origin) {
+    // Only handle same-origin GET requests (Cache API doesn't support POST)
+    if (url.origin !== location.origin || request.method !== 'GET') {
+        return;
+    }
+
+    // Skip SSE endpoints (text/event-stream)
+    if (url.pathname.includes('/download_progress/')) {
+        return;
+    }
+
+    // Skip audio requests with Range headers (206 partial responses can't be cached)
+    if (url.pathname.includes('/audio/') && request.headers.has('Range')) {
         return;
     }
 
@@ -114,7 +124,8 @@ async function cacheFirst(request, cache) {
 
     try {
         const response = await fetch(request);
-        if (response.ok) {
+        // Only cache full 200 responses (not 206 partial)
+        if (response.ok && response.status === 200) {
             await enforceCacheSizeLimit(cache);
             cache.put(request, response.clone());
         }
@@ -129,7 +140,8 @@ async function cacheFirst(request, cache) {
 async function networkFirst(request, cache) {
     try {
         const response = await fetch(request);
-        if (response.ok) {
+        // Only cache full 200 responses (not 206 partial)
+        if (response.ok && response.status === 200) {
             await enforceCacheSizeLimit(cache);
             cache.put(request, response.clone());
         }
@@ -149,7 +161,8 @@ async function cacheWithUpdate(request, cache) {
 
     // Fetch and update cache in background
     const fetchPromise = fetch(request).then(async (response) => {
-        if (response.ok) {
+        // Only cache full 200 responses (not 206 partial)
+        if (response.ok && response.status === 200) {
             await enforceCacheSizeLimit(cache);
             cache.put(request, response.clone());
         }

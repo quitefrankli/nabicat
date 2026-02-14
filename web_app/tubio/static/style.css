@@ -273,6 +273,34 @@ audio::-webkit-media-controls-panel {
   background: rgba(135, 168, 120, 0.1);
 }
 
+/* Scrubber bar styling */
+.scrubber-container {
+  flex-shrink: 0;
+}
+
+.scrubber-time {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--hw-text-secondary, #5A6B5A);
+}
+
+.scrubber {
+  height: 6px;
+  cursor: pointer;
+  accent-color: var(--hw-sage, #87A878);
+}
+
+.scrubber::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+}
+
+.scrubber::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(135, 168, 120, 0.3);
+}
+
 /* Search tab styling */
 .nav-tabs .nav-link {
   border: none;

@@ -90,9 +90,14 @@ function displaySearchResults(results) {
                         </div>
                         <div class="text-center mt-3">
                             <button onclick="downloadVideo('${video.video_id}', '${video.title.replace(/'/g, "\\'")}', this)"
-                                    class="btn btn-primary" ${isDisabled} id="download-btn-${index}">
+                                    class="btn btn-primary" ${isDisabled}>
                                 <i class="bi bi-download me-1"></i>Add To Favourites
                             </button>
+                            <div class="progress mt-2 d-none" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                     role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                            </div>
+                            <small class="text-muted d-none"></small>
                         </div>
                     </div>
                 </div>
@@ -155,13 +160,55 @@ document.addEventListener('DOMContentLoaded', function() {
 async function downloadVideo(videoId, title, buttonElement) {
     const originalText = buttonElement.innerHTML;
     buttonElement.disabled = true;
-    buttonElement.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Downloading...';
-    
+    buttonElement.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Starting...';
+
+    // Find progress elements relative to button's parent
+    const container = buttonElement.closest('.text-center');
+    const progressContainer = container ? container.querySelector('.progress') : null;
+    const progressBar = progressContainer ? progressContainer.querySelector('.progress-bar') : null;
+    const progressStatus = container ? container.querySelector('small.text-muted') : null;
+
+    if (progressContainer) progressContainer.classList.remove('d-none');
+    if (progressStatus) progressStatus.classList.remove('d-none');
+
+    let eventSource = null;
+
+    function updateProgress(percent, status) {
+        if (progressBar) {
+            progressBar.style.width = `${percent}%`;
+            progressBar.setAttribute('aria-valuenow', percent);
+            progressBar.textContent = `${Math.round(percent)}%`;
+        }
+        if (progressStatus) {
+            const statusText = status === 'downloading' ? 'Downloading...' :
+                               status === 'processing' ? 'Processing audio...' :
+                               status === 'complete' ? 'Complete!' : status;
+            progressStatus.textContent = statusText;
+        }
+    }
+
+    function hideProgress() {
+        if (progressContainer) progressContainer.classList.add('d-none');
+        if (progressStatus) progressStatus.classList.add('d-none');
+    }
+
     try {
         const formData = new FormData();
         formData.append('video_id', videoId);
         formData.append('title', title);
-        
+
+        eventSource = new EventSource(`/tubio/download_progress/${videoId}`);
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.status === 'not_found' || data.status === 'complete' || data.status === 'error') {
+                eventSource.close();
+            }
+            if (data.percent !== undefined) {
+                updateProgress(data.percent, data.status);
+            }
+        };
+        eventSource.onerror = () => eventSource.close();
+
         const response = await fetch('/tubio/youtube_download', {
             method: 'POST',
             body: formData,
@@ -170,30 +217,28 @@ async function downloadVideo(videoId, title, buttonElement) {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         });
-        
+
         const data = await response.json();
-        
+        if (eventSource) eventSource.close();
+
         if (response.ok && data.success) {
-            // Show success message
+            updateProgress(100, 'complete');
             showNotification(data.message, 'success');
-            
-            // Update playlists content
             await updateContent(data);
-            
-            // Disable the button and show it's cached
+
             buttonElement.innerHTML = '<i class="bi bi-check-circle me-1"></i>Downloaded';
             buttonElement.style.backgroundColor = '#adb5bd';
             buttonElement.style.borderColor = '#adb5bd';
-            
+            setTimeout(hideProgress, 1500);
         } else {
             throw new Error(data.error || 'Download failed');
         }
-        
+
     } catch (error) {
+        if (eventSource) eventSource.close();
         console.error('Error downloading video:', error);
         showNotification(error.message || 'Error downloading video', 'error');
-        
-        // Reset button
+        hideProgress();
         buttonElement.disabled = false;
         buttonElement.innerHTML = originalText;
     }
@@ -414,22 +459,40 @@ function updateLoopButtonUI(button, mode) {
     }
 }
 
-// Volume control function
-function setVolume(crc, value) {
-    const audioElement = document.getElementById(`audio-${crc}`);
-    const volumeLabel = document.getElementById(`volume-label-${crc}`);
-    
-    if (!audioElement) {
-        console.error(`Audio element not found for crc: ${crc}`);
-        return;
+function formatTime(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function seekTrack(crc, value) {
+    const audio = document.getElementById(`audio-${crc}`);
+    if (!audio) return;
+
+    if (audio.readyState === 0) {
+        audio.load();
+        audio.addEventListener('loadedmetadata', function onMeta() {
+            audio.removeEventListener('loadedmetadata', onMeta);
+            audio.currentTime = (value / 100) * audio.duration;
+        }, { once: true });
+    } else if (audio.duration && isFinite(audio.duration)) {
+        audio.currentTime = (value / 100) * audio.duration;
     }
-    
-    // Set the audio element's volume (0.0 to 1.0)
-    audioElement.volume = value / 100;
-    
-    // Update the label to show the percentage
-    if (volumeLabel) {
-        volumeLabel.textContent = value + '%';
+}
+
+function updateScrubber(crc) {
+    const audio = document.getElementById(`audio-${crc}`);
+    const scrubber = document.getElementById(`scrubber-${crc}`);
+    const currentTimeEl = document.getElementById(`time-current-${crc}`);
+    const durationEl = document.getElementById(`time-duration-${crc}`);
+
+    if (!audio || !scrubber) return;
+
+    if (audio.duration && isFinite(audio.duration)) {
+        scrubber.value = (audio.currentTime / audio.duration) * 100;
+        if (currentTimeEl) currentTimeEl.textContent = formatTime(audio.currentTime);
+        if (durationEl) durationEl.textContent = formatTime(audio.duration);
     }
 }
 
@@ -740,14 +803,20 @@ function initializeAudioEventListeners() {
         // Remove existing listeners to avoid duplicates
         audio.removeEventListener('play', audio._playHandler);
         audio.removeEventListener('pause', audio._pauseHandler);
+        audio.removeEventListener('timeupdate', audio._timeHandler);
+        audio.removeEventListener('loadedmetadata', audio._metaHandler);
 
         // Create and store handlers
         audio._playHandler = () => syncAudioButtonUI(crc);
         audio._pauseHandler = () => syncAudioButtonUI(crc);
+        audio._timeHandler = () => updateScrubber(crc);
+        audio._metaHandler = () => updateScrubber(crc);
 
-        // Add event listeners for play and pause events
+        // Add event listeners
         audio.addEventListener('play', audio._playHandler);
         audio.addEventListener('pause', audio._pauseHandler);
+        audio.addEventListener('timeupdate', audio._timeHandler);
+        audio.addEventListener('loadedmetadata', audio._metaHandler);
     });
 }
 
@@ -798,13 +867,18 @@ function getCurrentlyPlayingTrack() {
     return null;
 }
 
-// Lazy load thumbnails when track accordion is expanded
+// Lazy load thumbnails and audio metadata when track accordion is expanded
 function initializeLazyThumbnails() {
     document.querySelectorAll('.accordion-collapse').forEach(collapse => {
         collapse.addEventListener('show.bs.collapse', function() {
             const lazyImg = this.querySelector('.lazy-thumbnail[data-src]');
             if (lazyImg && !lazyImg.src) {
                 lazyImg.src = lazyImg.dataset.src;
+            }
+            // Load audio metadata for scrubber
+            const audio = this.querySelector('audio');
+            if (audio && audio.readyState === 0) {
+                audio.load();
             }
         }, { once: true });
     });
@@ -820,6 +894,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize lazy loading for thumbnails
     initializeLazyThumbnails();
+
+    // Initialize scrubber event listeners via delegation
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('scrubber') && e.target.dataset.crc) {
+            seekTrack(e.target.dataset.crc, e.target.value);
+        }
+    });
 
     // Update chevron rotation when playlist collapse events occur (only for playlist buttons, not track accordions)
     document.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {

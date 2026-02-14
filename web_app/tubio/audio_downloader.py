@@ -26,6 +26,26 @@ class VideoTooLongError(Exception):
         )
 
 
+class DownloadProgress:
+    """Tracks download progress for a specific video."""
+    def __init__(self):
+        self.percent: float = 0
+        self.status: str = "starting"
+        self.error: str | None = None
+
+
+# Global dict to track active downloads by video_id
+_active_downloads: dict[str, DownloadProgress] = {}
+
+
+def get_download_progress(video_id: str) -> DownloadProgress | None:
+    return _active_downloads.get(video_id)
+
+
+def clear_download_progress(video_id: str) -> None:
+    _active_downloads.pop(video_id, None)
+
+
 class AudioDownloader:
     YOUTUBE_SEARCH_URL = "https://www.youtube.com/results"
 
@@ -220,30 +240,50 @@ class AudioDownloader:
         url = f"https://www.youtube.com/watch?v={video_id}"
         temp_file = DataInterface().find_avail_temp_file_path(ext=".%(ext)s")
         temp_file.parent.mkdir(parents=True, exist_ok=True)
+
+        progress = DownloadProgress()
+        _active_downloads[video_id] = progress
+
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                progress.status = "downloading"
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                downloaded = d.get('downloaded_bytes', 0)
+                if total > 0:
+                    progress.percent = (downloaded / total) * 100
+            elif d['status'] == 'finished':
+                progress.status = "processing"
+                progress.percent = 100
+
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': temp_file.as_posix(),
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'progress_hooks': [progress_hook],
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'm4a',
-                'preferredquality': '32',  # lowest quality for cost
-
+                'preferredquality': '32',
             }],
             'extractaudio': True,
             'audioformat': 'm4a',
-            'audioquality': 0,  # best effort for lowest
+            'audioquality': 0,
         }
 
         if ConfigManager().tubio_cookie_path.exists() and not ConfigManager().debug_mode:
-            # Use cookies only if not in debug mode
             logging.info(f"Using cookie file: {ConfigManager().tubio_cookie_path}")
             ydl_opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            progress.status = "complete"
+        except Exception as e:
+            progress.status = "error"
+            progress.error = str(e)
+            raise
         temp_file = temp_file.with_suffix('.m4a')
         if not crc:
             with open(temp_file, 'rb') as f:

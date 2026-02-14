@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import timedelta
 
-from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError
+from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress, _active_downloads
 
 
 class TestExtractVideoId:
@@ -285,6 +285,24 @@ class TestSearchYoutubeWithDirectUrl:
 
         assert exc_info.value.video_id == 'dQw4w9WgXcQ'
         assert 'too long' in str(exc_info.value)
+
+
+class TestDownloadProgress:
+    def test_progress_tracking(self):
+        _active_downloads.clear()
+        _active_downloads['test123'] = DownloadProgress()
+
+        progress = get_download_progress('test123')
+        assert progress is not None
+        assert progress.percent == 0
+        assert progress.status == "starting"
+
+        progress.percent = 50
+        progress.status = "downloading"
+        assert get_download_progress('test123').percent == 50
+
+        clear_download_progress('test123')
+        assert get_download_progress('test123') is None
 
 
 if __name__ == '__main__':
