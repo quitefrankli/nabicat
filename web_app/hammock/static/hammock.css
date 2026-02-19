@@ -1,0 +1,97 @@
+.sidebar {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}
+
+.tree-project {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    user-select: none;
+}
+
+.tree-project:hover {
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.tree-project.active {
+    background-color: var(--bs-primary);
+    color: white;
+}
+
+.tree-project.active .badge {
+    background-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.tree-toggle {
+    transition: transform 0.2s ease;
+    font-size: 0.75rem;
+}
+
+.tree-item.expanded .tree-toggle {
+    transform: rotate(90deg);
+}
+
+.tree-posts {
+    border-left: 2px solid #dee2e6;
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
+}
+
+.tree-post {
+    color: var(--bs-body-color);
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease;
+}
+
+.tree-post:hover {
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+    color: var(--bs-body-color);
+}
+
+.tree-post.active {
+    background-color: rgba(var(--bs-primary-rgb), 0.2);
+    color: var(--bs-primary);
+    font-weight: 500;
+}
+
+.post-content {
+    line-height: 1.8;
+}
+
+.post-content h2,
+.post-content h3,
+.post-content h4 {
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+.post-content p {
+    margin-bottom: 1rem;
+}
+
+.post-content img,
+.post-content video {
+    max-width: 100%;
+    height: auto;
+    margin: 1.5rem 0;
+    border-radius: 0.5rem;
+}
+
+.hover-shadow {
+    transition: box-shadow 0.2s ease;
+}
+
+.hover-shadow:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: relative;
+        top: 0;
+        max-height: none;
+        margin-bottom: 1.5rem;
+    }
+}

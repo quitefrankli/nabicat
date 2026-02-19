@@ -1,0 +1,28 @@
+<div class="sidebar bg-light p-3 rounded">
+    <h5 class="mb-3">
+        <i class="bi bi-folder-fill text-primary me-2"></i>Projects
+    </h5>
+
+    <div class="tree-nav">
+        {% for project in posts_by_project %}
+        <div class="tree-item">
+            <div class="tree-project d-flex align-items-center py-2 px-2 rounded {% if project_name == project.name %}active{% endif %}"
+                 data-project="{{ project.name }}"
+                 role="button">
+                <i class="bi bi-chevron-right tree-toggle me-2"></i>
+                <i class="bi bi-folder me-2"></i>
+                <span class="project-name flex-grow-1">{{ project.name }}</span>
+            </div>
+            <div class="tree-posts ms-4 collapse">
+                {% for post in project.posts %}
+                <a href="{{ url_for('.view_post', project=project.name, post=post) }}"
+                   class="tree-post d-block py-1 px-2 rounded text-decoration-none {% if post_name == post %}active{% endif %}">
+                    <i class="bi bi-file-text me-2"></i>
+                    <span class="post-title">{{ post }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>

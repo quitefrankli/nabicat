@@ -3,7 +3,6 @@ import json
 import logging
 import shutil
 
-from io import BytesIO
 from pathlib import Path
 from pydantic import BaseModel
 from copy import deepcopy

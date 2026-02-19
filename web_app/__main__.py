@@ -10,7 +10,6 @@ from pathlib import Path
 from flask import render_template, request, send_from_directory
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
-from apscheduler.schedulers.base import SchedulerAlreadyRunningError
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
@@ -40,7 +39,7 @@ def scheduled_backup():
     logging.info("Backup complete")
 
 
-@scheduler.task('cron', id='scheduled_cookie_keepalive', day='*/2', hour=4, minute=0, misfire_grace_time=3600)
+@scheduler.task('cron', id='scheduled_cookie_keepalive', day='*', hour=4, minute=0, misfire_grace_time=3600)
 def run_cookie_keepalive() -> None:
     logging.info("Running scheduled cookie keepalive")
     cookie_path = ConfigManager().tubio_cookie_path
@@ -107,21 +106,24 @@ def configure_logging(debug: bool) -> None:
                         format='%(asctime)s %(levelname)s %(message)s')
 
 @click.command()
-@click.option('--debug', is_flag=True, help='Run the server in debug mode', default=False)
-@click.option('--port', default=80, help='Port to run the server on', type=int)
+@click.option('--debug', is_flag=True, default=False)
+@click.option('--port', default=80, type=int)
 def cli_start(debug: bool, port: int):
     configure_logging(debug=debug)
-    config = ConfigManager()
-    config.debug_mode = debug
     app.secret_key = ConfigManager().flask_secret_key
+    ConfigManager().debug_mode = debug
 
     logging.info("Starting server")
     app.run(host='0.0.0.0', port=port, debug=debug)
 
 if __name__ == '__main__':
+    # Dev Startup
     cli_start()
 else:
-    app.secret_key = ConfigManager().flask_secret_key
+    # Prod Startup
     configure_logging(debug=False)
-    start_scheduler()
+    app.secret_key = ConfigManager().flask_secret_key
+    ConfigManager().debug_mode = False
+
     logging.info("Starting server")
+    start_scheduler()

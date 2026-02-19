@@ -1,0 +1,18 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block navbar_brand %}Hammock{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="{{ url_for('.static', filename='hammock.css') }}">
+<script defer src="{{ url_for('.static', filename='hammock.js') }}"></script>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12 col-md-3 col-lg-2">
+            {% include "hammock_sidebar.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

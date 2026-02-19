@@ -29,6 +29,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
     from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
     from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
+    from web_app.hammock.data_interface import DataInterface as HammockDataInterface
 
     return [
         APIDataInterface,
@@ -37,6 +38,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
         JSwipeDataInterface,
         TubioDataInterface,
         FileStoreDataInterface,
+        HammockDataInterface,
     ]
 
 
@@ -50,6 +52,7 @@ def register_all_blueprints(app):
     from web_app.api import api_api
     from web_app.jswipe import jswipe_api
     from web_app.proxy import proxy_api
+    from web_app.hammock import hammock_api
 
     blueprints = [
         todoist2_api,
@@ -61,6 +64,7 @@ def register_all_blueprints(app):
         api_api,
         jswipe_api,
         proxy_api,
+        hammock_api,
     ]
 
     for blueprint in blueprints:

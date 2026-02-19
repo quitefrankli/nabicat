@@ -71,23 +71,6 @@
       
       <!-- App Grid -->
       <div class="row g-4">
-        <!-- Todoist2 (Admin Only) -->
-        {% if current_user.is_authenticated and current_user.is_admin %}
-        <div class="col-12 col-md-6">
-          <a href="/todoist2" class="text-decoration-none">
-            <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
-                  <i class="bi bi-check2-square"></i>
-                </div>
-                <h3 class="h5 mb-2 text-forest">Todoist2</h3>
-                <p class="text-muted small mb-0">Track your goals and manage tasks with ease</p>
-              </div>
-            </div>
-          </a>
-        </div>
-        {% endif %}
-        
         <!-- Metrics -->
         <div class="col-12 col-md-6">
           <a href="/metrics" class="text-decoration-none">
@@ -97,7 +80,6 @@
                   <i class="bi bi-graph-up-arrow"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">Metrics</h3>
-                <p class="text-muted small mb-0">Visualize your progress and insights</p>
               </div>
             </div>
           </a>
@@ -112,29 +94,41 @@
                   <i class="bi bi-music-note-beamed"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">Tubio</h3>
-                <p class="text-muted small mb-0">Your personal music collection manager</p>
               </div>
             </div>
           </a>
         </div>
         
         <!-- JSwipe (Admin Only) -->
-        {% if current_user.is_authenticated and current_user.is_admin %}
         <div class="col-12 col-md-6">
-          <a href="/jswipe" class="text-decoration-none">
+          {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
+          <a href="{{ '/jswipe' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
               <div class="card-body p-4 text-center">
                 <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #E07A5F 0%, #F4A261 100%);">
                   <i class="bi bi-briefcase-fill"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">JSwipe</h3>
-                <p class="text-muted small mb-0">Find your next career opportunity</p>
               </div>
             </div>
           </a>
         </div>
-        {% endif %}
-        
+
+        <!-- Todoist2 (Admin Only) -->
+        <div class="col-12 col-md-6">
+          {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
+          <a href="{{ '/todoist2' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
+            <div class="card h-100 home-app-card border-0">
+              <div class="card-body p-4 text-center">
+                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
+                  <i class="bi bi-check2-square"></i>
+                </div>
+                <h3 class="h5 mb-2 text-forest">Todoist2</h3>
+              </div>
+            </div>
+          </a>
+        </div>
+
         <!-- File Store -->
         <div class="col-12 col-md-6">
           <a href="/file_store" class="text-decoration-none">
@@ -144,45 +138,40 @@
                   <i class="bi bi-cloud-upload-fill"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">File Store</h3>
-                <p class="text-muted small mb-0">Secure cloud storage for your files</p>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Proxy (Admin Only) -->
-        {% if current_user.is_authenticated and current_user.is_admin %}
         <div class="col-12 col-md-6">
-          <a href="/proxy" class="text-decoration-none">
+          {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
+          <a href="{{ '/proxy' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
               <div class="card-body p-4 text-center">
                 <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);">
                   <i class="bi bi-globe2"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">Proxy</h3>
-                <p class="text-muted small mb-0">Browse the web through this server</p>
               </div>
             </div>
           </a>
         </div>
-        {% endif %}
-        
+
         <!-- Crosswords (Admin Only) -->
-        {% if current_user.is_authenticated and current_user.is_admin %}
         <div class="col-12 col-md-6">
-          <a href="/crosswords" class="text-decoration-none">
+          {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
+          <a href="{{ '/crosswords' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
               <div class="card-body p-4 text-center">
                 <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);">
                   <i class="bi bi-grid-3x3"></i>
                 </div>
                 <h3 class="h5 mb-2 text-forest">Crosswords</h3>
-                <p class="text-muted small mb-0">Generate and solve crossword puzzles</p>
               </div>
             </div>
           </a>
         </div>
-        {% endif %}
       </div>
       
     </div>
@@ -230,6 +219,16 @@
     border: 1px solid rgba(135, 168, 120, 0.2);
     border-radius: 12px;
     padding: 0.75rem 1.5rem;
+  }
+
+  .app-disabled {
+    pointer-events: none;
+    cursor: default;
+  }
+
+  .app-disabled .home-app-card {
+    opacity: 0.45;
+    filter: grayscale(0.6);
   }
 </style>
 
