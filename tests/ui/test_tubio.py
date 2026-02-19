@@ -36,6 +36,31 @@ def test_search_tab_content(tubio_page):
     """Test that search tab has search input."""
     # Click on Search tab
     tubio_page.click("a:has-text('Search')")
-    
+
     # Check for search input
     expect(tubio_page.locator("input[placeholder*='Search']")).to_be_visible()
+
+
+def test_audio_elements_have_preload_none(tubio_page):
+    """Audio elements must have preload=none to avoid overwhelming server on page load."""
+    audio_elements = tubio_page.locator("audio")
+    count = audio_elements.count()
+
+    for i in range(count):
+        preload = audio_elements.nth(i).get_attribute("preload")
+        assert preload == "none", f"Audio element {i} has preload='{preload}', expected 'none'"
+
+
+def test_no_failed_requests_on_page_load(tubio_page):
+    """Page load should not trigger failed audio requests (503 errors)."""
+    failed_requests = []
+
+    def handle_response(response):
+        if "/tubio/audio/" in response.url and response.status >= 400:
+            failed_requests.append((response.url, response.status))
+
+    tubio_page.on("response", handle_response)
+    tubio_page.reload()
+    tubio_page.wait_for_load_state("networkidle")
+
+    assert len(failed_requests) == 0, f"Failed audio requests on page load: {failed_requests}"

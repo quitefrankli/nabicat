@@ -332,7 +332,10 @@ function togglePlayTrack(crc) {
             currentPlaylistName = playlistName;
         }
 
-        // Play this track
+        // Load audio if not loaded, then play
+        if (audioElement.readyState === 0) {
+            audioElement.load();
+        }
         audioElement.play().catch(err => {
             console.error('Error playing audio:', err);
             showNotification('Error playing audio. Please try again.', 'error');
@@ -547,6 +550,9 @@ function resumePlaylist() {
     const playButton = document.getElementById(`play-btn-${crc}`);
 
     if (audioElement) {
+        if (audioElement.readyState === 0) {
+            audioElement.load();
+        }
         audioElement.play().catch(err => {
             console.error('Error resuming audio:', err);
             showNotification('Error resuming playback', 'error');
@@ -692,7 +698,10 @@ function playNextInQueue() {
         accordionItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     
-    // Play the audio using the same system as the play button
+    // Load audio if not loaded, then play
+    if (audioElement.readyState === 0) {
+        audioElement.load();
+    }
     audioElement.currentTime = 0;
     audioElement.play().catch(err => {
         console.error('Error playing audio:', err);

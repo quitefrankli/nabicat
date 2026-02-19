@@ -245,10 +245,9 @@ def serve_audio(crc: int):
     file_path = DataInterface().get_audio_path(crc)
     file_size = file_path.stat().st_size
     range_header = request.headers.get("Range", None)
-    logging.info(f"Serving audio file {file_path} with size {file_size} bytes, Range header: {range_header}")
+    logging.info(f"Serving audio {file_path}: {metadata.title} to user {cur_user()} with size {file_size} bytes, Range header: {range_header}")
 
     if not range_header:
-        # Send a small range response to initialize the audio player
         response = send_file(
             file_path,
             mimetype='audio/mp4',
@@ -256,14 +255,9 @@ def serve_audio(crc: int):
             download_name=f"{crc}.m4a"
         )
         response.headers['Accept-Ranges'] = 'bytes'
-        response.headers['Content-Range'] = f'bytes 0-1/{file_size}'
-        response.headers['Content-Length'] = '2'
-
-        # Cache audio files
         response.cache_control.max_age = ConfigManager().cache_max_age
         response.cache_control.public = True
         response.set_etag(str(crc))
-
         return response
 
     # Example: "Range: bytes=12345-"
@@ -273,8 +267,9 @@ def serve_audio(crc: int):
         logging.error(f"Invalid Range header format: {range_header}")
         raise ValueError("Invalid Range header format")
     if range_header[0] == '-':
-        # Example: "Range: bytes=-12345"
-        byte1 = 0
+        # Example: "Range: bytes=-12345" (last N bytes)
+        suffix_length = int(splitted[1])
+        byte1 = max(0, file_size - suffix_length)
         byte2 = file_size
     elif range_header[-1] == '-':
         # Example: "Range: bytes=12345-"
