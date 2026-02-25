@@ -311,6 +311,8 @@ function togglePlayTrack(crc) {
     // Get the playlist name from the track's parent accordion
     const playlistName = trackItem ? trackItem.dataset.playlist : '';
 
+    currentTrackCrc = crc;
+
     if (audioElement.paused) {
         // Pause all other audio elements and reset their buttons
         document.querySelectorAll('audio').forEach(audio => {
@@ -499,6 +501,9 @@ function updateScrubber(crc) {
     }
 }
 
+// Currently active track CRC (the last track the user interacted with)
+let currentTrackCrc = null;
+
 // Playlist playback functionality
 let currentPlaylistQueue = [];
 let currentPlaylistIndex = 0;
@@ -681,10 +686,11 @@ function playNextInQueue() {
     }
     
     const crc = currentPlaylistQueue[currentPlaylistIndex];
+    currentTrackCrc = crc;
     const audioElement = document.getElementById(`audio-${crc}`);
     const playButton = document.getElementById(`play-btn-${crc}`);
     const trackItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
-    
+
     if (!audioElement) {
         console.error(`Audio element not found: audio-${crc}`);
         currentPlaylistIndex++;
@@ -816,8 +822,15 @@ function initializeAudioEventListeners() {
         audio.removeEventListener('loadedmetadata', audio._metaHandler);
 
         // Create and store handlers
-        audio._playHandler = () => syncAudioButtonUI(crc);
-        audio._pauseHandler = () => syncAudioButtonUI(crc);
+        audio._playHandler = () => {
+            syncAudioButtonUI(crc);
+            updateMediaSessionMetadata(crc);
+            updateMediaSessionPlaybackState('playing');
+        };
+        audio._pauseHandler = () => {
+            syncAudioButtonUI(crc);
+            updateMediaSessionPlaybackState('paused');
+        };
         audio._timeHandler = () => updateScrubber(crc);
         audio._metaHandler = () => updateScrubber(crc);
 
@@ -829,51 +842,103 @@ function initializeAudioEventListeners() {
     });
 }
 
-// Media Session API integration for hardware media keys
-function initializeMediaSession() {
-    if ('mediaSession' in navigator) {
-        // Set up action handlers for hardware media keys
-        navigator.mediaSession.setActionHandler('play', () => {
-            const currentlyPlaying = getCurrentlyPlayingTrack();
-            if (currentlyPlaying) {
-                // If there's a paused track, resume it
-                const audioElement = document.getElementById(`audio-${currentlyPlaying}`);
-                if (audioElement && audioElement.paused) {
-                    togglePlayTrack(currentlyPlaying);
-                }
-            }
-        });
+function updateMediaSessionMetadata(crc) {
+    if (!('mediaSession' in navigator)) return;
+    const trackItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
+    if (!trackItem) return;
 
-        navigator.mediaSession.setActionHandler('pause', () => {
-            const currentlyPlaying = getCurrentlyPlayingTrack();
-            if (currentlyPlaying) {
-                const audioElement = document.getElementById(`audio-${currentlyPlaying}`);
-                if (audioElement && !audioElement.paused) {
-                    togglePlayTrack(currentlyPlaying);
-                }
-            }
-        });
+    const title = trackItem.dataset.title || 'Unknown Track';
+    const artwork = [];
+    if (trackItem.dataset.hasThumbnail === 'true') {
+        const thumbnailUrl = `/tubio/thumbnail/${crc}`;
+        artwork.push({ src: thumbnailUrl, sizes: '512x512', type: 'image/jpeg' });
+    }
+    navigator.mediaSession.metadata = new MediaMetadata({ title, artwork });
+}
+
+function updateMediaSessionPlaybackState(state) {
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = state;
     }
 }
 
-// Helper function to get the currently playing track CRC
+// Media Session API integration for hardware media keys
+function initializeMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+
+    navigator.mediaSession.setActionHandler('play', () => {
+        const crc = getCurrentlyPlayingTrack();
+        if (crc) {
+            const audio = document.getElementById(`audio-${crc}`);
+            if (audio && audio.paused) {
+                audio.play();
+                updateMediaSessionPlaybackState('playing');
+            }
+        }
+    });
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+        const crc = getCurrentlyPlayingTrack();
+        if (crc) {
+            const audio = document.getElementById(`audio-${crc}`);
+            if (audio && !audio.paused) {
+                audio.pause();
+                updateMediaSessionPlaybackState('paused');
+            }
+        }
+    });
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+        if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
+            const oldCrc = currentPlaylistQueue[currentPlaylistIndex];
+            const oldAudio = document.getElementById(`audio-${oldCrc}`);
+            const oldButton = document.getElementById(`play-btn-${oldCrc}`);
+            const oldItem = document.querySelector(`.accordion-item[data-audio-crc="${oldCrc}"]`);
+            if (oldAudio) oldAudio.pause();
+            if (oldButton) {
+                oldButton.innerHTML = '<i class="bi bi-play-fill"></i>';
+                oldButton.classList.remove('btn-success');
+                oldButton.classList.add('btn-outline-primary');
+            }
+            if (oldItem) oldItem.classList.remove('track-playing');
+            currentPlaylistIndex++;
+            playNextInQueue();
+        }
+    });
+
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+        if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
+            const crc = currentPlaylistQueue[currentPlaylistIndex];
+            const audio = document.getElementById(`audio-${crc}`);
+            if (audio && audio.currentTime > 3) {
+                audio.currentTime = 0;
+            } else if (currentPlaylistIndex > 0) {
+                const oldButton = document.getElementById(`play-btn-${crc}`);
+                const oldItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
+                if (audio) audio.pause();
+                if (oldButton) {
+                    oldButton.innerHTML = '<i class="bi bi-play-fill"></i>';
+                    oldButton.classList.remove('btn-success');
+                    oldButton.classList.add('btn-outline-primary');
+                }
+                if (oldItem) oldItem.classList.remove('track-playing');
+                currentPlaylistIndex--;
+                playNextInQueue();
+            } else if (audio) {
+                audio.currentTime = 0;
+            }
+        } else {
+            const crc = getCurrentlyPlayingTrack();
+            if (crc) {
+                const audio = document.getElementById(`audio-${crc}`);
+                if (audio) audio.currentTime = 0;
+            }
+        }
+    });
+}
+
 function getCurrentlyPlayingTrack() {
-    // Find the audio element that is currently playing
-    const playingAudio = Array.from(document.querySelectorAll('audio')).find(audio => !audio.paused);
-    if (playingAudio) {
-        return playingAudio.id.replace('audio-', '');
-    }
-
-    // If no audio is playing, find the last paused audio with currentTime > 0
-    const pausedWithProgress = Array.from(document.querySelectorAll('audio'))
-        .filter(audio => audio.currentTime > 0)
-        .sort((a, b) => b.currentTime - a.currentTime)[0];
-
-    if (pausedWithProgress) {
-        return pausedWithProgress.id.replace('audio-', '');
-    }
-
-    return null;
+    return currentTrackCrc;
 }
 
 // Lazy load thumbnails and audio metadata when track accordion is expanded
