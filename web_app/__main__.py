@@ -1,5 +1,7 @@
 import click
 import logging
+import smtplib
+import tempfile
 import flask_login
 import http.cookiejar
 import urllib.request
@@ -7,6 +9,7 @@ import urllib.request
 from git import Repo
 from typing import * # type: ignore
 from pathlib import Path
+from email.mime.text import MIMEText
 from flask import render_template, request, send_from_directory
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
@@ -14,6 +17,7 @@ from logging.handlers import RotatingFileHandler
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.helpers import get_ip, get_all_data_interfaces, register_all_blueprints
+from web_app.tubio.audio_downloader import AudioDownloader
 from web_app.app import app
 
 
@@ -58,6 +62,52 @@ def run_cookie_keepalive() -> None:
         logging.info(f"Cookie keepalive OK - status {response.status}")
     except Exception:
         logging.exception("Cookie keepalive failed")
+
+
+def send_alert_email(subject: str, body: str) -> None:
+    config = ConfigManager()
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = config.smtp_user
+    msg['To'] = config.alert_email_to
+    with smtplib.SMTP(config.smtp_host, config.smtp_port) as server:
+        server.starttls()
+        server.login(config.smtp_user, config.smtp_password)
+        server.sendmail(config.smtp_user, config.alert_email_to, msg.as_string())
+
+
+@scheduler.task('cron', id='scheduled_download_health_check', day='*', hour=4, minute=10, misfire_grace_time=3600)
+def run_download_health_check() -> None:
+    logging.info("Running download health check")
+    config = ConfigManager()
+    video_id = config.tubio_test_video_id
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_path = str(Path(tmp_dir) / "health_check.%(ext)s")
+        ydl_opts = AudioDownloader._build_ydl_opts(out_path)
+
+        try:
+            AudioDownloader.download_audio_file(video_id, ydl_opts)
+
+            result_file = Path(tmp_dir) / "health_check.m4a"
+            if result_file.exists() and result_file.stat().st_size > 0:
+                send_alert_email(
+                    "Tubio Health Check: OK",
+                    f"Download health check passed for video {video_id}.\nFile size: {result_file.stat().st_size} bytes."
+                )
+                logging.info("Download health check passed")
+            else:
+                send_alert_email(
+                    "Tubio Health Check: FAIL",
+                    f"Download completed but output file is missing or empty for video {video_id}."
+                )
+                logging.error("Download health check failed: output file missing or empty")
+        except Exception as e:
+            logging.exception("Download health check failed")
+            send_alert_email(
+                "Tubio Health Check: FAIL",
+                f"Download health check failed for video {video_id}.\nError: {e}"
+            )
 
 
 def start_scheduler() -> None:

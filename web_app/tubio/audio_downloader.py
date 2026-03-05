@@ -235,9 +235,38 @@ class AudioDownloader:
             return None
 
     @staticmethod
+    def _build_ydl_opts(outtmpl: str, progress_hooks: list | None = None) -> dict:
+        opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': outtmpl,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'm4a',
+                'preferredquality': '32',
+            }],
+            'extractaudio': True,
+            'audioformat': 'm4a',
+            'audioquality': 0,
+        }
+        if progress_hooks:
+            opts['progress_hooks'] = progress_hooks
+        if ConfigManager().tubio_cookie_path.exists() and not ConfigManager().debug_mode:
+            logging.info(f"Using cookie file: {ConfigManager().tubio_cookie_path}")
+            opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        return opts
+
+    @staticmethod
+    def download_audio_file(video_id: str, ydl_opts: dict) -> None:
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+    @staticmethod
     def download_youtube_audio(video_id: str, title: str, user: User, crc: int|None = None) -> None:
         logging.info(f"Tubio downloading video_id:={video_id}")
-        url = f"https://www.youtube.com/watch?v={video_id}"
         temp_file = DataInterface().find_avail_temp_file_path(ext=".%(ext)s")
         temp_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -255,30 +284,10 @@ class AudioDownloader:
                 progress.status = "processing"
                 progress.percent = 100
 
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': temp_file.as_posix(),
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-            'progress_hooks': [progress_hook],
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'm4a',
-                'preferredquality': '32',
-            }],
-            'extractaudio': True,
-            'audioformat': 'm4a',
-            'audioquality': 0,
-        }
-
-        if ConfigManager().tubio_cookie_path.exists() and not ConfigManager().debug_mode:
-            logging.info(f"Using cookie file: {ConfigManager().tubio_cookie_path}")
-            ydl_opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        ydl_opts = AudioDownloader._build_ydl_opts(temp_file.as_posix(), [progress_hook])
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            AudioDownloader.download_audio_file(video_id, ydl_opts)
             progress.status = "complete"
         except Exception as e:
             progress.status = "error"

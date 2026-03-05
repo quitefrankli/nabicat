@@ -31,8 +31,10 @@ class ConfigManager:
         self.tudio_search_prefix = "" # helps narrow down search results
         self.tudio_max_results = 10
         self.tudio_max_video_length = timedelta(minutes=10)
+        self.tubio_test_video_id = "dQw4w9WgXcQ" # Default video ID for testing (Rick Astley - Never Gonna Give You Up)
         self.todoist2_default_page_size = 8
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
+        self.smtp_port = 587
 
     @property
     def project_name(self) -> str:
@@ -71,3 +73,19 @@ class ConfigManager:
             return "DEBUG_FLASK_SECRET_KEY"
 
         raise ValueError("Flask secret key is not set. Please set the 'FLASK_SECRET_KEY' environment variable.")
+
+    @property
+    def smtp_host(self) -> str:
+        return getenv('SMTP_HOST', '')
+
+    @property
+    def smtp_user(self) -> str:
+        return getenv('SMTP_USER', '')
+
+    @property
+    def smtp_password(self) -> str:
+        return getenv('SMTP_PASSWORD', '')
+
+    @property
+    def alert_email_to(self) -> str:
+        return getenv('ALERT_EMAIL_TO', '')
