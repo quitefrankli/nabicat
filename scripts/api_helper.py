@@ -461,6 +461,40 @@ def sync_cookies(browser: str, profile: str | None) -> None:
         )
 
 @cli.command()
+@click.argument("post_folder", type=click.Path(exists=True))
+@click.option("--project", required=True, help="Project name for the post")
+@click.option("--name", "post_name", default=None, help="Post name (defaults to folder name)")
+def upload_post(post_folder: str, project: str, post_name: str | None) -> None:
+    post_path = Path(post_folder)
+    if not post_path.is_dir():
+        print(f"Error: {post_folder} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    if post_name is None:
+        post_name = post_path.name
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for path in post_path.rglob('*'):
+            if path.is_file():
+                zf.write(path, arcname=path.relative_to(post_path))
+    zip_buffer.seek(0)
+    data = zip_buffer.read()
+
+    compressed_data = gzip.compress(data)
+    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
+
+    mb = len(data) / (1024 * 1024)
+    print(f"Uploading post '{post_name}' to project '{project}' ({mb:.2f} MB)")
+
+    response = send_request("hammock/api/upload_post", {
+        "project": project,
+        "post_name": post_name,
+        "data": encoded_data,
+    })
+    print(f"Response: {response.status_code} - {response.text}")
+
+@cli.command()
 def test_handshake() -> None:
     """
     Test the encryption handshake with the server.
