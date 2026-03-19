@@ -56,7 +56,7 @@ function run_server_side()
 	function setup_certs()
 	{
 		DOMAIN=nabicat.site
-		EMAIL="erehnimda@gmail.com"
+		EMAIL="${CERTBOT_EMAIL:?CERTBOT_EMAIL is required}"
 		
 		# OCI Ubuntu images ship with iptables rules that block incoming traffic at the OS level (separate from the security list)
 	  	sudo apt install -y iptables-persistent

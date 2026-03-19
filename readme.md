@@ -56,8 +56,10 @@ CLOUD_PROVIDER is either aws or oci (aws doesn't work atm as the instance doesnt
 register the generated ip address with your domain name
 `export SERVER_IP_ADDR=$(terraform -chdir=terraform/$CLOUD_PROVIDER output server_ip_addr | sed 's/\"//g')`
 
-it may take a while for the ip to be associated with the domain, but once it's done run the final step
-`ssh nabicat.site -t "ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && git clone git@github.com:quitefrankli/nabicat.git && cd nabicat && source setup_server.sh && run_server_side"`
+it may take a while for the ip to be associated with the domain, but once it's done run the final step.
+Make sure to replace the email with your own for certbot
+
+`ssh nabicat.site -t "ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && git clone git@github.com:quitefrankli/nabicat.git && cd nabicat && source setup_server.sh && CERTBOT_EMAIL=your@email.com run_server_side"`
 
 
 ### Misc
