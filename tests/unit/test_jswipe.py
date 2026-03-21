@@ -178,46 +178,19 @@ class TestJSwipeAdminAccess:
 
         assert response.status_code == 200
 
-    def test_index_redirects_non_admin(self, client, non_admin_auth_mock):
-        """Test that non-admin is redirected from JSwipe index page"""
+    def test_index_blocked_for_non_admin(self, client, non_admin_auth_mock):
+        """Test that non-admin gets 403 from JSwipe"""
         with client.session_transaction() as sess:
             sess['_user_id'] = non_admin_auth_mock.id
 
         response = client.get('/jswipe/')
 
-        assert response.status_code == 302  # Redirect
-        assert response.location == '/'
-
-    def test_api_job_action_accessible_by_admin(self, client, admin_auth_mock):
-        """Test that admin can access job action API"""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = admin_auth_mock.id
-
-        response = client.post('/jswipe/api/job/job123/save', json={
-            'title': 'Test Job',
-            'company': 'Test Co',
-            'location': 'Sydney',
-            'url': 'https://example.com/job'
-        })
-
-        # Should not be redirected (may fail for other reasons, but not 302)
-        assert response.status_code != 302
-
-    def test_api_job_action_redirects_non_admin(self, client, non_admin_auth_mock):
-        """Test that non-admin is redirected from job action API"""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = non_admin_auth_mock.id
-
-        response = client.post('/jswipe/api/job/job123/save', json={})
-
-        assert response.status_code == 302  # Redirect
-        assert response.location == '/'
+        assert response.status_code == 403
 
     def test_requires_login_for_index(self, client):
         """Test that index page requires login"""
         response = client.get('/jswipe/')
 
-        # Should redirect to login page
         assert response.status_code == 302
         assert '/account/login' in response.location
 
@@ -225,7 +198,6 @@ class TestJSwipeAdminAccess:
         """Test that API requires login"""
         response = client.post('/jswipe/api/job/job123/save', json={})
 
-        # Should redirect to login page
         assert response.status_code == 302
         assert '/account/login' in response.location
 

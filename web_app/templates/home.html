@@ -114,10 +114,9 @@
           </a>
         </div>
 
-        <!-- Todoist2 (Admin Only) -->
+        <!-- Todoist2 -->
         <div class="col-12 col-md-6">
-          {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
-          <a href="{{ '/todoist2' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
+          <a href="/todoist2" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
               <div class="card-body p-4 text-center">
                 <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">

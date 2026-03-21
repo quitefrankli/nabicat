@@ -14,10 +14,8 @@ goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')
 
 @goals_api.before_request
 @flask_login.login_required
-def require_admin():
-    if not flask_login.current_user.is_admin:
-        flask.flash('You must be an admin to access this page', category='error')
-        return flask.redirect(flask.url_for('home'))
+def require_login():
+    pass
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('todoist2_api.summary_goals'))

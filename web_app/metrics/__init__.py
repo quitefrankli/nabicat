@@ -21,12 +21,6 @@ metrics_api = Blueprint(
     url_prefix='/metrics')
 
 
-@metrics_api.before_request
-@flask_login.login_required
-def before_request():
-    # This ensures all routes in this blueprint require login
-    pass
-
 @metrics_api.context_processor
 def inject_app_name():
     return dict(app_name='Metrics')
@@ -37,6 +31,8 @@ def get_default_redirect():
 @metrics_api.route('/', methods=['GET'])
 @limiter.limit("2 per second")
 def get_metrics():
+    if not flask_login.current_user.is_authenticated:
+        return render_template('metrics_page.html', metrics=[])
     tld = DataInterface().load_data(cur_user())
     metrics = list(tld.metrics.values())
     # Sort by last_modified (most recent first), similar to todoist2
@@ -47,6 +43,7 @@ def get_metrics():
     return render_template('metrics_page.html', metrics=metrics)
 
 @metrics_api.route('/new', methods=['POST'])
+@flask_login.login_required
 @limiter.limit("2 per second")
 def new_metric():
     name = from_req('name')
@@ -72,6 +69,7 @@ def new_metric():
     return get_default_redirect()
 
 @metrics_api.route('/delete', methods=['GET'])
+@flask_login.login_required
 @limiter.limit("2 per second")
 def delete_metric():
     metric_id = int(from_req('metric_id'))
@@ -82,6 +80,7 @@ def delete_metric():
     return get_default_redirect()
 
 @metrics_api.route('/edit', methods=['POST'])
+@flask_login.login_required
 @limiter.limit("2 per second")
 def edit_metric():
     metric_id = int(from_req('metric_id'))
@@ -105,6 +104,7 @@ def edit_metric():
     return get_default_redirect()
 
 @metrics_api.route('/log', methods=['POST'])
+@flask_login.login_required
 @limiter.limit("2 per second")
 def log_metric():
     metric_id = int(from_req('metric_id'))
@@ -123,6 +123,7 @@ def log_metric():
     return get_default_redirect()
 
 @metrics_api.route('/visualise/<int:metric_id>', methods=['GET'])
+@flask_login.login_required
 @limiter.limit("1 per second")
 def visualise_metric(metric_id: int):
     tld = DataInterface().load_data(cur_user())
