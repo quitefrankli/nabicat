@@ -1,3 +1,5 @@
+import re
+import json
 import click
 import logging
 import smtplib
@@ -7,6 +9,7 @@ import http.cookiejar
 import urllib.request
 
 from git import Repo
+from packaging.version import Version
 from typing import * # type: ignore
 from pathlib import Path
 from email.mime.text import MIMEText
@@ -76,9 +79,43 @@ def send_alert_email(subject: str, body: str) -> None:
         server.sendmail(config.smtp_user, config.alert_email_to, msg.as_string())
 
 
+def _check_and_update_ytdlp() -> None:
+    req_path = Path(__file__).resolve().parents[1] / "requirements.txt"
+    req_text = req_path.read_text()
+
+    match = re.search(r'yt-dlp\[default\]>=([\d.]+)', req_text)
+    if not match:
+        return
+    current_ver = match.group(1)
+
+    resp = urllib.request.urlopen("https://pypi.org/pypi/yt-dlp/json")
+    latest_ver = json.loads(resp.read())["info"]["version"]
+
+    if Version(latest_ver) <= Version(current_ver):
+        logging.info(f"yt-dlp is up to date ({current_ver})")
+        return
+
+    logging.info(f"Updating yt-dlp: {current_ver} -> {latest_ver}")
+    req_path.write_text(req_text.replace(f"yt-dlp[default]>={current_ver}", f"yt-dlp[default]>={latest_ver}"))
+
+    repo = Repo(req_path.parent)
+    repo.index.add(["requirements.txt"])
+    repo.index.commit(f"update yt-dlp to {latest_ver}")
+    repo.remotes.origin.push()
+
+    from web_app.api import update_server as _update_server
+    _update_server()
+
+
 @scheduler.task('cron', id='scheduled_download_health_check', day='*', hour=4, minute=10, misfire_grace_time=3600)
 def run_download_health_check() -> None:
     logging.info("Running download health check")
+
+    try:
+        _check_and_update_ytdlp()
+    except Exception as e:
+        logging.exception("yt-dlp update check failed")
+
     config = ConfigManager()
     video_id = config.tubio_test_video_id
 

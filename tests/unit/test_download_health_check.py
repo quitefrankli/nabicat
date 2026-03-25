@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from unittest.mock import patch, MagicMock, call
@@ -30,6 +31,51 @@ class TestSendAlertEmail:
         assert args[1] == 'alert@test.com'
         assert 'Test Subject' in args[2]
         assert 'Test body' in args[2]
+
+
+class TestCheckAndUpdateYtdlp:
+    @patch('web_app.api.update_server')
+    @patch('web_app.__main__.Repo')
+    @patch('web_app.__main__.urllib.request.urlopen')
+    def test_updates_and_pushes_when_new_version(self, mock_urlopen, mock_repo_cls, mock_update_server, tmp_path):
+        req_file = tmp_path / "requirements.txt"
+        req_file.write_text("yt-dlp[default]>=2026.3.17\nother-pkg==1.0\n")
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"info": {"version": "2026.3.25"}}).encode()
+        mock_urlopen.return_value = mock_resp
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+
+        from web_app.__main__ import _check_and_update_ytdlp
+        with patch('web_app.__main__.Path') as mock_path:
+            mock_path.return_value.resolve.return_value.parents.__getitem__ = lambda _, i: tmp_path
+            _check_and_update_ytdlp()
+
+        assert "yt-dlp[default]>=2026.3.25" in req_file.read_text()
+        mock_repo.index.add.assert_called_once_with(["requirements.txt"])
+        mock_repo.index.commit.assert_called_once_with("update yt-dlp to 2026.3.25")
+        mock_repo.remotes.origin.push.assert_called_once()
+        mock_update_server.assert_called_once()
+
+    @patch('web_app.__main__.Repo')
+    @patch('web_app.__main__.urllib.request.urlopen')
+    def test_skips_update_when_version_current(self, mock_urlopen, mock_repo_cls, tmp_path):
+        req_file = tmp_path / "requirements.txt"
+        req_file.write_text("yt-dlp[default]>=2026.3.17\n")
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"info": {"version": "2026.3.17"}}).encode()
+        mock_urlopen.return_value = mock_resp
+
+        from web_app.__main__ import _check_and_update_ytdlp
+        with patch('web_app.__main__.Path') as mock_path:
+            mock_path.return_value.resolve.return_value.parents.__getitem__ = lambda _, i: tmp_path
+            _check_and_update_ytdlp()
+
+        mock_repo_cls.assert_not_called()
+        assert req_file.read_text() == "yt-dlp[default]>=2026.3.17\n"
 
 
 class TestRunDownloadHealthCheck:
