@@ -51,8 +51,15 @@ def _get_filtered_summary_goals(user: User) -> Tuple[List[Goal], Dict[int, Goal]
             return False
         return True
 
+    def max_last_modified(goal: Goal) -> float:
+        ts = goal.last_modified.timestamp()
+        for child_id in goal.children:
+            if child_id in all_goals:
+                ts = max(ts, max_last_modified(all_goals[child_id]))
+        return ts
+
     goals = [goal for goal in all_goals.values() if should_render(goal)]
-    goals.sort(key=lambda goal: goal.last_modified.timestamp(), reverse=True)
+    goals.sort(key=max_last_modified, reverse=True)
     return goals, all_goals
 
 def _goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]]:

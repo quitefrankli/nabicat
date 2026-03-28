@@ -101,6 +101,23 @@ class TestTodoist2HelperFunctions:
         assert len(goals) == 1
         assert goals[0].id == 1
 
+    @patch('web_app.todoist2.DataInterface')
+    def test_summary_sorted_by_most_recent_subgoal(self, mock_di, test_user):
+        """Parent goal with a recently modified subgoal should sort above an older parent"""
+        older_parent = Goal(id=1, name='Older', state=GoalState.ACTIVE,
+                            last_modified=datetime(2026, 1, 1), children=[3])
+        newer_parent = Goal(id=2, name='Newer standalone', state=GoalState.ACTIVE,
+                            last_modified=datetime(2026, 1, 10))
+        recent_child = Goal(id=3, name='Recent child', state=GoalState.ACTIVE,
+                            last_modified=datetime(2026, 1, 20), parent=1)
+        mock_instance = Mock()
+        mock_instance.load_data.return_value = Goals(goals={1: older_parent, 2: newer_parent, 3: recent_child})
+        mock_di.return_value = mock_instance
+
+        goals, _ = _get_filtered_summary_goals(test_user)
+
+        assert goals[0].id == 1  # older_parent sorts first because its child is most recent
+
     def test_goals_to_blocks_empty(self):
         """Test goals_to_blocks with empty list"""
         blocks = _goals_to_blocks([])
