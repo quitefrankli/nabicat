@@ -75,15 +75,31 @@ class TestTodoist2HelperFunctions:
 
     @patch('web_app.todoist2.DataInterface')
     def test_get_filtered_summary_goals(self, mock_di, test_user, test_goals):
-        """Test filtering summary goals"""
+        """Test filtering summary goals returns (list, dict) tuple"""
         mock_instance = Mock()
         mock_instance.load_data.return_value = test_goals
         mock_di.return_value = mock_instance
 
-        goals = _get_filtered_summary_goals(test_user)
-        
-        # Should filter and sort goals
+        goals, all_goals = _get_filtered_summary_goals(test_user)
+
         assert isinstance(goals, list)
+        assert isinstance(all_goals, dict)
+
+    @patch('web_app.todoist2.DataInterface')
+    def test_child_goals_excluded_from_summary(self, mock_di, test_user):
+        """Child goals with a parent should not appear in the top-level summary"""
+        parent = Goal(id=1, name='Parent', state=GoalState.ACTIVE,
+                      last_modified=datetime(2026, 2, 1), children=[2])
+        child = Goal(id=2, name='Child', state=GoalState.ACTIVE,
+                     last_modified=datetime(2026, 2, 1), parent=1)
+        mock_instance = Mock()
+        mock_instance.load_data.return_value = Goals(goals={1: parent, 2: child})
+        mock_di.return_value = mock_instance
+
+        goals, _ = _get_filtered_summary_goals(test_user)
+
+        assert len(goals) == 1
+        assert goals[0].id == 1
 
     def test_goals_to_blocks_empty(self):
         """Test goals_to_blocks with empty list"""
@@ -172,6 +188,34 @@ class TestTodoist2HelperFunctions:
         
         blocks = _completed_goals_to_blocks([goal1, goal2])
         assert len(blocks) == 2
+
+
+class TestSubgoalDeletion:
+    """Tests for subgoal cascade deletion logic"""
+
+    def test_delete_cascades_to_children(self):
+        """Deleting a parent goal also deletes all descendants"""
+        from web_app.todoist2.app_data import Goals
+
+        grandchild = Goal(id=3, name='Grandchild', state=GoalState.ACTIVE,
+                          last_modified=datetime.now(), parent=2)
+        child = Goal(id=2, name='Child', state=GoalState.ACTIVE,
+                     last_modified=datetime.now(), parent=1, children=[3])
+        parent = Goal(id=1, name='Parent', state=GoalState.ACTIVE,
+                      last_modified=datetime.now(), children=[2])
+        tld = Goals(goals={1: parent, 2: child, 3: grandchild})
+
+        # Simulate what delete_goal does inline (delete_descendants is a closure)
+        def delete_descendants(goals, gid):
+            if gid not in goals:
+                return
+            for child_id in list(goals[gid].children):
+                delete_descendants(goals, child_id)
+            goals.pop(gid)
+
+        delete_descendants(tld.goals, 1)
+
+        assert tld.goals == {}
 
 
 if __name__ == '__main__':

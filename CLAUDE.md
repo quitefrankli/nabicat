@@ -18,4 +18,7 @@
 
 * DO NOT write superfluous tests, add 1-2 USEFUL tests only per feature
 
+* Project Architecture:
+    - this project contains a collection of smaller subapps/subpages under web_app/ all of which share a similar ui/ux theme and share the same domain and host
+
 * start every new session with "CLAUDE.md read!"

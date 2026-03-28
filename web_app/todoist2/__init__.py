@@ -33,30 +33,27 @@ def inject_app_name():
 def get_default_redirect():
     return flask.redirect(flask.url_for('.summary_goals'))
 
-def _get_filtered_summary_goals(user: User) -> List[Goal]:
-    """Get all filtered summary goals without pagination."""
+def _get_filtered_summary_goals(user: User) -> Tuple[List[Goal], Dict[int, Goal]]:
+    """Get filtered top-level summary goals and all goals dict."""
     now = datetime.now()
+    all_goals = DataInterface().load_data(user).goals
+
     def should_render(goal: Goal) -> bool:
-        # # TODO: add support for parent/children goals
-        # if goal.parent or goal.children:
-        #     return False
+        if goal.parent is not None:
+            return False
         if goal.recurrence:
             return False
-        # temporarily disable backlog functionality and show all backlogged goals
-        # TODO: implement some sort of filter for different goal states
         if goal.state == GoalState.BACKLOGGED:
             return True
         if goal.state not in (GoalState.ACTIVE, GoalState.COMPLETED):
             return False
-        # hides goals that have been completed for a while
         if goal.state == GoalState.COMPLETED and goal.completion_date and (now - goal.completion_date).days > 2:
             return False
         return True
-    
-    goals = list(DataInterface().load_data(user).goals.values())
-    goals = [goal for goal in goals if should_render(goal)]
+
+    goals = [goal for goal in all_goals.values() if should_render(goal)]
     goals.sort(key=lambda goal: goal.last_modified.timestamp(), reverse=True)
-    return goals
+    return goals, all_goals
 
 def _goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]]:
     """Convert a list of goals to dated goal blocks."""
@@ -95,12 +92,13 @@ def _completed_goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]
 @limiter.limit("2/second")
 def summary_goals():
     if not current_user.is_authenticated:
-        return render_template('summary_goals_page.html', dated_goal_blocks=[], has_more=False)
-    goals = _get_filtered_summary_goals(cur_user())
+        return render_template('summary_goals_page.html', dated_goal_blocks=[], all_goals={}, has_more=False)
+    goals, all_goals = _get_filtered_summary_goals(cur_user())
     paginated_goals = goals[:PAGE_SIZE]
     dated_goal_blocks = _goals_to_blocks(paginated_goals)
     return render_template('summary_goals_page.html',
                            dated_goal_blocks=dated_goal_blocks,
+                           all_goals=all_goals,
                            has_more=len(goals) > PAGE_SIZE)
 
 @todoist2_api.route('/completed_goals')
@@ -120,12 +118,12 @@ def completed_goals():
 @limiter.limit("2/second")
 def api_summary_goals_page():
     page = int(request.args.get('page', 0))
-    goals = _get_filtered_summary_goals(cur_user())
+    goals, all_goals = _get_filtered_summary_goals(cur_user())
     paginated_goals = goals[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
     goal_blocks = _goals_to_blocks(paginated_goals)
     has_more = (page + 1) * PAGE_SIZE < len(goals)
 
-    html = render_template('summary_goals.html', dated_goal_blocks=goal_blocks)
+    html = render_template('summary_goals.html', dated_goal_blocks=goal_blocks, all_goals=all_goals)
     return jsonify({'html': html, 'has_more': has_more})
 
 @todoist2_api.route('/api/completed_goals_page', methods=['GET'])

@@ -29,14 +29,21 @@ def new_goal():
         return get_default_redirect()
 
     description = from_req('description')
+    parent_id = request.form.get('parent_id')
 
     tld = DataInterface().load_data(cur_user())
     goal_id = 0 if not tld.goals else max(tld.goals.keys()) + 1
-    tld.goals[goal_id] = Goal(id=goal_id, 
-                              name=name, 
-                              state=GoalState.ACTIVE, 
-                              description=description,
-                              creation_date=datetime.now())
+    goal = Goal(id=goal_id,
+                name=name,
+                state=GoalState.ACTIVE,
+                description=description,
+                creation_date=datetime.now(),
+                parent=int(parent_id) if parent_id else None)
+    tld.goals[goal_id] = goal
+
+    if parent_id:
+        tld.goals[int(parent_id)].children.append(goal_id)
+
     DataInterface().save_data(tld, cur_user())
 
     return get_default_redirect()
@@ -115,7 +122,23 @@ def delete_goal():
 
     goal_id = int(req_data['goal_id'])
     tld = DataInterface().load_data(cur_user())
-    tld.goals.pop(goal_id)
+    goal = tld.goals[goal_id]
+
+    # Remove from parent's children list
+    if goal.parent is not None and goal.parent in tld.goals:
+        parent = tld.goals[goal.parent]
+        if goal_id in parent.children:
+            parent.children.remove(goal_id)
+
+    # Recursively delete all descendants
+    def delete_descendants(gid):
+        if gid not in tld.goals:
+            return
+        for child_id in list(tld.goals[gid].children):
+            delete_descendants(child_id)
+        tld.goals.pop(gid)
+
+    delete_descendants(goal_id)
     DataInterface().save_data(tld, cur_user())
 
     return get_default_redirect()

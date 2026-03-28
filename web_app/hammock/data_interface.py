@@ -42,6 +42,9 @@ class DataInterface(BaseDataInterface):
             return None
         return asset_path
 
+    def delete_user_data(self, user) -> None:
+        pass  # hammock has no per-user data
+
     def backup_data(self, backup_dir: Path) -> None:
         import shutil
         if self._content_dir.exists():

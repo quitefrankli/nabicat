@@ -30,8 +30,7 @@ jswipe_api = Blueprint(
 @flask_login.login_required
 def require_admin():
     if not flask_login.current_user.is_admin:
-        flask.flash('You must be an admin to access this page', category='error')
-        return flask.redirect(flask.url_for('home'))
+        flask.abort(403)
 
 
 @jswipe_api.context_processor

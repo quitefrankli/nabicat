@@ -117,13 +117,18 @@ class TestRapidAPIActiveJobsDB:
                     search_jobs('engineer', 'sydney')
 
 
+@pytest.fixture(scope='module', autouse=True)
+def setup_app():
+    app.config['TESTING'] = True
+    app.secret_key = 'test-secret-key'
+    from web_app.helpers import limiter, register_all_blueprints
+    limiter.enabled = False
+    if 'jswipe' not in app.blueprints:
+        register_all_blueprints(app)
+
+
 @pytest.fixture
 def client():
-    """Create a test client for the Flask app"""
-    app.config['TESTING'] = True
-    # Disable rate limiting for tests
-    from web_app.helpers import limiter
-    limiter.enabled = False
     with app.test_client() as client:
         yield client
 
