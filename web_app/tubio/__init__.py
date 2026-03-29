@@ -228,7 +228,6 @@ def redownload_audio(audio_metadata: AudioMetadata) -> None:
     
     logging.info(f"Redownloaded audio for YT video ID: {audio_metadata.yt_video_id}")
 
-@limiter.limit("100 per second") # TODO: only 1 should be loaded at a time temporary fix
 @login_required
 @tubio_api.route('/audio/<int:crc>')
 def serve_audio(crc: int):
@@ -305,6 +304,23 @@ def serve_audio(crc: int):
     response.set_etag(str(crc))
 
     return response
+
+
+@tubio_api.route('/audio/<int:crc>/download')
+@login_required
+def download_audio(crc: int):
+    try:
+        metadata = DataInterface().get_audio_metadata(crc=crc)
+    except ValueError:
+        flash(f'Error: no such audio: {crc}', 'error')
+        return redirect(url_for('.index'))
+
+    if not metadata.is_cached:
+        redownload_audio(metadata)
+
+    file_path = DataInterface().get_audio_path(crc)
+    safe_title = "".join(c for c in metadata.title if c.isalnum() or c in " _-").strip() or str(crc)
+    return send_file(file_path, mimetype='audio/mp4', as_attachment=True, download_name=f"{safe_title}.m4a")
 
 
 @tubio_api.route('/thumbnail/<int:crc>')
