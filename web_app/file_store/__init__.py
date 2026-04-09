@@ -2,7 +2,7 @@ import logging
 
 from werkzeug.datastructures import FileStorage
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash
-from flask_login import login_required, current_user
+from flask_login import login_required
 import flask_login
 
 from web_app.helpers import cur_user
@@ -20,6 +20,13 @@ file_store_api = Blueprint(
 )
 
 
+@file_store_api.before_request
+@login_required
+def before_request():
+    # This ensures all routes in this blueprint require login
+    pass
+
+
 @file_store_api.context_processor
 def inject_app_name():
     return dict(app_name='File Store')
@@ -27,13 +34,12 @@ def inject_app_name():
 
 @file_store_api.route('/')
 def index():
-    if not current_user.is_authenticated:
-        return render_template("file_store_index.html", files=[], storage_info=None, mode='list')
     user = cur_user()
     data_interface = DataInterface()
     mode = request.args.get('mode', 'list')
     files = data_interface.list_files_with_metadata(user) if user else []
 
+    # Calculate storage info for all users
     storage_info = None
     if user:
         total_used = data_interface.get_total_storage_size(user)
@@ -53,7 +59,6 @@ def index():
 
 
 @file_store_api.route('/upload', methods=['POST'])
-@login_required
 @limiter.limit(
     "10/second",
     key_func=lambda: flask_login.current_user.id,
@@ -107,7 +112,6 @@ def upload_file():
 
 
 @file_store_api.route('/download/<filename>')
-@login_required
 def download_file(filename: str):
     file_path = DataInterface().get_file_path(filename, cur_user())
     response = send_file(file_path, as_attachment=True)
@@ -124,7 +128,6 @@ def download_file(filename: str):
 
 
 @file_store_api.route('/thumbnail/<filename>')
-@login_required
 @limiter.limit("30/second", key_func=lambda: flask_login.current_user.id)
 def thumbnail(filename: str):
     """Serve a thumbnail for an image file."""
@@ -145,14 +148,12 @@ def thumbnail(filename: str):
 
 
 @file_store_api.route('/files_list')
-@login_required
 def files_list():
     files = DataInterface().list_files(cur_user())
     return {'files': files}
 
 
 @file_store_api.route('/delete/<filename>', methods=['POST'])
-@login_required
 def delete_file(filename):
     try:
         DataInterface().delete_file(filename, cur_user())
@@ -166,7 +167,6 @@ def delete_file(filename):
 
 
 @file_store_api.route('/delete_all', methods=['POST'])
-@login_required
 def delete_all_files():
     user = cur_user()
     data_interface = DataInterface()

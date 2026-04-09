@@ -5,7 +5,7 @@ import time
 from typing import *
 from pathlib import Path
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash, Response
-from flask_login import login_required, current_user
+from flask_login import login_required
 
 from web_app.tubio.data_interface import DataInterface, AudioMetadata
 from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, get_download_progress, clear_download_progress
@@ -22,6 +22,13 @@ tubio_api = Blueprint(
     static_folder='static',
     url_prefix='/tubio'
 )
+
+
+@tubio_api.before_request
+@login_required
+def before_request():
+    # This ensures all routes in this blueprint require login
+    pass
 
 
 @tubio_api.context_processor
@@ -53,12 +60,9 @@ def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool,
 
 @tubio_api.route('/')
 def index():
-    if not current_user.is_authenticated:
-        return render_template("index.html", playlists=[])
     return render_template("index.html", playlists=get_playlists_data(cur_user()))
 
 @tubio_api.route('/search', methods=['GET', 'POST'])
-@login_required
 def search():
     results = []
     query = ''
@@ -87,7 +91,6 @@ def search():
     return redirect(url_for('.index') + '#search')
 
 @tubio_api.route('/youtube_download', methods=['POST'])
-@login_required
 def youtube_download():
     req = parse_request(require_login=False, require_admin=False)
     video_id = req.get('video_id')
@@ -134,7 +137,6 @@ def youtube_download():
 
 
 @tubio_api.route('/download_progress/<video_id>')
-@login_required
 def download_progress(video_id: str):
     def generate():
         while True:
@@ -161,7 +163,6 @@ def download_progress(video_id: str):
 
 
 @tubio_api.route('/upload', methods=['POST'])
-@login_required
 @limiter.limit("20 per minute")
 def upload_audio():
     try:
@@ -228,7 +229,7 @@ def redownload_audio(audio_metadata: AudioMetadata) -> None:
     
     logging.info(f"Redownloaded audio for YT video ID: {audio_metadata.yt_video_id}")
 
-@login_required
+@limiter.limit("100 per second") # TODO: only 1 should be loaded at a time temporary fix
 @tubio_api.route('/audio/<int:crc>')
 def serve_audio(crc: int):
     try:
@@ -324,7 +325,6 @@ def download_audio(crc: int):
 
 
 @tubio_api.route('/thumbnail/<int:crc>')
-@login_required
 def serve_thumbnail(crc: int):
     thumbnail_path = DataInterface().get_thumbnail_path(crc)
     if not thumbnail_path.exists():
@@ -342,7 +342,6 @@ def serve_thumbnail(crc: int):
 
 
 @tubio_api.route('/delete_audio/<int:crc>', methods=['POST'])
-@login_required
 def delete_audio(crc: int):
     try:
         user = cur_user()
@@ -378,7 +377,6 @@ def delete_audio(crc: int):
     return redirect(url_for('.index'))
 
 @tubio_api.route('/create_playlist', methods=['POST'])
-@login_required
 @limiter.limit("10 per minute")
 def create_playlist():
     try:
@@ -409,7 +407,6 @@ def create_playlist():
     return redirect(url_for('.index'))
 
 @tubio_api.route('/move_tracks_to_playlist', methods=['POST'])
-@login_required
 @limiter.limit("20 per minute")
 def move_tracks_to_playlist():
     try:
@@ -447,7 +444,6 @@ def move_tracks_to_playlist():
 
 
 @tubio_api.route('/delete_selected_songs', methods=['POST'])
-@login_required
 @limiter.limit("10 per minute")
 def delete_selected_songs():
     try:
@@ -474,7 +470,6 @@ def delete_selected_songs():
     return redirect(url_for('.index'))
 
 @tubio_api.route('/delete_playlist', methods=['POST'])
-@login_required
 @limiter.limit("10 per minute")
 def delete_playlist():
     try:
