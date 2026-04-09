@@ -14,8 +14,11 @@ from web_app.config import ConfigManager
 from web_app.errors import APIError
 
 
+from web_app.app import csrf
+
 GITHUB_EVENT_HEADER = "X-GitHub-Event"
 api_api = Blueprint("api_api", __name__, url_prefix="/api")
+csrf.exempt(api_api)
 
 
 def _handle_api_error(func):
@@ -135,7 +138,7 @@ def api_backup():
 def api_push():
     logging.info(f"Received push request from {get_ip()}")
 
-    request_body = parse_request(require_login=True, require_admin=False)
+    request_body = parse_request(require_login=True, require_admin=True)
     name = _get_required_field(request_body, "name")
     data = _get_required_field(request_body, "data")
 
@@ -158,7 +161,7 @@ def api_push():
 def api_pull():
     logging.info(f"Received pull request from {get_ip()}")
 
-    request_body = parse_request(require_login=True, require_admin=False)
+    request_body = parse_request(require_login=True, require_admin=True)
     name = _get_required_field(request_body, "name")
 
     username = request_body["username"]
@@ -183,7 +186,7 @@ def api_pull():
 def api_delete():
     logging.info(f"Received delete request from {get_ip()}")
 
-    request_body = parse_request(require_login=True, require_admin=False)
+    request_body = parse_request(require_login=True, require_admin=True)
     name = _get_required_field(request_body, "name")
 
     username = request_body["username"]
@@ -201,7 +204,7 @@ def api_delete():
 def api_list():
     logging.info(f"Received list request from {get_ip()}")
 
-    request_body = parse_request(require_login=True, require_admin=False)
+    request_body = parse_request(require_login=True, require_admin=True)
     username = request_body["username"]
     user = DataInterface().load_users()[username]
     files = APIDataInterface().list_files(user)

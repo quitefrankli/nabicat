@@ -12,6 +12,7 @@ def app():
         "TESTING": True,
         "DEBUG": True,
         "SECRET_KEY": "test-secret-key",
+        "WTF_CSRF_ENABLED": False,
     })
     yield flask_app
 

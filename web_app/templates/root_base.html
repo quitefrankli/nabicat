@@ -32,6 +32,9 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='cat.png') }}">
     <meta name="format-detection" content="telephone=no, email=no">
     
+    <!-- CSRF token for all forms -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <!-- Custom Page Scripts -->
     {% block scripts %}{% endblock %}
     

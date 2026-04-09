@@ -20,7 +20,7 @@ app = main_module.app
 def client():
     """Create a test client for the Flask app"""
     app.config['TESTING'] = True
-    # Disable rate limiting for tests
+    app.config['WTF_CSRF_ENABLED'] = False
     limiter.enabled = False
     with app.test_client() as client:
         yield client

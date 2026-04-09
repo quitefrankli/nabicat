@@ -162,11 +162,15 @@ def before_request():
 
     message = f"Processing request: client={get_ip()}, path={request.path}, method={request.method}"
 
+    _REDACTED_KEYS = {'password', 'csrf_token', 'cookie', 'secret', 'token'}
     if request.method == 'POST':
         if request.is_json:
-            message += f", json={request.get_json()}"
+            raw = request.get_json(silent=True) or {}
+            safe = {k: ('***' if k.lower() in _REDACTED_KEYS else v) for k, v in raw.items()}
+            message += f", json={safe}"
         elif request.form:
-            message += f", form={request.form}"
+            safe = {k: ('***' if k.lower() in _REDACTED_KEYS else v) for k, v in request.form.items()}
+            message += f", form={safe}"
 
     if len(message) > 500:
         message = message[:500] + f"... (truncated {len(message) - 500} characters)"

@@ -120,6 +120,7 @@ class TestRapidAPIActiveJobsDB:
 @pytest.fixture(scope='module', autouse=True)
 def setup_app():
     app.config['TESTING'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
     app.secret_key = 'test-secret-key'
     from web_app.helpers import limiter, register_all_blueprints
     limiter.enabled = False
@@ -183,15 +184,14 @@ class TestJSwipeAdminAccess:
 
         assert response.status_code == 200
 
-    def test_index_redirects_non_admin(self, client, non_admin_auth_mock):
-        """Test that non-admin is redirected from JSwipe index page"""
+    def test_index_blocked_for_non_admin(self, client, non_admin_auth_mock):
+        """Test that non-admin gets 403 from JSwipe"""
         with client.session_transaction() as sess:
             sess['_user_id'] = non_admin_auth_mock.id
 
         response = client.get('/jswipe/')
 
-        assert response.status_code == 302  # Redirect
-        assert response.location == '/'
+        assert response.status_code == 403
 
     def test_api_job_action_accessible_by_admin(self, client, admin_auth_mock):
         """Test that admin can access job action API"""
@@ -208,15 +208,14 @@ class TestJSwipeAdminAccess:
         # Should not be redirected (may fail for other reasons, but not 302)
         assert response.status_code != 302
 
-    def test_api_job_action_redirects_non_admin(self, client, non_admin_auth_mock):
-        """Test that non-admin is redirected from job action API"""
+    def test_api_job_action_blocked_for_non_admin(self, client, non_admin_auth_mock):
+        """Test that non-admin gets 403 from job action API"""
         with client.session_transaction() as sess:
             sess['_user_id'] = non_admin_auth_mock.id
 
         response = client.post('/jswipe/api/job/job123/save', json={})
 
-        assert response.status_code == 302  # Redirect
-        assert response.location == '/'
+        assert response.status_code == 403
 
     def test_requires_login_for_index(self, client):
         """Test that index page requires login"""

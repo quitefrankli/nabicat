@@ -21,6 +21,7 @@ from web_app.todoist2.app_data import Goal, GoalState, Recurrence, Goals
 def client():
     """Create a test client for the Flask app"""
     app.config['TESTING'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
     with app.test_client() as client:
         yield client
 

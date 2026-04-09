@@ -1,8 +1,11 @@
 from datetime import timedelta
 from flask import Flask
 from flask_bootstrap import Bootstrap5
+from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Session configuration for longer-lasting sessions
 # 30 days session lifetime - especially helpful for mobile/iOS users
@@ -14,3 +17,4 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent XSS access to session co
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection while allowing normal navigation
 
 bootstrap = Bootstrap5(app)
+csrf = CSRFProtect(app)
