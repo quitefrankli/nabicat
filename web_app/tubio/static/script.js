@@ -125,7 +125,9 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const formData = new FormData();
                 formData.append('youtube_query', query);
-                
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+                if (csrfToken) formData.append('csrf_token', csrfToken);
+
                 const response = await fetch('/tubio/search', {
                     method: 'POST',
                     body: formData,
@@ -196,6 +198,8 @@ async function downloadVideo(videoId, title, buttonElement) {
         const formData = new FormData();
         formData.append('video_id', videoId);
         formData.append('title', title);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) formData.append('csrf_token', csrfToken);
 
         eventSource = new EventSource(`/tubio/download_progress/${videoId}`);
         eventSource.onmessage = (event) => {
