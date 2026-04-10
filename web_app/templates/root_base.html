@@ -118,5 +118,17 @@
     </div>
     
 
+    <script>
+      (function() {
+        var token = document.querySelector('meta[name="csrf-token"]').content;
+        document.querySelectorAll('form').forEach(function(f) {
+          if (f.method && f.method.toLowerCase() !== 'get' && !f.querySelector('input[name="csrf_token"]')) {
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'csrf_token'; i.value = token;
+            f.appendChild(i);
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
