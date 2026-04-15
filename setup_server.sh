@@ -60,9 +60,9 @@ function run_server_side()
 		
 		# OCI Ubuntu images ship with iptables rules that block incoming traffic at the OS level (separate from the security list)
 	  	sudo apt install -y iptables-persistent
-  		sudo netfilter-persistent save
-		sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT                        
+		sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
 		sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+		sudo netfilter-persistent save
 
 		mamba install -y anaconda::cryptography
 		mamba install -y certbot
