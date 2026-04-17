@@ -292,6 +292,9 @@ async function updateContent(data) {
 
                 // Re-initialize lazy loading for thumbnails
                 initializeLazyThumbnails();
+
+                // Re-initialize tooltips
+                initializeTooltips();
             }
         }
     } catch (error) {
@@ -945,6 +948,63 @@ function getCurrentlyPlayingTrack() {
     return currentTrackCrc;
 }
 
+async function resyncTrack(crc, buttonElement) {
+    const originalHTML = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Syncing...';
+
+    // Dispose tooltip so it doesn't linger while disabled
+    const tooltip = bootstrap.Tooltip.getInstance(buttonElement);
+    if (tooltip) tooltip.dispose();
+
+    try {
+        const formData = new FormData();
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) formData.append('csrf_token', csrfToken);
+
+        const response = await fetch(`/tubio/resync/${crc}`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showNotification(data.message, 'success');
+            buttonElement.innerHTML = '<i class="bi bi-check-circle me-1"></i>Done';
+            // Reload the audio element to pick up the new file
+            const audio = document.getElementById(`audio-${crc}`);
+            if (audio) {
+                audio.load();
+            }
+            setTimeout(() => {
+                buttonElement.disabled = false;
+                buttonElement.innerHTML = originalHTML;
+                new bootstrap.Tooltip(buttonElement);
+            }, 2000);
+        } else {
+            throw new Error(data.error || 'Resync failed');
+        }
+    } catch (error) {
+        console.error('Error resyncing track:', error);
+        showNotification(error.message || 'Error resyncing track', 'error');
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalHTML;
+        new bootstrap.Tooltip(buttonElement);
+    }
+}
+
+function initializeTooltips() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        if (!bootstrap.Tooltip.getInstance(el)) {
+            new bootstrap.Tooltip(el);
+        }
+    });
+}
+
 // Lazy load thumbnails and audio metadata when track accordion is expanded
 function initializeLazyThumbnails() {
     document.querySelectorAll('.accordion-collapse').forEach(collapse => {
@@ -958,6 +1018,12 @@ function initializeLazyThumbnails() {
             if (audio && audio.readyState === 0) {
                 audio.load();
             }
+            // Initialize tooltips within this expanded section
+            this.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                if (!bootstrap.Tooltip.getInstance(el)) {
+                    new bootstrap.Tooltip(el);
+                }
+            });
         }, { once: true });
     });
 }
@@ -972,6 +1038,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize lazy loading for thumbnails
     initializeLazyThumbnails();
+
+    // Initialize Bootstrap tooltips
+    initializeTooltips();
 
     // Initialize scrubber event listeners via delegation
     document.addEventListener('input', function(e) {

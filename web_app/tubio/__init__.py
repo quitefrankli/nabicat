@@ -341,6 +341,40 @@ def serve_thumbnail(crc: int):
     return response
 
 
+@tubio_api.route('/resync/<int:crc>', methods=['POST'])
+@limiter.limit("5 per minute")
+def resync_audio(crc: int):
+    is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+               'application/json' in request.headers.get('Accept', ''))
+    if not is_ajax:
+        flash("Invalid request.", 'error')
+        return redirect(url_for('.index'))
+
+    try:
+        metadata = DataInterface().get_audio_metadata(crc=crc)
+    except ValueError:
+        return {'error': 'Audio not found'}, 404
+
+    if not metadata.yt_video_id:
+        return {'error': 'Track was not downloaded from YouTube'}, 400
+
+    try:
+        # Delete existing file to force redownload
+        file_path = DataInterface().get_audio_path(crc)
+        if file_path.exists():
+            file_path.unlink()
+        metadata.is_cached = False
+        DataInterface().save_audio_metadata(metadata)
+
+        AudioDownloader.download_youtube_audio(
+            metadata.yt_video_id, metadata.title, cur_user(), crc=metadata.crc
+        )
+        return {'success': True, 'message': f'Resynced: {metadata.title}'}
+    except Exception:
+        logging.exception("Error resyncing audio")
+        return {'error': 'Error resyncing audio'}, 500
+
+
 @tubio_api.route('/delete_audio/<int:crc>', methods=['POST'])
 def delete_audio(crc: int):
     try:
