@@ -28,7 +28,7 @@ def login():
     if username in existing_users and password == existing_users[username].password:
         flask_login.login_user(existing_users[username], remember=True)
         # Validate next_url to prevent open redirect vulnerabilities
-        if next_url and next_url.startswith('/'):
+        if next_url and next_url.startswith('/') and not next_url.startswith('//'):
             return flask.redirect(next_url)
         return flask.redirect(flask.url_for('home'))
     else:

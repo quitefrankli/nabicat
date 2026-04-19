@@ -38,7 +38,14 @@ function displaySearchResults(results) {
     
     results.forEach((video, index) => {
         const isDisabled = video.cached ? 'disabled style="background-color: #adb5bd; border-color: #adb5bd;"' : '';
-        const truncatedTitle = video.title.length > 60 ? video.title.substring(0, 60) + '...' : video.title;
+        const safeTitle = escapeHtml(video.title);
+        const truncatedTitle = video.title.length > 60 ? escapeHtml(video.title.substring(0, 60) + '...') : safeTitle;
+        const safeDesc = escapeHtml(video.description);
+        const safeViews = escapeHtml(String(video.view_count));
+        const safePublished = escapeHtml(String(video.published));
+        const safeLength = escapeHtml(String(video.length));
+        const safeVideoId = escapeHtml(video.video_id);
+        const safeThumbnail = video.thumbnail_url ? escapeHtml(video.thumbnail_url) : '';
 
         html += `
             <div class="accordion-item mb-3 border-0 shadow-sm">
@@ -53,7 +60,7 @@ function displaySearchResults(results) {
                         <i class="bi bi-youtube me-2"></i>
                         <div class="d-flex justify-content-between align-items-center w-100 me-3">
                             <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${truncatedTitle}</span>
-                            <small class="badge bg-secondary ms-2">${video.length}</small>
+                            <small class="badge bg-secondary ms-2">${safeLength}</small>
                         </div>
                     </button>
                 </h2>
@@ -63,33 +70,33 @@ function displaySearchResults(results) {
                     <div class="accordion-body bg-light">
                         <div class="row">
                             <div class="col-md-4 mb-3 text-center">
-                                ${video.thumbnail_url ? `<img src="${video.thumbnail_url}" alt="Thumbnail" class="img-fluid rounded shadow-sm" style="max-height: 180px;">` : ''}
+                                ${safeThumbnail ? `<img src="${safeThumbnail}" alt="Thumbnail" class="img-fluid rounded shadow-sm" style="max-height: 180px;">` : ''}
                             </div>
                             <div class="col-md-8">
                                 <div class="mb-3">
                                     <h6 class="text-primary mb-2">Full Title:</h6>
-                                    <p class="text-dark fw-medium">${video.title}</p>
+                                    <p class="text-dark fw-medium">${safeTitle}</p>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-12 mb-3">
                                         <h6 class="text-primary mb-2">Description:</h6>
-                                        <p class="text-muted small" style="max-height: 100px; overflow-y: auto;">${video.description}</p>
+                                        <p class="text-muted small" style="max-height: 100px; overflow-y: auto;">${safeDesc}</p>
                                     </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-6">
                                         <h6 class="text-primary mb-2">Views:</h6>
-                                        <p class="text-dark">${video.view_count}</p>
+                                        <p class="text-dark">${safeViews}</p>
                                     </div>
                                     <div class="col-6">
                                         <h6 class="text-primary mb-2">Published:</h6>
-                                        <p class="text-dark">${video.published}</p>
+                                        <p class="text-dark">${safePublished}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div class="text-center mt-3">
-                            <button onclick="downloadVideo('${video.video_id}', '${video.title.replace(/'/g, "\\'")}', this)"
+                            <button onclick="downloadVideo('${safeVideoId}', '${safeTitle.replace(/'/g, "\\'")}', this)"
                                     class="btn btn-primary" ${isDisabled}>
                                 <i class="bi bi-download me-1"></i>Add To Favourites
                             </button>
@@ -145,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const resultsDiv = document.getElementById('search-results');
                     if (resultsDiv) {
                         const errorMsg = data.error || 'Search failed. Please try again.';
-                        resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${errorMsg}</h5></div>`;
+                        resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${escapeHtml(errorMsg)}</h5></div>`;
                     }
                 }
             } catch (error) {
@@ -783,7 +790,7 @@ function showNotification(message, type = 'info') {
     notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
     notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
     notification.innerHTML = `
-        ${message}
+        ${escapeHtml(message)}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
     

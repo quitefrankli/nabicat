@@ -18,8 +18,7 @@
     <!-- {{ app_name }} Honeydew Theme -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='cache-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-    
+
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='cat.ico') }}">
     
@@ -118,32 +117,6 @@
     </div>
     
 
-    <script>
-      (function() {
-        var token = document.querySelector('meta[name="csrf-token"]').content;
-        // Inject into existing forms
-        document.querySelectorAll('form').forEach(function(f) {
-          if (f.method && f.method.toLowerCase() !== 'get' && !f.querySelector('input[name="csrf_token"]')) {
-            var i = document.createElement('input');
-            i.type = 'hidden'; i.name = 'csrf_token'; i.value = token;
-            f.appendChild(i);
-          }
-        });
-        // Intercept fetch so all JS POST/PUT/DELETE requests include the token
-        var _fetch = window.fetch;
-        window.fetch = function(url, opts) {
-          opts = opts || {};
-          var m = (opts.method || 'GET').toUpperCase();
-          if (m !== 'GET' && m !== 'HEAD') {
-            if (opts.headers instanceof Headers) {
-              if (!opts.headers.has('X-CSRFToken')) opts.headers.set('X-CSRFToken', token);
-            } else {
-              opts.headers = Object.assign({'X-CSRFToken': token}, opts.headers || {});
-            }
-          }
-          return _fetch.call(this, url, opts);
-        };
-      })();
-    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
   </body>
 </html>

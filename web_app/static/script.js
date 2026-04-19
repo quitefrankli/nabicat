@@ -1,49 +1,77 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    if (!csrfToken) return;
+// HTML escaping for safe DOM insertion
+function escapeHtml(str) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(str));
+    return d.innerHTML;
+}
 
-    // Inject hidden CSRF field into all POST forms
-    document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+// CSRF protection — runs immediately to patch fetch/XHR before subpage scripts
+(function() {
+    var token = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (!token) return;
+
+    function injectCsrfField(form) {
         if (!form.querySelector('input[name="csrf_token"]')) {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'csrf_token';
-            input.value = csrfToken;
-            form.appendChild(input);
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'csrf_token'; i.value = token;
+            form.appendChild(i);
         }
-    });
+    }
 
-    // Also observe dynamically added forms
-    new MutationObserver(function(mutations) {
-        mutations.forEach(function(m) {
-            m.addedNodes.forEach(function(node) {
-                if (node.nodeType !== 1) return;
-                var forms = node.tagName === 'FORM' ? [node] : node.querySelectorAll ? node.querySelectorAll('form[method="post"], form[method="POST"]') : [];
-                forms.forEach(function(form) {
-                    if (!form.querySelector('input[name="csrf_token"]')) {
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = 'csrf_token';
-                        input.value = csrfToken;
-                        form.appendChild(input);
-                    }
+    function isNonGetForm(f) {
+        return f.method && f.method.toLowerCase() !== 'get';
+    }
+
+    // Inject into existing forms once DOM is ready
+    function injectExistingForms() {
+        document.querySelectorAll('form').forEach(function(f) {
+            if (isNonGetForm(f)) injectCsrfField(f);
+        });
+        // Observe dynamically added forms
+        new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                m.addedNodes.forEach(function(node) {
+                    if (node.nodeType !== 1) return;
+                    var forms = node.tagName === 'FORM' ? [node] : node.querySelectorAll('form[method="post"], form[method="POST"]');
+                    forms.forEach(injectCsrfField);
                 });
             });
-        });
-    }).observe(document.body, { childList: true, subtree: true });
+        }).observe(document.body, { childList: true, subtree: true });
+    }
 
-    // Add CSRF header to fetch requests
-    const originalFetch = window.fetch;
-    window.fetch = function(url, options) {
-        options = options || {};
-        if (options.method && options.method.toUpperCase() !== 'GET') {
-            options.headers = options.headers || {};
-            if (options.headers instanceof Headers) {
-                if (!options.headers.has('X-CSRFToken')) options.headers.set('X-CSRFToken', csrfToken);
+    if (document.body) {
+        injectExistingForms();
+    } else {
+        document.addEventListener('DOMContentLoaded', injectExistingForms);
+    }
+
+    // Intercept fetch
+    var _fetch = window.fetch;
+    window.fetch = function(url, opts) {
+        opts = opts || {};
+        var m = (opts.method || 'GET').toUpperCase();
+        if (m !== 'GET' && m !== 'HEAD') {
+            if (opts.headers instanceof Headers) {
+                if (!opts.headers.has('X-CSRFToken')) opts.headers.set('X-CSRFToken', token);
             } else {
-                if (!options.headers['X-CSRFToken']) options.headers['X-CSRFToken'] = csrfToken;
+                opts.headers = Object.assign({'X-CSRFToken': token}, opts.headers || {});
             }
         }
-        return originalFetch.call(this, url, options);
+        return _fetch.call(this, url, opts);
     };
-});
+
+    // Intercept XMLHttpRequest
+    var _xhrOpen = XMLHttpRequest.prototype.open;
+    var _xhrSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method) {
+        this._csrfMethod = method;
+        return _xhrOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function() {
+        var m = (this._csrfMethod || 'GET').toUpperCase();
+        if (m !== 'GET' && m !== 'HEAD') {
+            this.setRequestHeader('X-CSRFToken', token);
+        }
+        return _xhrSend.apply(this, arguments);
+    };
+})();
