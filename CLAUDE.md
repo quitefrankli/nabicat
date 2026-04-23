@@ -20,5 +20,8 @@
 
 * Project Architecture:
     - this project contains a collection of smaller subapps/subpages under web_app/ all of which share a similar ui/ux theme and share the same domain and host
+    - Each subapp is a Flask Blueprint with its own templates/ and static/ folders
+    - CSS and JS must live in the subapp's static/ folder (e.g. `assistant/static/assistant.css`), never inline in HTML templates
+    - Link them via `{% block scripts %}` using `url_for('.static', filename='...')`
 
 * start every new session with "CLAUDE.md read!"

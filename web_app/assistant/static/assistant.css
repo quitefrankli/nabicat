@@ -1,0 +1,45 @@
+#chat-history { scroll-behavior: smooth; }
+
+.msg-bubble {
+  max-width: 80%;
+  border-radius: 16px;
+  padding: 0.6rem 1rem;
+  font-size: 0.925rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg-user {
+  align-self: flex-end;
+  background: var(--bs-primary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.msg-assistant {
+  align-self: flex-start;
+  background: rgba(135,168,120,0.12);
+  border: 1px solid rgba(135,168,120,0.25);
+  color: var(--bs-body-color);
+  border-bottom-left-radius: 4px;
+}
+.msg-tool {
+  align-self: flex-start;
+  max-width: 90%;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+.tool-header {
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--bs-secondary-color);
+}
+.tool-body {
+  padding: 0 0.75rem 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

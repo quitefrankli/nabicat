@@ -1,0 +1,37 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block navbar_brand %}Assistant{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="{{ url_for('.static', filename='assistant.css') }}">
+<script defer src="{{ url_for('.static', filename='assistant.js') }}"></script>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid mt-3" style="max-width: 900px;">
+  <div class="card border-0 shadow-soft d-flex flex-column" style="height: calc(100vh - 120px);">
+
+    <!-- Chat history -->
+    <div id="chat-history" class="flex-grow-1 overflow-y-auto p-3" style="display:flex; flex-direction:column; gap:0.75rem;">
+      <div class="text-muted text-center small fst-italic mt-auto pt-3" id="empty-hint">
+        Send a message to start chatting with Claude.
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="border-top p-3">
+      <div id="tool-status" class="text-muted small mb-2" style="display:none;">
+        <i class="bi bi-terminal me-1"></i><span id="tool-status-text"></span>
+      </div>
+      <div class="d-flex gap-2">
+        <textarea id="chat-input" class="form-control" rows="2"
+          placeholder="Ask Claude to help with code, run git commands, etc."
+          style="resize:none;"></textarea>
+        <button id="send-btn" class="btn btn-primary px-3" onclick="sendMessage()">
+          <i class="bi bi-send-fill"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

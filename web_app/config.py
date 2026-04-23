@@ -35,6 +35,13 @@ class ConfigManager:
         self.todoist2_default_page_size = 8
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
         self.smtp_port = 587
+        self.project_dir = Path.cwd()
+
+        # Assistant
+        self.assistant_meridian_default_port = 3456
+        self.assistant_meridian_url = f"http://127.0.0.1:{self.assistant_meridian_default_port}/v1/messages"
+        self.assistant_model = "claude-sonnet-4-5"
+        self.assistant_max_tokens = 4096
 
     @property
     def project_name(self) -> str:

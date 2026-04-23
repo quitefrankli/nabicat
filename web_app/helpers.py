@@ -53,6 +53,7 @@ def register_all_blueprints(app):
     from web_app.jswipe import jswipe_api
     from web_app.proxy import proxy_api
     from web_app.hammock import hammock_api
+    from web_app.assistant import assistant_api
 
     blueprints = [
         todoist2_api,
@@ -65,6 +66,7 @@ def register_all_blueprints(app):
         jswipe_api,
         proxy_api,
         hammock_api,
+        assistant_api,
     ]
 
     for blueprint in blueprints:
