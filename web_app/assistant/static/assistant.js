@@ -75,12 +75,19 @@ async function sendMessage() {
       appendToolBlock(tc.command, tc.output);
     }
 
+    if (data.error) {
+      appendBubble('assistant', 'Error: ' + data.error);
+      return;
+    }
+
     const last = messages[messages.length - 1];
     if (last && last.role === 'assistant') {
       const text = Array.isArray(last.content)
         ? last.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
         : (last.content || '').toString().trim();
-      if (text) appendBubble('assistant', text);
+      appendBubble('assistant', text || '(no response)');
+    } else {
+      appendBubble('assistant', '(no response)');
     }
   } catch (e) {
     appendBubble('assistant', 'Error: ' + e.message);
