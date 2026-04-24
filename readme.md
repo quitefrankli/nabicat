@@ -62,6 +62,34 @@ Make sure to replace the email with your own for certbot
 `ssh nabicat.site -t "ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && git clone git@github.com:quitefrankli/nabicat.git && cd nabicat && source setup_server.sh && CERTBOT_EMAIL=your@email.com run_server_side"`
 
 
+### Systemd Services
+
+`update_server.sh` generates and manages two systemd units:
+
+* `nabicat.service` — the gunicorn web app
+* `meridian.service` — the Meridian LLM proxy used by `/assistant`
+
+sudo systemctl status nabicat meridian
+
+### Logs
+
+stdout is captured by journald
+
+```bash
+journalctl -u nabicat -f      # for stdout/stderr from update_server.sh bash script
+journalctl -u meridian -f     # live meridian logs
+```
+
+### Claude Login (first-time `/assistant` setup)
+
+Meridian proxies requests to the `claude` CLI, which needs to be authenticated once on the server as the same user the service runs under (whoever ran `setup_server.sh`):
+
+```bash
+claude login
+sudo systemctl restart meridian
+```
+
+
 ### Misc
 
 to bring down the server
@@ -72,7 +100,7 @@ to bring down the server
 
 a. simply push from main branch, force push also works too
 b. on main branch run - `python scripts/api_helper.py update`
-c. run on server - `bash update_server.sh &> logs/shell_logs.log &`
+c. run on server - `bash update_server.sh`
 
 ## Renewing Cert
 

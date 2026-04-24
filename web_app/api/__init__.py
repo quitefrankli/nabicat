@@ -43,7 +43,7 @@ def _get_required_field(request_body: dict, field: str) -> str:
 
 def update_server():
     logging.info(f"Updating server...")
-    subprocess.Popen("bash update_server.sh &>> logs/shell_logs.log", shell=True, close_fds=True)
+    subprocess.Popen("bash update_server.sh", shell=True, close_fds=True)
 
 def handle_github_webhook():
     # for the webhook, login creds are supplied in the authorization header
@@ -106,8 +106,8 @@ def api_update():
 
     # in order to prevent any issues with piping to bash, we will convert it to base64
     encoded_patch = base64.b64encode(patch.encode('utf-8')).decode('utf-8')
-    subprocess.Popen(f"bash update_server.sh -p \"{encoded_patch}\" &>> logs/shell_logs.log", 
-                     shell=True, 
+    subprocess.Popen(f"bash update_server.sh -p \"{encoded_patch}\"",
+                     shell=True,
                      close_fds=True)
     
     return jsonify({

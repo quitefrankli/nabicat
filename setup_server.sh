@@ -72,7 +72,8 @@ function run_server_side()
 	}
 
 	sudo apt update
-	sudo apt install -y nginx gunicorn ffmpeg
+	sudo apt install -y nginx gunicorn ffmpeg nodejs npm
+	sudo npm install -g @rynfar/meridian @anthropic-ai/claude-code
 	setup_conda
 	source "$HOME/miniforge3/bin/activate"
 	mamba install -y deno
@@ -82,6 +83,5 @@ function run_server_side()
 	# sudo systemctl status nginx
 	mamba clean -a -y # frees up some space
 
-	mkdir logs
-	bash update_server.sh &> logs/shell_logs.log &
+	bash update_server.sh
 )
