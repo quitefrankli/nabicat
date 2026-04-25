@@ -49,7 +49,7 @@ def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool,
     metadata = DataInterface().get_metadata()
     for playlist in user_metadata.get_playlists():
         playlist_data = []
-        for crc in playlist.audio_crcs:
+        for crc in reversed(playlist.audio_crcs):
             if crc in metadata.audios:
                 audio = metadata.audios[crc]
                 has_thumbnail = DataInterface().has_thumbnail(crc)
