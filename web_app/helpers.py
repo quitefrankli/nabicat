@@ -30,6 +30,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
     from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
     from web_app.hammock.data_interface import DataInterface as HammockDataInterface
+    from web_app.assistant.data_interface import DataInterface as AssistantDataInterface
 
     return [
         APIDataInterface,
@@ -39,6 +40,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
         TubioDataInterface,
         FileStoreDataInterface,
         HammockDataInterface,
+        AssistantDataInterface,
     ]
 
 

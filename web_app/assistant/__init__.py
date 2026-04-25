@@ -1,10 +1,10 @@
 import subprocess
 import requests as http_requests
-from pathlib import Path
 from flask import Blueprint, render_template, request, jsonify, abort
 from flask_login import login_required, current_user
 
 from web_app.config import ConfigManager
+from web_app.assistant.data_interface import DataInterface
 
 
 SYSTEM_PROMPT = (
@@ -88,12 +88,44 @@ def _call_meridian(messages: list) -> dict:
     return resp.json()
 
 
+@assistant_api.route('/chats', methods=['GET'])
+def list_chats():
+    di = DataInterface()
+    chats = di.list_chats(current_user)
+    return jsonify({"chats": [c.model_dump() for c in chats]})
+
+
+@assistant_api.route('/chats/<chat_id>', methods=['GET'])
+def get_chat(chat_id: str):
+    di = DataInterface()
+    chat = di.load_chat(current_user, chat_id)
+    if chat is None:
+        abort(404)
+    return jsonify(chat.model_dump())
+
+
+@assistant_api.route('/chats/<chat_id>', methods=['DELETE'])
+def delete_chat(chat_id: str):
+    DataInterface().delete_chat(current_user, chat_id)
+    return jsonify({"ok": True})
+
+
 @assistant_api.route('/chat', methods=['POST'])
 def chat():
     data = request.get_json()
-    messages = data.get('messages', [])
+    chat_id = data.get('chat_id')
     user_message = data.get('message', '').strip()
-    tool_call_log = []
+
+    di = DataInterface()
+    if chat_id:
+        stored = di.load_chat(current_user, chat_id)
+        if stored is None:
+            abort(404)
+    else:
+        stored = di.create_chat(current_user, title=user_message or "New chat")
+
+    messages = stored.messages
+    tool_call_log = stored.tool_calls
 
     if user_message:
         messages.append({"role": "user", "content": user_message})
@@ -103,7 +135,17 @@ def chat():
         try:
             result = _call_meridian(messages)
         except Exception as e:
-            return jsonify({"messages": messages, "tool_calls": tool_call_log, "error": str(e)}), 200
+            stored.messages = messages
+            stored.tool_calls = tool_call_log
+            di.save_chat(current_user, stored)
+            return jsonify({
+                "chat_id": stored.id,
+                "title": stored.title,
+                "messages": messages,
+                "tool_calls": tool_call_log,
+                "error": str(e),
+            }), 200
+
         content_blocks = result.get('content', [])
         stop_reason = result.get('stop_reason')
 
@@ -112,7 +154,6 @@ def chat():
         if stop_reason != 'tool_use':
             break
 
-        # Execute each tool_use block, send results back
         tool_results = []
         for block in content_blocks:
             if block.get('type') != 'tool_use':
@@ -138,4 +179,13 @@ def chat():
 
         messages.append({"role": "user", "content": tool_results})
 
-    return jsonify({"messages": messages, "tool_calls": tool_call_log})
+    stored.messages = messages
+    stored.tool_calls = tool_call_log
+    di.save_chat(current_user, stored)
+
+    return jsonify({
+        "chat_id": stored.id,
+        "title": stored.title,
+        "messages": messages,
+        "tool_calls": tool_call_log,
+    })
