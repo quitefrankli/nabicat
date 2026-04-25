@@ -12,11 +12,14 @@ const CACHE_STRATEGIES = {
     // Network-first with cache fallback (default)
     networkFirst: /\/(api|account)\//,
 
-    // Cache-first for static assets
-    cacheFirst: /\/(static|css|js|fonts)\//,
+    // Cache-first for truly immutable assets (fonts, etc.)
+    cacheFirst: /\/(fonts)\//,
 
-    // Cache with network update for downloads and audio
-    cacheWithUpdate: /\/(download|thumbnail|audio)\//,
+    // Cache with network update — used for app static assets (JS/CSS/images)
+    // and for heavy media (audio, downloads, thumbnails). Stale-while-revalidate
+    // means updates always reach the browser on the next visit without manual
+    // cache clears, while large files still load instantly from cache.
+    cacheWithUpdate: /\/(static|download|thumbnail|audio)\//,
 };
 
 self.addEventListener('install', (event) => {
