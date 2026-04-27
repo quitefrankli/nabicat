@@ -13,17 +13,30 @@
   height: calc(100vh - 110px);
   padding: 0.75rem;
   box-sizing: border-box;
+  position: relative;
 }
 
 .tubio-sidebar {
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(135, 168, 120, 0.2);
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(45, 74, 62, 0.08);
+  transition: transform 0.25s ease, opacity 0.2s ease, margin 0.25s ease, flex-basis 0.25s ease;
+}
+
+.tubio-sidebar-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(45, 74, 62, 0.35);
+  z-index: 49;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
 }
 
 .sidebar-header {
@@ -34,6 +47,45 @@
   background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sidebar-close-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.sidebar-toggle-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .sidebar-list {
@@ -185,18 +237,50 @@
   display: none;
 }
 
+/* Desktop: collapsed sidebar slides off the flex track */
+.tubio-layout.sidebar-collapsed .tubio-sidebar {
+  flex: 0 0 0;
+  margin-left: -1rem;
+  opacity: 0;
+  transform: translateX(-1rem);
+  pointer-events: none;
+}
+
+/* Mobile / narrow viewports: sidebar overlays the main panel */
 @media (max-width: 768px) {
   .tubio-layout {
-    flex-direction: column;
-    height: auto;
-  }
-  .tubio-sidebar {
-    flex: 0 0 auto;
-    max-height: 240px;
+    flex-direction: row;
+    height: calc(100vh - 110px);
   }
   .tubio-main {
-    flex: 1 1 auto;
-    min-height: 60vh;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .tubio-sidebar {
+    position: absolute;
+    top: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    width: min(85vw, 320px);
+    flex: 0 0 auto;
+    z-index: 50;
+    transform: translateX(0);
+    margin-left: 0;
+  }
+  .tubio-layout.sidebar-collapsed .tubio-sidebar {
+    flex: 0 0 auto;
+    margin-left: 0;
+    transform: translateX(calc(-100% - 0.75rem));
+    opacity: 0;
+    pointer-events: none;
+  }
+  .tubio-layout:not(.sidebar-collapsed) .tubio-sidebar-backdrop {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sidebar-close-btn {
+    display: inline-flex;
   }
 }
 

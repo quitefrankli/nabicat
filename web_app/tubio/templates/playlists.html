@@ -1,8 +1,12 @@
 {% if playlists %}
 <div class="tubio-layout">
+    <div class="tubio-sidebar-backdrop" onclick="closeSidebar()"></div>
     <aside class="tubio-sidebar">
         <div class="sidebar-header">
-            <i class="bi bi-collection-play me-2"></i>Your Library
+            <span><i class="bi bi-collection-play me-2"></i>Playlists</span>
+            <button type="button" class="sidebar-close-btn" onclick="closeSidebar()" title="Close">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
         <div class="sidebar-list" id="playlist-sidebar-list">
             {% for playlist_name, playlist_data in playlists %}

@@ -2,6 +2,9 @@
 <div class="playlist-panel" id="panel-{{ slug }}" data-playlist-name="{{ playlist_name }}">
     <div class="playlist-panel-header">
         <div class="playlist-panel-title">
+            <button type="button" class="sidebar-toggle-btn me-2" onclick="toggleSidebar()" title="Toggle playlists">
+                <i class="bi bi-list"></i>
+            </button>
             <i class="bi bi-music-note-list me-2"></i>
             <span>{{ playlist_name }}</span>
             <span class="badge bg-light ms-2" style="color: var(--hw-sage-dark, #6B8E5A);">{{ playlist_data|length }} songs</span>

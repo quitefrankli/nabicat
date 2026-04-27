@@ -290,6 +290,29 @@ async function updateContent(data) {
 }
 
 // Sidebar / panel selection
+function isMobileViewport() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function setSidebarCollapsed(collapsed) {
+    const layout = document.querySelector('.tubio-layout');
+    if (!layout) return;
+    layout.classList.toggle('sidebar-collapsed', collapsed);
+    try {
+        sessionStorage.setItem('tubioSidebarCollapsed', collapsed ? '1' : '0');
+    } catch (e) {}
+}
+
+function toggleSidebar() {
+    const layout = document.querySelector('.tubio-layout');
+    if (!layout) return;
+    setSidebarCollapsed(!layout.classList.contains('sidebar-collapsed'));
+}
+
+function closeSidebar() {
+    setSidebarCollapsed(true);
+}
+
 function selectPlaylist(slug) {
     const sidebar = document.getElementById('playlist-sidebar-list');
     if (sidebar) {
@@ -304,9 +327,23 @@ function selectPlaylist(slug) {
     if (emptyPanel) emptyPanel.classList.add('hidden');
 
     try { sessionStorage.setItem('tubioSelectedPlaylist', slug); } catch (e) {}
+
+    if (isMobileViewport()) closeSidebar();
 }
 
 function initializeSidebar() {
+    const layout = document.querySelector('.tubio-layout');
+    if (layout) {
+        let collapsed;
+        try {
+            const saved = sessionStorage.getItem('tubioSidebarCollapsed');
+            collapsed = saved === null ? isMobileViewport() : saved === '1';
+        } catch (e) {
+            collapsed = isMobileViewport();
+        }
+        layout.classList.toggle('sidebar-collapsed', collapsed);
+    }
+
     const sidebar = document.getElementById('playlist-sidebar-list');
     if (!sidebar) return;
 
@@ -322,7 +359,16 @@ function initializeSidebar() {
     } catch (e) {}
 
     if (!target) target = items[0];
+
+    // selectPlaylist may auto-close the sidebar on mobile; preserve the prior collapsed
+    // state by skipping autoclose during init.
+    const wasMobile = isMobileViewport();
+    const layoutEl = document.querySelector('.tubio-layout');
+    const wasCollapsed = layoutEl && layoutEl.classList.contains('sidebar-collapsed');
     selectPlaylist(target.dataset.playlistSlug);
+    if (wasMobile && layoutEl) {
+        layoutEl.classList.toggle('sidebar-collapsed', wasCollapsed);
+    }
 }
 
 function updateSidebarCounts() {
