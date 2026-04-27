@@ -277,10 +277,18 @@ async function updateContent(data) {
             if (newPlaylistsContent && currentPlaylistsTab) {
                 currentPlaylistsTab.innerHTML = newPlaylistsContent.innerHTML;
 
+                // Audio elements were destroyed; clear playback state
+                currentTrackCrc = null;
+                isPlayingPlaylist = false;
+                currentPlaylistQueue = [];
+                currentPlaylistIndex = 0;
+
                 initializeAudioEventListeners();
                 initializeLazyThumbnails();
                 initializeTooltips();
                 initializeSidebar();
+                updateTrackbar(null);
+                updateTrackbarScrubber();
             }
         }
     } catch (error) {
@@ -414,6 +422,12 @@ async function removeTrack(crc, buttonElement) {
         if (!response.ok) throw new Error('Failed to remove track');
 
         document.querySelectorAll(`.accordion-item[data-audio-crc="${crc}"]`).forEach(el => el.remove());
+        if (String(currentTrackCrc) === String(crc)) {
+            currentTrackCrc = null;
+            isPlayingPlaylist = false;
+            updateTrackbar(null);
+            updateTrackbarScrubber();
+        }
         updateSidebarCounts();
         showNotification('Track removed', 'success');
     } catch (error) {
@@ -487,7 +501,7 @@ function togglePlayTrack(crc) {
     // Add event listener to reset button when track ends naturally
     audioElement.onended = function() {
         // Get loop mode for current playlist
-        const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
+        const loopMode = globalLoopMode;
 
         // Handle single track looping for individual track play
         if (loopMode === 'single') {
@@ -502,35 +516,23 @@ function togglePlayTrack(crc) {
     };
 }
 
-// Loop mode for playlists: 'off', 'playlist', 'single'
-let playlistLoopModes = {};
+// Global playback state — controlled from the bottom trackbar
+let globalShuffle = false;
+let globalLoopMode = 'off'; // 'off' | 'playlist' | 'single'
 
-// Shuffle mode for playlists
-let playlistShuffleModes = {};
-
-function toggleShuffle(playlistName) {
-    const buttonId = `shuffle-toggle-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
-    const button = document.getElementById(buttonId);
-
-    if (!button) {
-        console.error(`Shuffle toggle button not found: ${buttonId}`);
-        return;
+function toggleShuffle() {
+    globalShuffle = !globalShuffle;
+    const btn = document.getElementById('trackbar-shuffle');
+    if (btn) {
+        btn.classList.toggle('active', globalShuffle);
+        btn.title = globalShuffle ? 'Shuffle: On' : 'Shuffle: Off';
     }
 
-    const isShuffled = button.dataset.shuffle === 'true';
-    const newState = !isShuffled;
-
-    // Store the shuffle mode for this playlist
-    playlistShuffleModes[playlistName] = newState;
-    button.dataset.shuffle = newState.toString();
-
-    // Update button visual state
-    if (newState) {
-        button.classList.add('btn-shuffle-active');
-        button.title = 'Shuffle: On';
-    } else {
-        button.classList.remove('btn-shuffle-active');
-        button.title = 'Shuffle: Off';
+    // If a playlist is currently playing, reshuffle the upcoming queue
+    if (isPlayingPlaylist && currentPlaylistQueue.length > 1) {
+        const played = currentPlaylistQueue.slice(0, currentPlaylistIndex + 1);
+        const upcoming = currentPlaylistQueue.slice(currentPlaylistIndex + 1);
+        currentPlaylistQueue = played.concat(globalShuffle ? shuffleArray(upcoming) : upcoming);
     }
 }
 
@@ -544,50 +546,24 @@ function shuffleArray(array) {
     return shuffled;
 }
 
-function cycleLoopMode(playlistName) {
-    const buttonId = `loop-toggle-${playlistName.replace(/ /g, '-').replace(/'/g, '')}`;
-    const button = document.getElementById(buttonId);
+function cycleLoopMode() {
+    const order = ['off', 'playlist', 'single'];
+    globalLoopMode = order[(order.indexOf(globalLoopMode) + 1) % order.length];
 
-    if (!button) {
-        console.error(`Loop toggle button not found: ${buttonId}`);
-        return;
-    }
-
-    const currentMode = button.dataset.loopMode || 'off';
-    let newMode;
-
-    // Cycle through modes: off -> playlist -> single -> off
-    if (currentMode === 'off') {
-        newMode = 'playlist';
-    } else if (currentMode === 'playlist') {
-        newMode = 'single';
+    const btn = document.getElementById('trackbar-loop');
+    if (!btn) return;
+    btn.classList.remove('active');
+    if (globalLoopMode === 'off') {
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+        btn.title = 'Loop: Off';
+    } else if (globalLoopMode === 'playlist') {
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i><small>All</small>';
+        btn.title = 'Loop: Playlist';
     } else {
-        newMode = 'off';
-    }
-
-    // Store the loop mode for this playlist
-    playlistLoopModes[playlistName] = newMode;
-    button.dataset.loopMode = newMode;
-
-    // Update button visual state
-    updateLoopButtonUI(button, newMode);
-}
-
-function updateLoopButtonUI(button, mode) {
-    // Reset classes
-    button.classList.remove('btn-loop-playlist', 'btn-loop-single');
-
-    if (mode === 'off') {
-        button.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-        button.title = 'Loop: Off';
-    } else if (mode === 'playlist') {
-        button.classList.add('btn-loop-playlist');
-        button.innerHTML = '<i class="bi bi-arrow-repeat"></i> <small>All</small>';
-        button.title = 'Loop: Playlist (loops all songs)';
-    } else if (mode === 'single') {
-        button.classList.add('btn-loop-single');
-        button.innerHTML = '<i class="bi bi-arrow-repeat"></i> <small>1</small>';
-        button.title = 'Loop: Single (loops current song)';
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i><small>1</small>';
+        btn.title = 'Loop: Single';
     }
 }
 
@@ -767,9 +743,7 @@ function playAllInPlaylist(playlistName) {
     // Build queue of audio CRCs
     currentPlaylistQueue = Array.from(audioItems).map(item => item.dataset.audioCrc);
 
-    // Shuffle if enabled
-    const isShuffled = playlistShuffleModes[playlistName] || false;
-    if (isShuffled) {
+    if (globalShuffle) {
         currentPlaylistQueue = shuffleArray(currentPlaylistQueue);
     }
 
@@ -781,8 +755,7 @@ function playAllInPlaylist(playlistName) {
     resetAllPlaylistPlayButtons();
     updatePlaylistPlayButton(playlistName, true);
 
-    // Show notification
-    const shuffleText = isShuffled ? ' (shuffled)' : '';
+    const shuffleText = globalShuffle ? ' (shuffled)' : '';
     showNotification(`Playing all ${currentPlaylistQueue.length} songs in "${playlistName}"${shuffleText}`, 'success');
 
     // Start playing first song
@@ -790,15 +763,10 @@ function playAllInPlaylist(playlistName) {
 }
 
 function playNextInQueue() {
-    // Get loop mode for current playlist
-    const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
-
     if (!isPlayingPlaylist || currentPlaylistIndex >= currentPlaylistQueue.length) {
         // Check if we should loop the playlist
-        if (loopMode === 'playlist' && currentPlaylistQueue.length > 0) {
-            // Re-shuffle if shuffle is enabled
-            const isShuffled = playlistShuffleModes[currentPlaylistName] || false;
-            if (isShuffled) {
+        if (globalLoopMode === 'playlist' && currentPlaylistQueue.length > 0) {
+            if (globalShuffle) {
                 currentPlaylistQueue = shuffleArray(currentPlaylistQueue);
             }
             currentPlaylistIndex = 0;
@@ -860,7 +828,7 @@ function playNextInQueue() {
         audioElement.removeEventListener('ended', onEnded);
 
         // Get loop mode for current playlist
-        const loopMode = playlistLoopModes[currentPlaylistName] || 'off';
+        const loopMode = globalLoopMode;
 
         // Handle single track looping
         if (loopMode === 'single') {
@@ -950,16 +918,25 @@ function initializeAudioEventListeners() {
 
         // Create and store handlers
         audio._playHandler = () => {
+            currentTrackCrc = crc;
             syncAudioButtonUI(crc);
             updateMediaSessionMetadata(crc);
             updateMediaSessionPlaybackState('playing');
+            updateTrackbar(crc);
         };
         audio._pauseHandler = () => {
             syncAudioButtonUI(crc);
             updateMediaSessionPlaybackState('paused');
+            if (crc === currentTrackCrc) updateTrackbarPlayPauseUI(false);
         };
-        audio._timeHandler = () => updateScrubber(crc);
-        audio._metaHandler = () => updateScrubber(crc);
+        audio._timeHandler = () => {
+            updateScrubber(crc);
+            if (crc === currentTrackCrc) updateTrackbarScrubber();
+        };
+        audio._metaHandler = () => {
+            updateScrubber(crc);
+            if (crc === currentTrackCrc) updateTrackbarScrubber();
+        };
 
         // Add event listeners
         audio.addEventListener('play', audio._playHandler);
@@ -989,6 +966,137 @@ function updateMediaSessionPlaybackState(state) {
     }
 }
 
+// Trackbar / playback control entry points
+function togglePlayPause() {
+    const crc = currentTrackCrc;
+    if (!crc) return;
+    const audio = document.getElementById(`audio-${crc}`);
+    if (!audio) return;
+    if (audio.paused) {
+        if (audio.readyState === 0) audio.load();
+        audio.play().catch(err => console.error('Error playing audio:', err));
+    } else {
+        audio.pause();
+    }
+}
+
+function resetTrackPlayingUI(crc) {
+    const button = document.getElementById(`play-btn-${crc}`);
+    const item = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
+    if (button) {
+        button.innerHTML = '<i class="bi bi-play-fill"></i>';
+        button.classList.remove('btn-success');
+        button.classList.add('btn-outline-primary');
+    }
+    if (item) item.classList.remove('track-playing');
+}
+
+function nextTrack() {
+    if (!isPlayingPlaylist || currentPlaylistQueue.length === 0) return;
+    const oldCrc = currentPlaylistQueue[currentPlaylistIndex];
+    const oldAudio = document.getElementById(`audio-${oldCrc}`);
+    if (oldAudio) oldAudio.pause();
+    resetTrackPlayingUI(oldCrc);
+    currentPlaylistIndex++;
+    playNextInQueue();
+}
+
+function prevTrack() {
+    if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
+        const crc = currentPlaylistQueue[currentPlaylistIndex];
+        const audio = document.getElementById(`audio-${crc}`);
+        if (audio && audio.currentTime > 3) {
+            audio.currentTime = 0;
+        } else if (currentPlaylistIndex > 0) {
+            if (audio) audio.pause();
+            resetTrackPlayingUI(crc);
+            currentPlaylistIndex--;
+            playNextInQueue();
+        } else if (audio) {
+            audio.currentTime = 0;
+        }
+    } else {
+        const crc = currentTrackCrc;
+        if (crc) {
+            const audio = document.getElementById(`audio-${crc}`);
+            if (audio) audio.currentTime = 0;
+        }
+    }
+}
+
+function updateTrackbar(crc) {
+    const trackbar = document.getElementById('tubio-trackbar');
+    const titleEl = document.getElementById('trackbar-title');
+    const playlistEl = document.getElementById('trackbar-playlist');
+    const thumb = document.getElementById('trackbar-thumb');
+    const placeholder = document.getElementById('trackbar-thumb-placeholder');
+
+    if (!crc) {
+        if (trackbar) trackbar.dataset.active = 'false';
+        if (titleEl) titleEl.textContent = 'No track playing';
+        if (playlistEl) playlistEl.textContent = '';
+        if (thumb) { thumb.hidden = true; thumb.removeAttribute('src'); }
+        if (placeholder) placeholder.hidden = false;
+        updateTrackbarPlayPauseUI(false);
+        return;
+    }
+
+    const trackItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
+    if (!trackItem) return;
+
+    if (trackbar) trackbar.dataset.active = 'true';
+    if (titleEl) titleEl.textContent = trackItem.dataset.title || 'Unknown Track';
+    if (playlistEl) playlistEl.textContent = trackItem.dataset.playlist || '';
+
+    if (trackItem.dataset.hasThumbnail === 'true' && thumb) {
+        const url = `/tubio/thumbnail/${crc}`;
+        if (thumb.src !== url) thumb.src = url;
+        thumb.hidden = false;
+        if (placeholder) placeholder.hidden = true;
+    } else {
+        if (thumb) { thumb.hidden = true; thumb.removeAttribute('src'); }
+        if (placeholder) placeholder.hidden = false;
+    }
+
+    const audio = document.getElementById(`audio-${crc}`);
+    updateTrackbarPlayPauseUI(audio ? !audio.paused : false);
+}
+
+function updateTrackbarPlayPauseUI(isPlaying) {
+    const btn = document.getElementById('trackbar-playpause');
+    if (!btn) return;
+    btn.innerHTML = isPlaying
+        ? '<i class="bi bi-pause-fill"></i>'
+        : '<i class="bi bi-play-fill"></i>';
+    btn.title = isPlaying ? 'Pause' : 'Play';
+}
+
+function updateTrackbarScrubber() {
+    const crc = currentTrackCrc;
+    const range = document.getElementById('trackbar-scrubber');
+    const currEl = document.getElementById('trackbar-time-current');
+    const durEl = document.getElementById('trackbar-time-duration');
+    if (!range) return;
+
+    if (!crc) {
+        range.value = 0;
+        range.disabled = true;
+        if (currEl) currEl.textContent = '0:00';
+        if (durEl) durEl.textContent = '0:00';
+        return;
+    }
+
+    range.disabled = false;
+    const audio = document.getElementById(`audio-${crc}`);
+    if (!audio) return;
+
+    if (audio.duration && isFinite(audio.duration)) {
+        range.value = (audio.currentTime / audio.duration) * 100;
+        if (currEl) currEl.textContent = formatTime(audio.currentTime);
+        if (durEl) durEl.textContent = formatTime(audio.duration);
+    }
+}
+
 // Media Session API integration for hardware media keys
 function initializeMediaSession() {
     if (!('mediaSession' in navigator)) return;
@@ -1015,45 +1123,11 @@ function initializeMediaSession() {
         }
     });
 
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-        if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
-            const oldCrc = currentPlaylistQueue[currentPlaylistIndex];
-            const oldAudio = document.getElementById(`audio-${oldCrc}`);
-            const oldButton = document.getElementById(`play-btn-${oldCrc}`);
-            const oldItem = document.querySelector(`.accordion-item[data-audio-crc="${oldCrc}"]`);
-            if (oldAudio) oldAudio.pause();
-            if (oldButton) {
-                oldButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-                oldButton.classList.remove('btn-success');
-                oldButton.classList.add('btn-outline-primary');
-            }
-            if (oldItem) oldItem.classList.remove('track-playing');
-            currentPlaylistIndex++;
-            playNextInQueue();
-        }
-    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
 
     navigator.mediaSession.setActionHandler('previoustrack', () => {
         if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
-            const crc = currentPlaylistQueue[currentPlaylistIndex];
-            const audio = document.getElementById(`audio-${crc}`);
-            if (audio && audio.currentTime > 3) {
-                audio.currentTime = 0;
-            } else if (currentPlaylistIndex > 0) {
-                const oldButton = document.getElementById(`play-btn-${crc}`);
-                const oldItem = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
-                if (audio) audio.pause();
-                if (oldButton) {
-                    oldButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-                    oldButton.classList.remove('btn-success');
-                    oldButton.classList.add('btn-outline-primary');
-                }
-                if (oldItem) oldItem.classList.remove('track-playing');
-                currentPlaylistIndex--;
-                playNextInQueue();
-            } else if (audio) {
-                audio.currentTime = 0;
-            }
+            prevTrack();
         } else {
             const crc = getCurrentlyPlayingTrack();
             if (crc) {
@@ -1154,6 +1228,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeLazyThumbnails();
     initializeTooltips();
     initializeSidebar();
+    updateTrackbar(null);
+    updateTrackbarScrubber();
 
     // Initialize scrubber event listeners via delegation
     document.addEventListener('input', function(e) {
@@ -1161,6 +1237,13 @@ document.addEventListener('DOMContentLoaded', function() {
             seekTrack(e.target.dataset.crc, e.target.value);
         }
     });
+
+    const trackbarScrubber = document.getElementById('trackbar-scrubber');
+    if (trackbarScrubber) {
+        trackbarScrubber.addEventListener('input', function() {
+            if (currentTrackCrc) seekTrack(currentTrackCrc, this.value);
+        });
+    }
 });
 
 // Playlist management functions

@@ -11,20 +11,6 @@
         </div>
         <div class="playlist-panel-controls">
             {% if playlist_data %}
-            <button class="btn btn-sm btn-shuffle-toggle"
-                    id="shuffle-toggle-{{ slug }}"
-                    onclick="toggleShuffle('{{ playlist_name|replace("'", "\\'") }}')"
-                    data-shuffle="false"
-                    title="Shuffle: Off">
-                <i class="bi bi-shuffle"></i>
-            </button>
-            <button class="btn btn-sm btn-loop-toggle"
-                    id="loop-toggle-{{ slug }}"
-                    onclick="cycleLoopMode('{{ playlist_name|replace("'", "\\'") }}')"
-                    data-loop-mode="off"
-                    title="Loop: Off">
-                <i class="bi bi-arrow-repeat"></i>
-            </button>
             <button class="btn btn-sm btn-play-all"
                     id="play-all-btn-{{ slug }}"
                     onclick="togglePlaylistPlayback('{{ playlist_name|replace("'", "\\'") }}')"

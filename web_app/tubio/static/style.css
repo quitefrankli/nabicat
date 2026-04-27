@@ -7,10 +7,18 @@
   width: 100%;
 }
 
+:root {
+  --tubio-trackbar-height: 92px;
+}
+
+body {
+  padding-bottom: var(--tubio-trackbar-height);
+}
+
 .tubio-layout {
   display: flex;
   gap: 1rem;
-  height: calc(100vh - 110px);
+  height: calc(100vh - 110px - var(--tubio-trackbar-height));
   padding: 0.75rem;
   box-sizing: border-box;
   position: relative;
@@ -250,7 +258,7 @@
 @media (max-width: 768px) {
   .tubio-layout {
     flex-direction: row;
-    height: calc(100vh - 110px);
+    height: calc(100vh - 110px - var(--tubio-trackbar-height));
   }
   .tubio-main {
     flex: 1 1 100%;
@@ -450,6 +458,16 @@
 .accordion-header {
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+/* The track row (a .d-flex inside .accordion-header) must also be allowed to
+   shrink, otherwise its accordion-button child grows to its content's
+   intrinsic width and the title's ellipsis never engages. */
+.accordion-header > .d-flex {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
 }
 
 .accordion-button {
@@ -457,10 +475,21 @@
   padding: 0.5rem 0.75rem;
   min-height: 40px;
   font-size: 0.95rem;
+  min-width: 0;
 }
 
 .accordion-button:not(.collapsed) {
   background: rgba(135, 168, 120, 0.08);
+}
+
+.accordion-button > span {
+  flex: 1 1 0;
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 1rem;
 }
 
 /* ============================================================
@@ -537,3 +566,210 @@ audio::-webkit-media-controls-panel {
   opacity: 0.3;
   margin-bottom: 1rem;
 }
+
+/* ============================================================
+   Persistent bottom trackbar
+   ============================================================ */
+.tubio-trackbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tubio-trackbar-height);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.97) 0%, rgba(248, 250, 247, 0.97) 100%);
+  border-top: 1px solid rgba(135, 168, 120, 0.25);
+  box-shadow: 0 -4px 16px rgba(45, 74, 62, 0.08);
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+.trackbar-info {
+  flex: 0 0 240px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.trackbar-thumb-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(135, 168, 120, 0.25) 0%, rgba(168, 198, 134, 0.25) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hw-sage-dark, #6B8E5A);
+}
+
+.trackbar-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.trackbar-thumb-placeholder {
+  font-size: 1.5rem;
+}
+
+.trackbar-title-wrap {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.trackbar-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--hw-forest, #2D4A3E);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackbar-playlist {
+  font-size: 0.75rem;
+  color: var(--hw-text-muted, #8A9A8A);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackbar-center {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.trackbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.trackbar-btn {
+  border: none;
+  background: transparent;
+  color: var(--hw-text-secondary, #5A6B5A);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.trackbar-btn:hover:not(:disabled) {
+  background: rgba(135, 168, 120, 0.15);
+  color: var(--hw-forest, #2D4A3E);
+  transform: scale(1.05);
+}
+
+.trackbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.trackbar-btn-secondary {
+  width: 30px;
+  height: 30px;
+  font-size: 0.95rem;
+}
+
+.trackbar-btn-primary {
+  width: 38px;
+  height: 38px;
+  font-size: 1.1rem;
+  background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(135, 168, 120, 0.35);
+}
+
+.trackbar-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--hw-sage-dark, #6B8E5A) 0%, var(--hw-forest, #2D4A3E) 100%);
+  color: white;
+  transform: scale(1.06);
+}
+
+.trackbar-btn.active {
+  color: var(--hw-sage-dark, #6B8E5A);
+  background: rgba(135, 168, 120, 0.2);
+}
+
+.trackbar-btn.active::after {
+  content: '';
+  position: absolute;
+}
+
+.trackbar-btn small {
+  font-size: 0.55rem;
+  margin-left: 1px;
+  font-weight: 700;
+}
+
+.trackbar-scrubber-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 720px;
+}
+
+.trackbar-time {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--hw-text-secondary, #5A6B5A);
+  min-width: 32px;
+  text-align: center;
+}
+
+.trackbar-range {
+  flex: 1 1 auto;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--hw-sage, #87A878);
+}
+
+.trackbar-range:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tubio-trackbar[data-active="false"] .trackbar-title {
+  color: var(--hw-text-muted, #8A9A8A);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --tubio-trackbar-height: 110px;
+  }
+  .tubio-trackbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.4rem 0.6rem;
+  }
+  .trackbar-info {
+    flex: 0 0 auto;
+  }
+  .trackbar-thumb-wrap {
+    width: 36px;
+    height: 36px;
+  }
+  .trackbar-center {
+    gap: 0.15rem;
+  }
+  .trackbar-scrubber-row {
+    max-width: 100%;
+  }
+}
+

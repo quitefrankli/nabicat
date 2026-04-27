@@ -114,6 +114,44 @@
     </div>
 </div>
 
+<!-- Persistent bottom trackbar -->
+<div class="tubio-trackbar" id="tubio-trackbar" data-active="false">
+    <div class="trackbar-info">
+        <div class="trackbar-thumb-wrap">
+            <img class="trackbar-thumb" id="trackbar-thumb" alt="" hidden>
+            <i class="bi bi-music-note trackbar-thumb-placeholder" id="trackbar-thumb-placeholder"></i>
+        </div>
+        <div class="trackbar-title-wrap">
+            <div class="trackbar-title" id="trackbar-title">No track playing</div>
+            <div class="trackbar-playlist" id="trackbar-playlist"></div>
+        </div>
+    </div>
+    <div class="trackbar-center">
+        <div class="trackbar-controls">
+            <button class="trackbar-btn trackbar-btn-secondary" id="trackbar-shuffle" onclick="toggleShuffle()" title="Shuffle: Off">
+                <i class="bi bi-shuffle"></i>
+            </button>
+            <button class="trackbar-btn trackbar-btn-secondary" id="trackbar-prev" onclick="prevTrack()" title="Previous">
+                <i class="bi bi-skip-start-fill"></i>
+            </button>
+            <button class="trackbar-btn trackbar-btn-primary" id="trackbar-playpause" onclick="togglePlayPause()" title="Play/Pause">
+                <i class="bi bi-play-fill"></i>
+            </button>
+            <button class="trackbar-btn trackbar-btn-secondary" id="trackbar-next" onclick="nextTrack()" title="Next">
+                <i class="bi bi-skip-end-fill"></i>
+            </button>
+            <button class="trackbar-btn trackbar-btn-secondary" id="trackbar-loop" onclick="cycleLoopMode()" title="Loop: Off">
+                <i class="bi bi-arrow-repeat"></i>
+            </button>
+        </div>
+        <div class="trackbar-scrubber-row">
+            <span class="trackbar-time" id="trackbar-time-current">0:00</span>
+            <input type="range" class="trackbar-range" id="trackbar-scrubber" min="0" max="100" value="0" step="0.1">
+            <span class="trackbar-time" id="trackbar-time-duration">0:00</span>
+        </div>
+    </div>
+</div>
+
 <!-- Move to Playlist Modal -->
 <div class="modal fade" id="addToPlaylistModal" tabindex="-1" aria-labelledby="moveToPlaylistModalLabel" aria-hidden="true">
     <div class="modal-dialog">
