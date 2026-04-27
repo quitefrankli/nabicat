@@ -16,15 +16,15 @@
             <form id="upload-audio-form" method="post" action="{{ url_for('.upload_audio') }}" enctype="multipart/form-data">
                 <div class="modal-body p-4">
                     <div class="form-floating mb-3">
-                        <input type="file" class="form-control" name="audio_file" id="audio_file" 
-                               accept=".mp3,.mp4,.m4a,audio/mpeg,audio/mp4,audio/x-m4a" 
+                        <input type="file" class="form-control" name="audio_file" id="audio_file"
+                               accept=".mp3,.mp4,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
                                required>
                         <label for="audio_file">
                             <i class="bi bi-file-music me-2 text-sage"></i>Audio File (mp3, mp4, m4a)
                         </label>
                     </div>
                     <div class="form-floating mb-3">
-                        <input type="text" class="form-control" name="audio_title" id="audio_title" 
+                        <input type="text" class="form-control" name="audio_title" id="audio_title"
                                placeholder="Enter audio title (optional)">
                         <label for="audio_title">
                             <i class="bi bi-pencil me-2 text-sage"></i>Audio Title (Optional)
@@ -87,29 +87,27 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-3">
-    <div class="row justify-content-center">
-        <div class="col-lg-10">
-            <div class="tab-content" id="tubio-tab-content">
-                <!-- Playlists Tab -->
-                <div class="tab-pane fade" id="playlists" role="tabpanel" aria-labelledby="playlists-tab">
-                {% include 'playlists.html' with context %}
-                </div>
+<div class="tab-content tubio-tab-content" id="tubio-tab-content">
+    <!-- Playlists Tab -->
+    <div class="tab-pane fade" id="playlists" role="tabpanel" aria-labelledby="playlists-tab">
+        {% include 'playlists.html' with context %}
+    </div>
 
-                <!-- Search Tab -->
-                <div class="tab-pane fade" id="search" role="tabpanel" aria-labelledby="search-tab">
+    <!-- Search Tab -->
+    <div class="tab-pane fade" id="search" role="tabpanel" aria-labelledby="search-tab">
+        <div class="container-fluid mt-3">
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
                     <form id="search-form" class="mb-4">
                         <div class="input-group" style="max-width: 800px; margin: 0 auto;">
-                            <input type="text" class="form-control" id="youtube-query" name="youtube_query" 
+                            <input type="text" class="form-control" id="youtube-query" name="youtube_query"
                                    placeholder="Search YouTube..." required>
                             <button class="btn btn-outline-primary" type="submit">
                                 <i class="bi bi-search me-1"></i>Search
                             </button>
                         </div>
                     </form>
-                    
                     <div id="search-results"></div>
-                </div>
                 </div>
             </div>
         </div>
@@ -147,37 +145,6 @@
                     </button>
                     <button type="submit" class="btn btn-success">
                         <i class="bi bi-check-circle me-1"></i>Move to Playlist
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Selected Songs Modal -->
-<div class="modal fade" id="deleteSelectedSongsModal" tabindex="-1" aria-labelledby="deleteSelectedSongsModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, #E07A5F 0%, #D35400 100%); border-radius: 16px 16px 0 0;">
-                <h1 class="modal-title fs-5 d-flex align-items-center" id="deleteSelectedSongsModalLabel">
-                    <i class="bi bi-trash me-2"></i>Delete Tracks
-                </h1>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="delete-selected-songs-form" method="post" action="{{ url_for('.delete_selected_songs') }}">
-                <div class="modal-body p-4">
-                    <div class="alert mb-3" style="background: rgba(224, 122, 95, 0.15); color: #D35400; border: none;">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        <strong>Warning:</strong> track(s) will be permanently deleted!
-                    </div>
-                    <input type="hidden" name="song_crcs" id="delete_song_crcs">
-                </div>
-                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="bi bi-x-circle me-1"></i>Cancel
-                    </button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash me-1"></i>Delete Permanently
                     </button>
                 </div>
             </form>

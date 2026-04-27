@@ -1,23 +1,45 @@
 {% if playlists %}
-    {% for playlist_name, playlist_data in playlists %}
-        {% include 'playlist.html' with context %}
-    {% endfor %}
-
-    <!-- New Playlist Card -->
-    <div class="card mb-4 shadow-sm new-playlist-card"
-         style="border: none; border-radius: 16px; overflow: hidden; cursor: pointer;"
-         data-bs-toggle="modal"
-         data-bs-target="#newPlaylistModal">
-        <div class="card-header" style="background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%); padding: 0;">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="text-white text-decoration-none flex-grow-1 text-start py-3 px-3"
-                     style="font-size: 1.25rem; font-weight: bold;">
-                    <i class="bi bi-plus-circle me-3" style="font-size: 1.5rem; font-weight: bold;"></i>
-                    New Playlist
-                </div>
-            </div>
+<div class="tubio-layout">
+    <aside class="tubio-sidebar">
+        <div class="sidebar-header">
+            <i class="bi bi-collection-play me-2"></i>Your Library
         </div>
-    </div>
+        <div class="sidebar-list" id="playlist-sidebar-list">
+            {% for playlist_name, playlist_data in playlists %}
+                {% set slug = playlist_name|replace(' ', '-')|replace("'", '') %}
+                <button type="button"
+                        class="sidebar-item"
+                        data-playlist-slug="{{ slug }}"
+                        data-playlist-name="{{ playlist_name }}"
+                        onclick="selectPlaylist('{{ slug }}')">
+                    <i class="bi bi-music-note-list sidebar-item-icon"></i>
+                    <div class="sidebar-item-text">
+                        <div class="sidebar-item-name">{{ playlist_name }}</div>
+                        <div class="sidebar-item-meta">{{ playlist_data|length }} song{% if playlist_data|length != 1 %}s{% endif %}</div>
+                    </div>
+                </button>
+            {% endfor %}
+            <button type="button"
+                    class="sidebar-item sidebar-new-playlist"
+                    data-bs-toggle="modal"
+                    data-bs-target="#newPlaylistModal">
+                <i class="bi bi-plus-circle sidebar-item-icon"></i>
+                <div class="sidebar-item-text">
+                    <div class="sidebar-item-name">New Playlist</div>
+                </div>
+            </button>
+        </div>
+    </aside>
+    <main class="tubio-main">
+        {% for playlist_name, playlist_data in playlists %}
+            {% include 'playlist.html' with context %}
+        {% endfor %}
+        <div class="playlist-panel-empty" id="panel-empty">
+            <i class="bi bi-music-note-beamed"></i>
+            <p>Select a playlist from the sidebar.</p>
+        </div>
+    </main>
+</div>
 {% else %}
     <!-- Empty state when no playlists exist -->
     <div class="container py-5">
@@ -26,7 +48,7 @@
                 <div class="card shadow-lg border-0" style="border-radius: 20px; background: linear-gradient(135deg, rgba(135, 168, 120, 0.1) 0%, rgba(168, 198, 134, 0.1) 100%);">
                     <div class="card-body text-center p-5">
                         <div class="mb-4">
-                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center" 
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
                                  style="width: 100px; height: 100px; background: linear-gradient(135deg, rgba(135, 168, 120, 0.2) 0%, rgba(168, 198, 134, 0.2) 100%);">
                                 <i class="bi bi-music-note-list" style="font-size: 3.5rem; color: var(--hw-sage, #87A878);"></i>
                             </div>
@@ -35,16 +57,6 @@
                         <p class="lead mb-4" style="color: var(--hw-text-secondary, #5A6B5A);">
                             Your music library is empty. Get started by downloading your first song!
                         </p>
-                        <div class="alert border-0 mb-4" style="background-color: rgba(255, 255, 255, 0.7); color: var(--hw-text-secondary, #5A6B5A);">
-                            <i class="bi bi-lightbulb text-warning me-2"></i>
-                            <strong>How to get started:</strong>
-                            <ol class="text-start mt-2 mb-0">
-                                <li>Switch to the <strong>Search</strong> tab</li>
-                                <li>Search for a YouTube video or song</li>
-                                <li>Click <strong>"Add To Favourites"</strong></li>
-                                <li>Return here to see your music!</li>
-                            </ol>
-                        </div>
                         <button class="btn btn-primary btn-lg shadow" onclick="switchTab('search')" style="border-radius: 12px; padding: 0.75rem 2rem;">
                             <i class="bi bi-search me-2"></i>Go to Search
                         </button>

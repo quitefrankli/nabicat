@@ -265,49 +265,116 @@ async function updateContent(data) {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         });
-        
+
         if (response.ok) {
             const html = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            
-            // Extract the playlists tab content from the response
+
             const newPlaylistsContent = doc.getElementById('playlists');
             const currentPlaylistsTab = document.getElementById('playlists');
-            
+
             if (newPlaylistsContent && currentPlaylistsTab) {
                 currentPlaylistsTab.innerHTML = newPlaylistsContent.innerHTML;
 
-                // Re-attach collapse event listeners for chevron animation (only for playlist buttons)
-                currentPlaylistsTab.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {
-                    const targetId = button.getAttribute('data-bs-target');
-                    if (targetId) {
-                        const target = document.querySelector(targetId);
-                        if (target) {
-                            target.addEventListener('shown.bs.collapse', function() {
-                                button.setAttribute('aria-expanded', 'true');
-                            });
-                            target.addEventListener('hidden.bs.collapse', function() {
-                                button.setAttribute('aria-expanded', 'false');
-                            });
-                        }
-                    }
-                });
-
-                // Re-initialize audio event listeners for newly added tracks
                 initializeAudioEventListeners();
-
-                // Re-initialize lazy loading for thumbnails
                 initializeLazyThumbnails();
-
-                // Re-initialize tooltips
                 initializeTooltips();
+                initializeSidebar();
             }
         }
     } catch (error) {
         console.error('Error updating content:', error);
-        // Fallback: just reload the page
         window.location.reload();
+    }
+}
+
+// Sidebar / panel selection
+function selectPlaylist(slug) {
+    const sidebar = document.getElementById('playlist-sidebar-list');
+    if (sidebar) {
+        sidebar.querySelectorAll('.sidebar-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.playlistSlug === slug);
+        });
+    }
+    document.querySelectorAll('.playlist-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `panel-${slug}`);
+    });
+    const emptyPanel = document.getElementById('panel-empty');
+    if (emptyPanel) emptyPanel.classList.add('hidden');
+
+    try { sessionStorage.setItem('tubioSelectedPlaylist', slug); } catch (e) {}
+}
+
+function initializeSidebar() {
+    const sidebar = document.getElementById('playlist-sidebar-list');
+    if (!sidebar) return;
+
+    const items = sidebar.querySelectorAll('.sidebar-item[data-playlist-slug]');
+    if (items.length === 0) return;
+
+    let target = null;
+    try {
+        const saved = sessionStorage.getItem('tubioSelectedPlaylist');
+        if (saved) {
+            target = sidebar.querySelector(`.sidebar-item[data-playlist-slug="${CSS.escape(saved)}"]`);
+        }
+    } catch (e) {}
+
+    if (!target) target = items[0];
+    selectPlaylist(target.dataset.playlistSlug);
+}
+
+function updateSidebarCounts() {
+    const sidebar = document.getElementById('playlist-sidebar-list');
+    if (!sidebar) return;
+    sidebar.querySelectorAll('.sidebar-item[data-playlist-slug]').forEach(item => {
+        const slug = item.dataset.playlistSlug;
+        const panel = document.getElementById(`panel-${slug}`);
+        if (!panel) return;
+        const count = panel.querySelectorAll('.accordion-item[data-audio-crc]').length;
+        const meta = item.querySelector('.sidebar-item-meta');
+        if (meta) meta.textContent = `${count} song${count === 1 ? '' : 's'}`;
+        const headerBadge = panel.querySelector('.playlist-panel-title .badge');
+        if (headerBadge) headerBadge.textContent = `${count} songs`;
+    });
+}
+
+async function removeTrack(crc, buttonElement) {
+    if (!confirm('Remove this track from your playlists?')) return;
+
+    const originalHTML = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Removing...';
+
+    const tooltip = bootstrap.Tooltip.getInstance(buttonElement);
+    if (tooltip) tooltip.dispose();
+
+    try {
+        // Stop audio if currently playing this track
+        const audio = document.getElementById(`audio-${crc}`);
+        if (audio && !audio.paused) audio.pause();
+
+        const formData = new FormData();
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) formData.append('csrf_token', csrfToken);
+
+        const response = await fetch(`/tubio/delete_audio/${crc}`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        if (!response.ok) throw new Error('Failed to remove track');
+
+        document.querySelectorAll(`.accordion-item[data-audio-crc="${crc}"]`).forEach(el => el.remove());
+        updateSidebarCounts();
+        showNotification('Track removed', 'success');
+    } catch (error) {
+        console.error('Error removing track:', error);
+        showNotification(error.message || 'Error removing track', 'error');
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalHTML;
     }
 }
 
@@ -1035,40 +1102,17 @@ function initializeLazyThumbnails() {
     });
 }
 
-// Handle playlist collapse chevron rotation
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Media Session API
     initializeMediaSession();
-
-    // Initialize audio event listeners for UI sync
     initializeAudioEventListeners();
-
-    // Initialize lazy loading for thumbnails
     initializeLazyThumbnails();
-
-    // Initialize Bootstrap tooltips
     initializeTooltips();
+    initializeSidebar();
 
     // Initialize scrubber event listeners via delegation
     document.addEventListener('input', function(e) {
         if (e.target.classList.contains('scrubber') && e.target.dataset.crc) {
             seekTrack(e.target.dataset.crc, e.target.value);
-        }
-    });
-
-    // Update chevron rotation when playlist collapse events occur (only for playlist buttons, not track accordions)
-    document.querySelectorAll('.playlist-collapse-btn[data-bs-toggle="collapse"]').forEach(button => {
-        const targetId = button.getAttribute('data-bs-target');
-        if (targetId) {
-            const target = document.querySelector(targetId);
-            if (target) {
-                target.addEventListener('shown.bs.collapse', function() {
-                    button.setAttribute('aria-expanded', 'true');
-                });
-                target.addEventListener('hidden.bs.collapse', function() {
-                    button.setAttribute('aria-expanded', 'false');
-                });
-            }
         }
     });
 });
@@ -1082,30 +1126,10 @@ function getSelectedSongs() {
 function preparePlaylistModal() {
     const selectedSongs = getSelectedSongs();
     const count = selectedSongs.length;
-    
-    // Set hidden inputs
-    document.getElementById('move_playlist_tracks_crcs').value = selectedSongs.join(',');
-    document.getElementById('delete_song_crcs').value = selectedSongs.join(',');
-    
-    // Disable submit if no songs selected
+
+    const movePlaylistInput = document.getElementById('move_playlist_tracks_crcs');
+    if (movePlaylistInput) movePlaylistInput.value = selectedSongs.join(',');
+
     const movePlaylistBtn = document.querySelector('#move-playlist-form button[type="submit"]');
-    const deleteBtn = document.querySelector('#delete-selected-songs-form button[type="submit"]');
-    
     if (movePlaylistBtn) movePlaylistBtn.disabled = (count === 0);
-    if (deleteBtn) deleteBtn.disabled = (count === 0);
-}
-
-// Select/deselect all checkboxes in a playlist
-function togglePlaylistSelection(playlistName, checked) {
-    const accordionId = `audioAccordion-${playlistName.replace(/ /g, '-')}`;
-    const accordion = document.getElementById(accordionId);
-    if (accordion) {
-        const checkboxes = accordion.querySelectorAll('.song-checkbox');
-        checkboxes.forEach(cb => cb.checked = checked);
-    }
-}
-
-// Clear all selections
-function clearAllSelections() {
-    document.querySelectorAll('.song-checkbox').forEach(cb => cb.checked = false);
 }
