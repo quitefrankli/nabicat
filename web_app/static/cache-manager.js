@@ -181,10 +181,14 @@ class CacheManager {
 window.cacheManager = new CacheManager();
 
 // Auto-initialize on page load
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.cacheManager.init();
+function _initCacheManager() {
+    window.cacheManager.init().then(() => {
+        window.dispatchEvent(new Event('cacheManagerReady'));
     });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initCacheManager);
 } else {
-    window.cacheManager.init();
+    _initCacheManager();
 }

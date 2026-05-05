@@ -199,10 +199,20 @@ self.addEventListener('message', async (event) => {
             break;
 
         case 'getCacheSize':
-            const estimate = await navigator.storage.estimate();
+            const cacheForSize = await caches.open(CACHE_NAME);
+            const cacheKeys = await cacheForSize.keys();
+            let totalSize = 0;
+            for (const req of cacheKeys) {
+                const res = await cacheForSize.match(req);
+                if (res) {
+                    const buf = await res.clone().arrayBuffer();
+                    totalSize += buf.byteLength;
+                }
+            }
+            const storageEstimate = await navigator.storage.estimate();
             event.ports[0].postMessage({
-                usage: estimate.usage,
-                quota: estimate.quota,
+                usage: totalSize,
+                quota: storageEstimate.quota,
             });
             break;
 

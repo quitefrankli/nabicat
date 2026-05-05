@@ -25,177 +25,156 @@
         </h1>
       </div>
       
-      <!-- Build Version Card -->
+      <!-- Build Version + Cache Card -->
       <div class="card mb-4 border-0 shadow-soft">
-        <div class="card-body text-center p-4">
-          <div class="d-inline-flex align-items-center gap-2 version-badge">
-            <i class="bi bi-git text-sage"></i>
-            <code class="text-forest">{{ commit_hash[:12] if commit_hash else 'unknown' }}</code>
-          </div>
-          <p class="text-muted mb-0 mt-2 small">
-            <i class="bi bi-info-circle me-1"></i>
-            Current build version
-          </p>
-        </div>
-      </div>
-
-      <!-- Browser Cache Info Card -->
-      <div class="card mb-5 border-0 shadow-soft" id="cacheInfoCard" style="display: none;">
-        <div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-lightning-charge-fill text-primary" style="font-size: 1.5rem;"></i>
-              <h5 class="mb-0 text-forest">Browser Cache</h5>
+        <div class="card-body p-3">
+          <div class="row align-items-center g-0">
+            <div class="col-6 text-center info-col-divider">
+              <div class="d-inline-flex align-items-center gap-2 version-badge">
+                <i class="bi bi-git text-sage"></i>
+                <code class="text-forest">{{ commit_hash[:12] if commit_hash else 'unknown' }}</code>
+              </div>
+              <p class="text-muted mb-0 mt-1 small">build version</p>
             </div>
-            <span class="badge bg-primary" id="cacheUsageText">Loading...</span>
+            <div class="col-6 text-center" id="cacheInfoCard" style="display: none;">
+              <span class="text-muted small" id="cacheUsageText">—</span>
+              <div class="mt-1">
+                <button class="btn btn-outline-danger btn-sm py-0 px-2" id="clearCacheBtn">
+                  <i class="bi bi-trash3 me-1"></i>Clear cache
+                </button>
+              </div>
+            </div>
           </div>
-
-          <div class="progress mb-2" style="height: 12px; border-radius: 8px;">
-            <div class="progress-bar progress-bar-striped" id="cacheBarFill"
-                 role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-          </div>
-
-          <div class="d-flex justify-content-between align-items-center">
-            <span class="text-muted small" id="cachePercentage">0% used</span>
-            <button class="btn btn-outline-danger btn-sm" id="clearCacheBtn">
-              <i class="bi bi-trash3 me-1"></i>Clear cache
-            </button>
-          </div>
-
-          <p class="text-muted small mb-0 mt-3">
-            <i class="bi bi-info-circle me-1"></i>
-            Cached files from Tubio, File Store, and other apps. Limit: 10GB
-          </p>
         </div>
       </div>
       
       <!-- App Grid -->
-      <div class="row g-4">
+      <div class="row g-3">
         <!-- Metrics -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           <a href="/metrics" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #E9C46A 0%, #F4A261 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #E9C46A 0%, #F4A261 100%);">
                   <i class="bi bi-graph-up-arrow"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Metrics</h3>
+                <h3 class="app-title mb-0 text-forest">Metrics</h3>
               </div>
             </div>
           </a>
         </div>
-        
+
         <!-- Tubio -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           <a href="/tubio" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #2D4A3E 0%, #4A5D4A 100%);">
                   <i class="bi bi-music-note-beamed"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Tubio</h3>
+                <h3 class="app-title mb-0 text-forest">Tubio</h3>
               </div>
             </div>
           </a>
         </div>
-        
+
         <!-- JSwipe (Admin Only) -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
           <a href="{{ '/jswipe' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #E07A5F 0%, #F4A261 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #E07A5F 0%, #F4A261 100%);">
                   <i class="bi bi-briefcase-fill"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">JSwipe</h3>
+                <h3 class="app-title mb-0 text-forest">JSwipe</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Todoist2 -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           <a href="/todoist2" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #87A878 0%, #A8C686 100%);">
                   <i class="bi bi-check2-square"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Todoist2</h3>
+                <h3 class="app-title mb-0 text-forest">Todoist2</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- File Store -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           <a href="/file_store" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #6B8E5A 0%, #87A878 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #6B8E5A 0%, #87A878 100%);">
                   <i class="bi bi-cloud-upload-fill"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">File Store</h3>
+                <h3 class="app-title mb-0 text-forest">File Store</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Proxy (Admin Only) -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
           <a href="{{ '/proxy' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);">
                   <i class="bi bi-globe2"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Proxy</h3>
+                <h3 class="app-title mb-0 text-forest">Proxy</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Hammock -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           <a href="/hammock" class="text-decoration-none">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #4A7C59 0%, #6B9E78 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #4A7C59 0%, #6B9E78 100%);">
                   <i class="bi bi-journal-richtext"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Hammock</h3>
+                <h3 class="app-title mb-0 text-forest">Hammock</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Crosswords (Admin Only) -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
           <a href="{{ '/crosswords' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);">
                   <i class="bi bi-grid-3x3"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Crosswords</h3>
+                <h3 class="app-title mb-0 text-forest">Crosswords</h3>
               </div>
             </div>
           </a>
         </div>
 
         <!-- Assistant (Admin Only) -->
-        <div class="col-12 col-md-6">
+        <div class="col-4">
           {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
           <a href="{{ '/assistant' if is_admin else '#' }}" class="text-decoration-none {{ '' if is_admin else 'app-disabled' }}">
             <div class="card h-100 home-app-card border-0">
-              <div class="card-body p-4 text-center">
-                <div class="app-icon-wrapper mb-3 mx-auto" style="background: linear-gradient(135deg, #3D5A80 0%, #5B8FB9 100%);">
+              <div class="card-body p-3 text-center">
+                <div class="app-icon-wrapper mb-2 mx-auto" style="background: linear-gradient(135deg, #3D5A80 0%, #5B8FB9 100%);">
                   <i class="bi bi-robot"></i>
                 </div>
-                <h3 class="h5 mb-2 text-forest">Assistant</h3>
+                <h3 class="app-title mb-0 text-forest">Assistant</h3>
               </div>
             </div>
           </a>
@@ -226,16 +205,25 @@
   }
   
   .app-icon-wrapper {
-    width: 64px;
-    height: 64px;
-    border-radius: 16px;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.75rem;
+    font-size: 1.4rem;
     color: white;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     transition: transform 0.3s ease;
+  }
+
+  @media (min-width: 768px) {
+    .app-icon-wrapper {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      font-size: 1.75rem;
+    }
   }
   
   .home-app-card:hover .app-icon-wrapper {
@@ -246,7 +234,7 @@
     background: rgba(135, 168, 120, 0.1);
     border: 1px solid rgba(135, 168, 120, 0.2);
     border-radius: 12px;
-    padding: 0.75rem 1.5rem;
+    padding: 0.3rem 0.75rem;
   }
 
   .app-disabled {
@@ -257,6 +245,25 @@
   .app-disabled .home-app-card {
     opacity: 0.45;
     filter: grayscale(0.6);
+  }
+
+  .info-col-divider {
+    position: relative;
+  }
+
+  .info-col-divider::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 15%;
+    height: 70%;
+    width: 1px;
+    background-color: var(--bs-border-color);
+  }
+
+  .app-title {
+    font-size: 0.7rem;
+    font-weight: 600;
   }
 </style>
 
