@@ -7,7 +7,6 @@ __pycache__
 Contents.json
 *.xcassets/
 logs/
-resources/
 .mypy_cache/
 .pytest_cache/
 ios_app/

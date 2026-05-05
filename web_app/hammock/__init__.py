@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, send_file, abort, request, redirec
 from web_app.hammock.data_interface import DataInterface
 from web_app.helpers import limiter, parse_request, get_ip
 from web_app.errors import APIError
+from web_app.app import csrf
 
 hammock_api = Blueprint(
     'hammock',
@@ -40,6 +41,7 @@ def view_post(project: str, post: str):
                            post_content=post_content)
 
 @hammock_api.route('/api/upload_post', methods=['POST'])
+@csrf.exempt
 def upload_post():
     try:
         request_body = parse_request(require_login=True, require_admin=True)
