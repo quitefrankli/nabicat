@@ -9,13 +9,12 @@ git checkout main
 git fetch
 git reset --hard origin/main
 
-while getopts ":p:" opt
+while getopts ":p" opt
 do
     case "$opt" in
         p)
-            PATCHES=$OPTARG
             echo "Applying patches..."
-            echo $PATCHES | base64 -di | git am
+            git am
             git push
             exit 0
             ;;
