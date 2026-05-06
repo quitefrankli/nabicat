@@ -675,12 +675,14 @@ body {
   }
 }
 
-/* Make navbar buttons full width on small screens */
+/* On mobile, keep the actions dropdown panel at its natural width and
+   pin it to the right edge so the trigger button can stay compact. */
 @media (max-width: 991.98px) {
-  .navbar .d-flex.flex-column .btn,
-  .navbar .d-flex.flex-column .dropdown > .btn {
-    width: 100%;
-    justify-content: center;
+  .navbar .actions-dropdown {
+    width: auto;
+    min-width: 12rem;
+    right: 0;
+    left: auto;
   }
 }
 
