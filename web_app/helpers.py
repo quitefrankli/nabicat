@@ -7,6 +7,7 @@ import flask
 import flask_login
 import logging
 
+import requests as http_requests
 from io import BytesIO
 from flask import request
 from flask_limiter import Limiter
@@ -17,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from web_app.app import app
+from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.users import User
 from web_app.errors import *
@@ -325,5 +327,73 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
         password = request_body.get("password", "")
         if not authenticate_user(username, password, require_admin=require_admin):
             raise AuthenticationError("Invalid credentials")
-    
+
     return request_body
+
+
+class MeridianError(RuntimeError):
+    """Raised when the Meridian proxy is unreachable or returns an error."""
+
+
+def call_meridian(
+    messages: list,
+    system: str,
+    model: str | None = None,
+    max_tokens: int = 1024,
+    tools: list | None = None,
+    timeout_s: float = 120.0,
+    agent: str = "nabicat",
+) -> dict:
+    """Send a single /v1/messages request to the local Meridian proxy.
+
+    Returns the parsed JSON response on success. Raises ``MeridianError``
+    on network failure or non-2xx response. Does not retry.
+    """
+    config = ConfigManager()
+    headers = {"Content-Type": "application/json", "x-meridian-agent": agent}
+    body = {
+        "model": model or config.assistant_model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": messages,
+    }
+    if tools is not None:
+        body["tools"] = tools
+
+    try:
+        resp = http_requests.post(config.assistant_meridian_url, headers=headers, json=body, timeout=timeout_s)
+    except http_requests.RequestException as e:
+        raise MeridianError(f"meridian unreachable: {e}") from e
+
+    if not resp.ok:
+        raise MeridianError(f"meridian {resp.status_code}: {resp.text[:500]}")
+
+    try:
+        return resp.json()
+    except ValueError as e:
+        raise MeridianError(f"meridian returned non-JSON: {e}") from e
+
+
+def meridian_text(
+    user_message: str,
+    system: str,
+    model: str | None = None,
+    max_tokens: int = 1024,
+    timeout_s: float = 120.0,
+    agent: str = "nabicat",
+) -> str:
+    """Convenience wrapper around ``call_meridian`` for text-only prompts.
+
+    Concatenates all ``text`` blocks from the response and returns the
+    stripped result. Raises ``MeridianError`` on transport failures.
+    """
+    result = call_meridian(
+        messages=[{"role": "user", "content": user_message}],
+        system=system,
+        model=model,
+        max_tokens=max_tokens,
+        timeout_s=timeout_s,
+        agent=agent,
+    )
+    blocks = result.get("content", []) or []
+    return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()

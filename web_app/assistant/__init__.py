@@ -1,10 +1,10 @@
 import subprocess
-import requests as http_requests
 from flask import Blueprint, render_template, request, jsonify, abort
 from flask_login import login_required, current_user
 
 from web_app.config import ConfigManager
 from web_app.assistant.data_interface import DataInterface
+from web_app.helpers import call_meridian
 
 
 SYSTEM_PROMPT = (
@@ -28,11 +28,6 @@ TOOLS = [{
         "required": ["command"]
     }
 }]
-
-HEADERS = {
-    "Content-Type": "application/json",
-    "x-meridian-agent": "opencode",
-}
 
 assistant_api = Blueprint(
     'assistant',
@@ -76,16 +71,14 @@ def _run(command: str) -> str:
 
 def _call_meridian(messages: list) -> dict:
     config = ConfigManager()
-    resp = http_requests.post(config.assistant_meridian_url, headers=HEADERS, json={
-        "model": config.assistant_model,
-        "max_tokens": config.assistant_max_tokens,
-        "system": SYSTEM_PROMPT,
-        "tools": TOOLS,
-        "messages": messages,
-    }, timeout=120)
-    if not resp.ok:
-        raise RuntimeError(f"meridian {resp.status_code}: {resp.text}")
-    return resp.json()
+    return call_meridian(
+        messages=messages,
+        system=SYSTEM_PROMPT,
+        model=config.assistant_model,
+        max_tokens=config.assistant_max_tokens,
+        tools=TOOLS,
+        agent="opencode",
+    )
 
 
 @assistant_api.route('/chats', methods=['GET'])

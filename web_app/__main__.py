@@ -157,7 +157,14 @@ def start_scheduler() -> None:
 def before_request():
     # Auto-login as admin in debug mode
     if ConfigManager().debug_mode and not flask_login.current_user.is_authenticated:
-        user = DataInterface().load_users()["admin"]
+        di = DataInterface()
+        users = di.load_users()
+        user = users.get("admin")
+        if user is None:
+            user = di.generate_new_user("admin", "admin")
+            user.is_admin = True
+            di.save_users(list(users.values()) + [user])
+            logging.info("Debug mode: created admin user")
         flask_login.login_user(user, remember=True)
 
     message = f"Processing request: client={get_ip()}, path={request.path}, method={request.method}"

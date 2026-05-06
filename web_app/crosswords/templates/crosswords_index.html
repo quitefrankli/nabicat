@@ -3,98 +3,139 @@
 {% block subapp_index_url %}{{ url_for('crosswords.index') }}{% endblock %}
 {% block navbar_brand %}Crosswords{% endblock %}
 
+{% block page_actions %}
+  <li>
+    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('crosswords.index') }}">
+      <i class="bi bi-arrow-repeat"></i>
+      <span>Re-generate</span>
+    </a>
+  </li>
+  <li><hr class="dropdown-divider"></li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" id="actionCheck">
+      <i class="bi bi-check2-circle"></i>
+      <span>Check Answers</span>
+    </button>
+  </li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" id="actionReveal">
+      <i class="bi bi-eye"></i>
+      <span>Reveal All</span>
+    </button>
+  </li>
+  <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2 text-danger" id="actionClear">
+      <i class="bi bi-eraser"></i>
+      <span>Clear</span>
+    </button>
+  </li>
+{% endblock %}
+
 {% block page_content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-lg-8">
-    <div class="card border-0 shadow-soft">
-      <div class="card-body p-4 p-md-5 text-center">
-        
-        <!-- Welcome -->
-        <div class="mb-5">
-          <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-4"
-               style="width: 100px; height: 100px; background: linear-gradient(135deg, rgba(139, 115, 85, 0.15) 0%, rgba(160, 130, 109, 0.15) 100%);">
-            <i class="bi bi-grid-3x3-gap-fill" style="font-size: 3rem; color: #8B7355;"></i>
-          </div>
-          <h4 class="text-forest mb-2">Ready for a challenge?</h4>
-          <p class="text-muted">Generate a new crossword puzzle and test your vocabulary!</p>
-        </div>
-        
-        <!-- Generate Button -->
-        <form action="{{ url_for('crosswords.new_crossword') }}" method="post" class="mb-5">
-          <button type="submit" class="btn btn-primary btn-lg px-5 d-inline-flex align-items-center gap-2">
-            <i class="bi bi-magic"></i>
-            Generate New Crossword
-          </button>
-        </form>
-        
-        <!-- Crossword Grid -->
-        {% if crossword_generated %}
-          <div class="mt-5">
-            <div class="alert alert-success d-inline-flex align-items-center gap-2 mb-4">
-              <i class="bi bi-check-circle-fill"></i>
-              <span>A new crossword puzzle has been generated!</span>
+<div class="row justify-content-center g-4">
+  <div class="col-12 col-xl-10">
+
+    <!-- Welcome / generator controls -->
+    <div id="crossword-welcome" class="crosswords-welcome text-center mb-4">
+      <div class="welcome-icon">
+        <i class="bi bi-grid-3x3-gap-fill"></i>
+      </div>
+
+      <form id="crossword-form" class="crossword-form mx-auto" autocomplete="off">
+        <div class="row g-3 align-items-start justify-content-center">
+          <div class="col-12 col-md-5 form-col">
+            <label for="cw-theme" class="form-label small text-forest fw-semibold mb-1 d-flex justify-content-between">
+              <span>Theme</span>
+              <span class="difficulty-badge">&nbsp;</span>
+            </label>
+            <div class="theme-slot">
+              <div class="difficulty-endpoints" aria-hidden="true">
+                <span>&nbsp;</span>
+              </div>
+              <input type="text" class="form-control" id="cw-theme" name="theme"
+                     value="{{ default_theme }}"
+                     minlength="{{ theme_min_len }}" maxlength="{{ theme_max_len }}"
+                     placeholder="cats" pattern="[A-Za-z]+" autocomplete="off"
+                     data-min-len="{{ theme_min_len }}" data-max-len="{{ theme_max_len }}">
+              <div class="theme-hint small text-muted mt-1">{{ theme_criteria }}</div>
+              <div id="cw-theme-error" class="theme-error small text-danger mt-1 d-none"></div>
             </div>
-            
-            <div class="d-flex justify-content-center">
-              <div class="card border-0 shadow-sm d-inline-block">
-                <div class="card-body p-3">
-                  <table class="crossword-grid" style="border-collapse: separate; border-spacing: 2px;">
-                    {% for row in crossword_grid %}
-                      <tr>
-                        {% for cell in row %}
-                          {% if cell %}
-                            <td class="crossword-cell filled">{{ cell }}</td>
-                          {% else %}
-                            <td class="crossword-cell empty"></td>
-                          {% endif %}
-                        {% endfor %}
-                      </tr>
-                    {% endfor %}
-                  </table>
-                </div>
+          </div>
+          <div class="col-12 col-md-5 form-col">
+            <label for="cw-difficulty" class="form-label small text-forest fw-semibold mb-1 d-flex justify-content-between">
+              <span>Difficulty</span>
+              <span class="difficulty-badge" id="cw-difficulty-label"></span>
+            </label>
+            <div class="difficulty-slider">
+              <div class="difficulty-endpoints">
+                <span>Easy</span>
+                <span>Hard</span>
+              </div>
+              <input type="range" class="form-range" id="cw-difficulty" name="difficulty"
+                     min="{{ difficulty_min }}" max="{{ difficulty_max }}" step="1"
+                     list="cw-difficulty-ticks" value="{{ default_difficulty }}">
+              <datalist id="cw-difficulty-ticks">
+                {% for i in range(difficulty_min, difficulty_max + 1) %}
+                  <option value="{{ i }}"></option>
+                {% endfor %}
+              </datalist>
+              <div class="difficulty-ticks" aria-hidden="true">
+                {% for i in range(difficulty_min, difficulty_max + 1) %}
+                  <span>{{ i }}</span>
+                {% endfor %}
               </div>
             </div>
           </div>
-        {% endif %}
-        
+        </div>
+        <div class="mt-4">
+          <button type="submit" class="btn btn-generate" id="btnGenerate">
+            <i class="bi bi-magic me-2"></i>Generate New Crossword
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Puzzle area -->
+    <div id="crossword-puzzle" class="crossword-puzzle d-none">
+      <div class="puzzle-meta mb-3">
+        <span class="puzzle-meta-item me-4">
+          <i class="bi bi-bookmark-star me-2"></i>
+          <span class="puzzle-meta-label">Theme:</span>
+          <span class="puzzle-meta-value" id="puzzle-theme"></span>
+        </span>
+        <span class="puzzle-meta-item">
+          <i class="bi bi-bar-chart me-2"></i>
+          <span class="puzzle-meta-label">Difficulty:</span>
+          <span class="puzzle-meta-value" id="puzzle-difficulty"></span>
+        </span>
+      </div>
+
+      <div class="row g-4 align-items-start">
+        <div class="col-12 col-lg-auto">
+          <div class="crossword-container">
+            <div id="crossword-grid" class="crossword-grid" role="grid"></div>
+            <div id="crossword-status" class="crossword-status small text-muted mt-3 text-center"></div>
+          </div>
+        </div>
+        <div class="col-12 col-lg">
+          <div class="word-list">
+            <h6><i class="bi bi-arrow-right-short"></i>Across</h6>
+            <ul id="clues-across" class="clue-list"></ul>
+          </div>
+          <div class="word-list mt-3">
+            <h6><i class="bi bi-arrow-down-short"></i>Down</h6>
+            <ul id="clues-down" class="clue-list"></ul>
+          </div>
+        </div>
       </div>
     </div>
+
   </div>
 </div>
-
-<style>
-  .crossword-cell {
-    width: 40px;
-    height: 40px;
-    text-align: center;
-    font-size: 1.25rem;
-    font-weight: 600;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-  }
-  
-  .crossword-cell.filled {
-    background: #8B7355;
-    color: white;
-    border: 2px solid #6B5344;
-  }
-  
-  .crossword-cell.empty {
-    background: #f0f0f0;
-    border: 2px solid #e0e0e0;
-  }
-  
-  @media (max-width: 576px) {
-    .crossword-cell {
-      width: 32px;
-      height: 32px;
-      font-size: 1rem;
-    }
-  }
-</style>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('crosswords.static', filename='style.css') }}">
+  <script defer src="{{ url_for('crosswords.static', filename='crosswords.js') }}"></script>
 {% endblock %}

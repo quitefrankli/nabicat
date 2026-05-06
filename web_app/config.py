@@ -40,8 +40,23 @@ class ConfigManager:
         # Assistant
         self.assistant_meridian_default_port = 3456
         self.assistant_meridian_url = f"http://127.0.0.1:{self.assistant_meridian_default_port}/v1/messages"
-        self.assistant_model = "claude-sonnet-4-5"
+        self.assistant_model = "claude-opus-4-7"
         self.assistant_max_tokens = 4096
+
+        # Crosswords
+        self.crosswords_model = "claude-sonnet-4-6"
+        self.crosswords_word_count = 10
+        self.crosswords_min_placed_words = 3
+        self.crosswords_generation_max_tokens = 1024
+        self.crosswords_generation_timeout_s = 20.0
+        self.crosswords_theme_check_max_tokens = 4
+        self.crosswords_theme_check_timeout_s = 10.0
+        self.crosswords_default_theme = "cats"
+        self.crosswords_default_difficulty = 2
+        self.crosswords_difficulty_min = 1
+        self.crosswords_difficulty_max = 5
+        self.crosswords_theme_min_len = 2
+        self.crosswords_theme_max_len = 13
 
     @property
     def project_name(self) -> str:
