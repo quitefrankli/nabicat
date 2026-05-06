@@ -16,22 +16,6 @@
   padding: 2.5rem 1.5rem;
 }
 
-.crosswords-welcome .welcome-icon {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(139, 115, 85, 0.15) 0%, rgba(160, 130, 109, 0.15) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1.25rem;
-}
-
-.crosswords-welcome .welcome-icon i {
-  font-size: 3rem;
-  color: var(--cw-brown-a);
-}
-
 /* Generator form */
 .crossword-form {
   max-width: 560px;
@@ -61,6 +45,15 @@
   font-size: 0.75rem;
   line-height: 1.3;
   text-align: left;
+}
+
+/* The theme column has an empty endpoints spacer to align the input with the
+   Easy/Hard labels in the difficulty column on desktop. On mobile the columns
+   stack, so the spacer just creates a jarring gap — hide it. */
+@media (max-width: 767.98px) {
+  .theme-slot .difficulty-endpoints {
+    display: none;
+  }
 }
 
 .theme-error {
@@ -321,14 +314,10 @@
   50% { transform: scale(1.15) rotate(8deg); }
 }
 
-/* Responsive */
+/* Responsive — cell size itself is computed in JS (fitGridToViewport) so the
+   full grid always fits the container, regardless of puzzle dimensions. */
 @media (max-width: 576px) {
-  :root { --cw-cell: 34px; }
   .crossword-cell input { font-size: 0.95rem; }
   .cell-number { font-size: 0.55rem; }
   .crossword-container { padding: 0.75rem; }
-}
-
-@media (max-width: 380px) {
-  :root { --cw-cell: 28px; }
 }

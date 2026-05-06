@@ -46,7 +46,7 @@ class ConfigManager:
 
         # Crosswords
         self.crosswords_model = "claude-sonnet-4-6"
-        self.crosswords_word_count = 10
+        self.crosswords_word_count = 7
         self.crosswords_min_placed_words = 3
         self.crosswords_generation_max_tokens = 1024
         self.crosswords_generation_timeout_s = 20.0

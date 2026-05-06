@@ -134,6 +134,7 @@
 
   function renderGrid() {
     grid.innerHTML = '';
+    fitGridToViewport();
     grid.style.gridTemplateColumns = `repeat(${puzzle.cols}, var(--cw-cell))`;
     grid.style.gridTemplateRows = `repeat(${puzzle.rows}, var(--cw-cell))`;
     inputs = Array.from({ length: puzzle.rows }, () => Array(puzzle.cols).fill(null));
@@ -171,6 +172,25 @@
         grid.appendChild(div);
       }
     }
+  }
+
+  // Size cells so the full grid fits within the container on every viewport.
+  // CSS breakpoints alone can't react to puzzle dimensions, so an oversized
+  // puzzle on a phone would overflow horizontally.
+  function fitGridToViewport() {
+    if (!puzzle) return;
+    const container = grid.parentElement; // .crossword-container
+    if (!container) return;
+    const containerStyle = getComputedStyle(container);
+    const padX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+    const available = Math.max(0, container.clientWidth - padX);
+    const gap = 3; // matches .crossword-grid gap
+    const totalGaps = gap * (puzzle.cols - 1);
+    const computed = Math.floor((available - totalGaps) / puzzle.cols);
+    const max = 44;
+    const min = 22;
+    const size = Math.max(min, Math.min(max, computed));
+    document.documentElement.style.setProperty('--cw-cell', `${size}px`);
   }
 
   function renderClues() {
@@ -232,7 +252,23 @@
     const li = document.querySelector(`.clue-item[data-direction="${activeClue.direction}"][data-number="${activeClue.number}"]`);
     if (li) {
       li.classList.add('active');
-      li.scrollIntoView({ block: 'nearest' });
+      scrollClueIntoView(li);
+    }
+  }
+
+  // Manually scroll only the clue list container — using Element.scrollIntoView
+  // bubbles up the scroll chain and also scrolls the window on mobile, which
+  // fights with the browser's auto-scroll of the focused input and causes the
+  // viewport to oscillate.
+  function scrollClueIntoView(li) {
+    const list = li.closest('.clue-list');
+    if (!list) return;
+    const liTop = li.offsetTop;
+    const liBottom = liTop + li.offsetHeight;
+    if (liTop < list.scrollTop) {
+      list.scrollTop = liTop;
+    } else if (liBottom > list.scrollTop + list.clientHeight) {
+      list.scrollTop = liBottom - list.clientHeight;
     }
   }
 
@@ -375,6 +411,13 @@
     }
     setStatus('');
   }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (!puzzle) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(fitGridToViewport, 100);
+  });
 
   difficultyInput?.addEventListener('input', updateDifficultyLabel);
   themeInput?.addEventListener('input', clearThemeError);
