@@ -21,10 +21,13 @@ class DataInterface(BaseDataInterface):
     def get_posts_by_project(self) -> list[Project]:
         projects: list[Project] = []
 
-        for project_dir in self.projects_dir.iterdir():
+        for project_dir in sorted(self.projects_dir.iterdir(), key=lambda path: path.name):
             if not project_dir.is_dir():
                 continue
-            posts = [posts_dir.name for posts_dir in project_dir.iterdir() if posts_dir.is_dir()]
+            posts = sorted(
+                [posts_dir.name for posts_dir in project_dir.iterdir() if posts_dir.is_dir()],
+                reverse=True
+            )
             projects.append(Project(name=project_dir.name, posts=posts))
 
         return projects
