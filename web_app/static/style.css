@@ -684,6 +684,12 @@ body {
     right: 0;
     left: auto;
   }
+
+  /* Equalise Actions and Login/Logout button widths. */
+  .navbar .nav-action-btn {
+    width: 8.5rem;
+    justify-content: center;
+  }
 }
 
 /* ============================================

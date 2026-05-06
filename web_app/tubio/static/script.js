@@ -3,39 +3,50 @@ function switchTab(tabName) {
     document.querySelectorAll('#search-nav-tab, #playlists-nav-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    
+
     // Add active class to clicked tab
     const navTab = document.getElementById(tabName + '-nav-tab');
     if (navTab) {
         navTab.classList.add('active');
     }
-    
+
     // Hide all tab content
     document.querySelectorAll('.tab-pane').forEach(pane => {
         pane.classList.remove('show', 'active');
     });
-    
+
     // Show the selected tab content
     const targetPane = document.getElementById(tabName);
     if (targetPane) {
         targetPane.classList.add('show', 'active');
     }
-    
+
+    // Search tab has no contextual actions — hide the Actions dropdown entirely.
+    const actionsDropdown = document.querySelector('.actions-dropdown');
+    const actionsContainer = actionsDropdown ? actionsDropdown.closest('.dropdown') : null;
+    if (actionsContainer) {
+        actionsContainer.classList.toggle('d-none', tabName === 'search');
+    }
+
     // Update URL hash
     window.location.hash = '#' + tabName;
 }
 
-function displaySearchResults(results) {
+function displaySearchResults(data) {
     const resultsDiv = document.getElementById('search-results');
     if (!resultsDiv) return;
-    
+
+    const results = Array.isArray(data) ? data : (data && data.results) || [];
+    const page = (data && typeof data.page === 'number') ? data.page : 0;
+    const totalPages = (data && typeof data.total_pages === 'number') ? data.total_pages : 1;
+
     if (!results || results.length === 0) {
         resultsDiv.innerHTML = '<div class="text-center py-5"><h5 class="text-muted">No results found</h5></div>';
         return;
     }
-    
+
     let html = '<div class="accordion" id="searchResultsAccordion">';
-    
+
     results.forEach((video, index) => {
         const isDisabled = video.cached ? 'disabled style="background-color: #adb5bd; border-color: #adb5bd;"' : '';
         const safeTitle = escapeHtml(video.title);
@@ -50,18 +61,16 @@ function displaySearchResults(results) {
         html += `
             <div class="accordion-item mb-3 border-0 shadow-sm">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed bg-gradient text-primary fw-semibold"
+                    <button class="accordion-button collapsed bg-gradient text-primary fw-semibold search-result-btn"
                             type="button"
                             data-bs-toggle="collapse"
                             data-bs-target="#collapse-search-${index}"
                             aria-expanded="false"
                             aria-controls="collapse-search-${index}"
                             style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-                        <i class="bi bi-youtube me-2"></i>
-                        <div class="d-flex justify-content-between align-items-center w-100 me-3">
-                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${truncatedTitle}</span>
-                            <small class="badge bg-secondary ms-2">${safeLength}</small>
-                        </div>
+                        <i class="bi bi-youtube me-2 flex-shrink-0"></i>
+                        <span class="search-result-title">${truncatedTitle}</span>
+                        <small class="badge bg-secondary ms-2 flex-shrink-0">${safeLength}</small>
                     </button>
                 </h2>
                 <div id="collapse-search-${index}"
@@ -113,7 +122,67 @@ function displaySearchResults(results) {
     });
     
     html += '</div>';
+
+    if (totalPages > 1) {
+        let buttons = '';
+        for (let i = 0; i < totalPages; i++) {
+            const isActive = i === page;
+            buttons += `
+                <button type="button"
+                        class="btn ${isActive ? 'btn-primary' : 'btn-outline-primary'}"
+                        onclick="searchPage(${i})"
+                        ${isActive ? 'disabled' : ''}>
+                    ${i + 1}
+                </button>
+            `;
+        }
+        html += `
+            <div class="d-flex justify-content-center gap-2 mt-3 mb-4">
+                ${buttons}
+            </div>
+        `;
+    }
+
     resultsDiv.innerHTML = html;
+}
+
+async function searchPage(page) {
+    const queryInput = document.getElementById('youtube-query');
+    if (!queryInput) return;
+    const query = queryInput.value;
+    if (!query) return;
+
+    const resultsDiv = document.getElementById('search-results');
+    try {
+        const formData = new FormData();
+        formData.append('youtube_query', query);
+        formData.append('page', String(page));
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) formData.append('csrf_token', csrfToken);
+
+        const response = await fetch('/tubio/search', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            displaySearchResults(data);
+            if (resultsDiv) resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (resultsDiv) {
+            const errorMsg = data.error || 'Search failed. Please try again.';
+            resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${escapeHtml(errorMsg)}</h5></div>`;
+        }
+    } catch (error) {
+        console.error('Error during search:', error);
+        if (resultsDiv) {
+            resultsDiv.innerHTML = '<div class="text-center py-5"><h5 class="text-danger">Error occurred while searching.</h5></div>';
+        }
+    }
 }
 
 // Initialize everything when DOM is ready
@@ -132,6 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const formData = new FormData();
                 formData.append('youtube_query', query);
+                formData.append('page', '0');
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
                 if (csrfToken) formData.append('csrf_token', csrfToken);
 
@@ -143,10 +213,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         'X-Requested-With': 'XMLHttpRequest'
                     }
                 });
-                
+
                 const data = await response.json();
                 if (response.ok) {
-                    displaySearchResults(data.results);
+                    displaySearchResults(data);
                 } else {
                     console.error('Search failed:', data.error);
                     const resultsDiv = document.getElementById('search-results');
@@ -589,21 +659,6 @@ function seekTrack(crc, value) {
     }
 }
 
-function updateScrubber(crc) {
-    const audio = document.getElementById(`audio-${crc}`);
-    const scrubber = document.getElementById(`scrubber-${crc}`);
-    const currentTimeEl = document.getElementById(`time-current-${crc}`);
-    const durationEl = document.getElementById(`time-duration-${crc}`);
-
-    if (!audio || !scrubber) return;
-
-    if (audio.duration && isFinite(audio.duration)) {
-        scrubber.value = (audio.currentTime / audio.duration) * 100;
-        if (currentTimeEl) currentTimeEl.textContent = formatTime(audio.currentTime);
-        if (durationEl) durationEl.textContent = formatTime(audio.duration);
-    }
-}
-
 // Currently active track CRC (the last track the user interacted with)
 let currentTrackCrc = null;
 
@@ -930,11 +985,9 @@ function initializeAudioEventListeners() {
             if (crc === currentTrackCrc) updateTrackbarPlayPauseUI(false);
         };
         audio._timeHandler = () => {
-            updateScrubber(crc);
             if (crc === currentTrackCrc) updateTrackbarScrubber();
         };
         audio._metaHandler = () => {
-            updateScrubber(crc);
             if (crc === currentTrackCrc) updateTrackbarScrubber();
         };
 
@@ -1230,13 +1283,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSidebar();
     updateTrackbar(null);
     updateTrackbarScrubber();
-
-    // Initialize scrubber event listeners via delegation
-    document.addEventListener('input', function(e) {
-        if (e.target.classList.contains('scrubber') && e.target.dataset.crc) {
-            seekTrack(e.target.dataset.crc, e.target.value);
-        }
-    });
 
     const trackbarScrubber = document.getElementById('trackbar-scrubber');
     if (trackbarScrubber) {

@@ -24,4 +24,11 @@
     - CSS and JS must live in the subapp's static/ folder (e.g. `assistant/static/assistant.css`), never inline in HTML templates
     - Link them via `{% block scripts %}` using `url_for('.static', filename='...')`
 
+* Cross-browser / cross-device UI: this is a web app served to real users on a mix of browsers (Chrome, Firefox, Safari — including iOS Safari) and devices (desktop, tablet, phone). When making UI/CSS/JS changes:
+    - Design mobile-first and verify layouts still work on narrow viewports (~375px wide phones). Use responsive units and existing `@media (max-width: 768px)` breakpoints rather than fixed pixel sizing.
+    - Avoid WebKit-only / Chrome-only CSS without fallbacks. Be cautious with newer APIs (e.g. `:has()`, container queries, View Transitions) and check baseline support before relying on them.
+    - Account for iOS Safari quirks: safe-area insets (`env(safe-area-inset-bottom)`), the dynamic bottom chrome hiding fixed elements, 100vh != viewport height, and touch vs. hover (`:hover` doesn't apply on touch — don't hide critical UI behind hover).
+    - Touch targets should be large enough to tap (~40px min). Don't rely on hover-only tooltips for essential info.
+    - Test behavior when the keyboard is open on mobile (fixed bottom bars can get covered).
+
 * start every new session with "CLAUDE.md read!"

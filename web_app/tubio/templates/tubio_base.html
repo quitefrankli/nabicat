@@ -20,6 +20,12 @@
 
 {% block page_actions %}
   <li>
+    <button type="button" class="dropdown-item d-flex align-items-center gap-2" onclick="toggleSidebar()">
+      <i class="bi bi-collection-play text-sage"></i>
+      <span>All Playlists</span>
+    </button>
+  </li>
+  <li>
     <button type="button" class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadAudioModal">
       <i class="bi bi-cloud-upload text-primary"></i>
       <span>Upload Audio</span>

@@ -30,6 +30,7 @@ class ConfigManager:
         self.debug_mode = False
         self.tudio_search_prefix = "" # helps narrow down search results
         self.tudio_max_results = 10
+        self.tubio_max_search_pages = 3
         self.tudio_max_video_length = timedelta(minutes=10)
         self.tubio_test_video_id = "dQw4w9WgXcQ" # Default video ID for testing (Rick Astley - Never Gonna Give You Up)
         self.todoist2_default_page_size = 8

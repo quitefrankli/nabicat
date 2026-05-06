@@ -64,7 +64,6 @@ def index():
 
 @tubio_api.route('/search', methods=['GET', 'POST'])
 def search():
-    results = []
     query = ''
     if request.method == 'POST':
         query = request.form.get('youtube_query', '')
@@ -73,11 +72,21 @@ def search():
             return redirect(url_for('.index') + '#search')
 
         try:
+            page = int(request.form.get('page', 0))
+        except ValueError:
+            page = 0
+
+        try:
             decorated_query = f"{ConfigManager().tudio_search_prefix}{query}"
             user_favourites = get_cached_yt_vid_ids(cur_user())
-            results = AudioDownloader.search_youtube(decorated_query, user_favourites)
+            search_data = AudioDownloader.search_youtube(decorated_query, user_favourites, page=page)
             # assume AJAX POST request
-            return {'results': results, 'query': query}
+            return {
+                'results': search_data['results'],
+                'page': search_data['page'],
+                'total_pages': search_data['total_pages'],
+                'query': query,
+            }
 
         except VideoTooLongError as e:
             max_mins = int(e.max_duration.total_seconds() // 60)
@@ -87,7 +96,7 @@ def search():
             logging.exception("Error searching YouTube")
             flash("Error: Search Failed!", 'error')
             redirect(url_for('.index') + '#search')
-    
+
     return redirect(url_for('.index') + '#search')
 
 @tubio_api.route('/youtube_download', methods=['POST'])

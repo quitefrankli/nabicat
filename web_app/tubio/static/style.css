@@ -12,13 +12,17 @@
 }
 
 body {
-  padding-bottom: var(--tubio-trackbar-height);
+  padding-bottom: calc(
+    var(--tubio-trackbar-height)
+    + env(safe-area-inset-bottom, 0px)
+    + var(--tubio-trackbar-offset, 0px)
+  );
 }
 
 .tubio-layout {
   display: flex;
   gap: 1rem;
-  height: calc(100vh - 110px - var(--tubio-trackbar-height));
+  height: calc(100vh - 110px - var(--tubio-trackbar-height) - env(safe-area-inset-bottom, 0px) - var(--tubio-trackbar-offset, 0px));
   padding: 0.75rem;
   box-sizing: border-box;
   position: relative;
@@ -75,25 +79,6 @@ body {
 
 .sidebar-close-btn:hover {
   background: rgba(255, 255, 255, 0.32);
-}
-
-.sidebar-toggle-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-
-.sidebar-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
 }
 
 .sidebar-list {
@@ -199,9 +184,6 @@ body {
   background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);
   color: white;
   margin-bottom: 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 5;
   box-shadow: 0 4px 12px rgba(45, 74, 62, 0.1);
 }
 
@@ -258,7 +240,7 @@ body {
 @media (max-width: 768px) {
   .tubio-layout {
     flex-direction: row;
-    height: calc(100vh - 110px - var(--tubio-trackbar-height));
+    height: calc(100vh - 110px - var(--tubio-trackbar-height) - env(safe-area-inset-bottom, 0px) - var(--tubio-trackbar-offset, 0px));
   }
   .tubio-main {
     flex: 1 1 100%;
@@ -504,32 +486,20 @@ audio::-webkit-media-controls-panel {
   background: rgba(135, 168, 120, 0.1);
 }
 
-/* Scrubber bar styling */
-.scrubber-container {
-  flex-shrink: 0;
+/* Search result titles must shrink to leave room for the length badge. */
+.search-result-btn {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
 }
 
-.scrubber-time {
-  font-family: monospace;
-  font-size: 0.7rem;
-  color: var(--hw-text-secondary, #5A6B5A);
-}
-
-.scrubber {
-  height: 6px;
-  cursor: pointer;
-  accent-color: var(--hw-sage, #87A878);
-}
-
-.scrubber::-webkit-slider-thumb {
-  width: 12px;
-  height: 12px;
-}
-
-.scrubber::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(135, 168, 120, 0.3);
+.search-result-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -574,7 +544,7 @@ audio::-webkit-media-controls-panel {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tubio-trackbar-offset, 0px));
   height: var(--tubio-trackbar-height);
   display: flex;
   align-items: center;
@@ -582,9 +552,18 @@ audio::-webkit-media-controls-panel {
   padding: 0.5rem 1rem;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.97) 0%, rgba(248, 250, 247, 0.97) 100%);
   border-top: 1px solid rgba(135, 168, 120, 0.25);
+  border-radius: 14px 14px 0 0;
   box-shadow: 0 -4px 16px rgba(45, 74, 62, 0.08);
   z-index: 100;
   box-sizing: border-box;
+}
+
+/* On narrow viewports (typical phones), lift the trackbar a bit so it
+   isn't hidden behind iOS Safari's bottom browser chrome. */
+@media (max-width: 768px) {
+  :root {
+    --tubio-trackbar-offset: 56px;
+  }
 }
 
 .trackbar-info {
@@ -700,13 +679,14 @@ audio::-webkit-media-controls-panel {
 }
 
 .trackbar-btn.active {
-  color: var(--hw-sage-dark, #6B8E5A);
-  background: rgba(135, 168, 120, 0.2);
+  color: white;
+  background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);
+  box-shadow: 0 2px 8px rgba(135, 168, 120, 0.45);
 }
 
-.trackbar-btn.active::after {
-  content: '';
-  position: absolute;
+.trackbar-btn.active:hover:not(:disabled) {
+  color: white;
+  background: linear-gradient(135deg, var(--hw-sage-dark, #6B8E5A) 0%, var(--hw-forest, #2D4A3E) 100%);
 }
 
 .trackbar-btn small {

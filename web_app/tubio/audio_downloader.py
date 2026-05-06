@@ -79,6 +79,8 @@ class AudioDownloader:
 
         if ConfigManager().tubio_cookie_path.exists():
             ydl_opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        if ConfigManager().debug_mode:
+            ydl_opts['nocheckcertificate'] = True
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -139,11 +141,11 @@ class AudioDownloader:
         return timedelta(seconds=total_seconds)
 
     @staticmethod
-    def search_youtube(query: str, cached_yt_vid_ids: Set[str]) -> List[dict]:
+    def search_youtube(query: str, cached_yt_vid_ids: Set[str], page: int = 0) -> dict:
         """
-        Search YouTube for videos matching the query and return a list of video info dicts.
-        Extracts video_id, title, description, view count, date, and length.
-        If query is a direct YouTube URL, returns only that video.
+        Search YouTube for videos matching the query. Returns a dict with paginated results
+        and pagination metadata: {"results": [...], "page": int, "has_prev": bool, "has_next": bool}.
+        If query is a direct YouTube URL, returns only that video with no pagination.
 
         Raises:
             VideoTooLongError: If a direct URL video exceeds the maximum allowed length.
@@ -154,7 +156,8 @@ class AudioDownloader:
             logging.info(f"Direct YouTube URL detected, fetching video: {video_id}")
             # Let VideoTooLongError propagate for direct URLs
             video_info = AudioDownloader.get_video_info(video_id, cached_yt_vid_ids)
-            return [video_info] if video_info else []
+            results = [video_info] if video_info else []
+            return {"results": results, "page": 0, "total_pages": 1}
 
         params = {"search_query": query}
         response = requests.get(AudioDownloader.YOUTUBE_SEARCH_URL, params=params)
@@ -163,26 +166,24 @@ class AudioDownloader:
         # Extract ytInitialData JSON
         initial_data_match = re.search(r'var ytInitialData = (\{.*?\});', html, re.DOTALL)
         if not initial_data_match:
-            return []
+            return {"results": [], "page": 0, "total_pages": 1}
         try:
             data = json.loads(initial_data_match.group(1))
         except Exception:
             logging.exception("Failed to parse YouTube search results")
-            return []
+            return {"results": [], "page": 0, "total_pages": 1}
         # Traverse the JSON to get videoRenderer items
         sections = data.get('contents', {}) \
             .get('twoColumnSearchResultsRenderer', {}) \
             .get('primaryContents', {}) \
             .get('sectionListRenderer', {}) \
             .get('contents', [])
-        
-        logging.info(f"Searching YouTube with query: {query}")
-        results = []
+
+        logging.info(f"Searching YouTube with query: {query} (page {page})")
+        all_results = []
         for section in sections:
             items = section.get('itemSectionRenderer', {}).get('contents', [])
             for item in items:
-                if len(results) > ConfigManager().tudio_max_results:
-                    return results
                 video = item.get('videoRenderer')
                 if not video:
                     continue
@@ -206,7 +207,7 @@ class AudioDownloader:
                 thumbnails = video.get('thumbnail', {}).get('thumbnails', [])
                 thumbnail_url = thumbnails[-1].get('url', '') if thumbnails else ''
 
-                results.append({
+                all_results.append({
                     "video_id": vid_id,
                     "url": f"https://www.youtube.com/watch?v={vid_id}",
                     "title": title,
@@ -217,7 +218,18 @@ class AudioDownloader:
                     "cached": cached,
                     "thumbnail_url": thumbnail_url,
                 })
-        return results
+
+        page_size = ConfigManager().tudio_max_results
+        max_pages = ConfigManager().tubio_max_search_pages
+        total_pages = min(max_pages, max(1, (len(all_results) + page_size - 1) // page_size))
+        page = max(0, min(page, total_pages - 1))
+        start = page * page_size
+        end = start + page_size
+        return {
+            "results": all_results[start:end],
+            "page": page,
+            "total_pages": total_pages,
+        }
 
     @staticmethod
     def download_thumbnail(video_id: str, crc: int) -> Path | None:
@@ -256,6 +268,8 @@ class AudioDownloader:
         if ConfigManager().tubio_cookie_path.exists() and not ConfigManager().debug_mode:
             logging.info(f"Using cookie file: {ConfigManager().tubio_cookie_path}")
             opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        if ConfigManager().debug_mode:
+            opts['nocheckcertificate'] = True
         return opts
 
     @staticmethod
