@@ -1,6 +1,9 @@
 set -ex
 
+SAVED_ARGS=("$@")
+set --
 source "$HOME/miniforge3/bin/activate"
+set -- "${SAVED_ARGS[@]}"
 
 git checkout main
 git fetch
