@@ -32,3 +32,51 @@
     - Test behavior when the keyboard is open on mobile (fixed bottom bars can get covered).
 
 * start every new session with "CLAUDE.md read!"
+
+## UI/UX Design System — Honeydew Theme
+
+All UI work must stay consistent with the established design system in `web_app/static/style.css`.
+
+### Design Tokens (CSS variables — always use these, never hardcode values)
+
+**Colors:**
+- `--hw-bg-primary`: #F0FFF0 | `--hw-bg-secondary`: #FAF9F6 | `--hw-bg-cream`: #F5F5DC
+- `--hw-sage`: #87A878 | `--hw-sage-light`: #A8C686 | `--hw-sage-dark`: #6B8E5A
+- `--hw-forest`: #2D4A3E | `--hw-moss`: #4A5D4A
+- `--hw-peach`: #F4A261 | `--hw-gold`: #E9C46A | `--hw-coral`: #E07A5F | `--hw-terracotta`: #D4866A
+- `--hw-text-primary`: #2D4A3E | `--hw-text-secondary`: #5A6B5A | `--hw-text-muted`: #8A9A8A
+- `--hw-border`: rgba(135, 168, 120, 0.2)
+
+**Gradients:** `--hw-gradient-warm`, `--hw-gradient-sage`, `--hw-gradient-golden`, `--hw-gradient-soft`
+
+**Shadows:** `--hw-shadow-sm` / `--hw-shadow-md` / `--hw-shadow-lg` / `--hw-shadow-glow`
+
+**Border radius:** `--hw-radius-sm` 8px | `--hw-radius-md` 12px | `--hw-radius-lg` 16px | `--hw-radius-xl` 24px | `--hw-radius-full` 9999px
+
+**Transitions:** `--hw-transition-fast` 0.2s | `--hw-transition-base` 0.3s | `--hw-transition-slow` 0.5s — all use `cubic-bezier(0.4, 0, 0.2, 1)`
+
+### Typography
+- Body: `'Nunito'` (400/500/600/700), sans-serif
+- Headings: `'Playfair Display'` (600/700), serif
+- Code/mono: `'SF Mono'`, monospace
+- Both loaded from Google Fonts in `root_base.html`
+
+### Component Conventions
+- **Buttons:** `--hw-radius-md`, padding `0.625rem 1.25rem`, gradient fills, `translateY(-2px)` on hover
+- **Cards:** `rgba(255,255,255,0.9)`, `--hw-radius-lg` (16px), `--hw-shadow-md`, `translateY(-4px)` on hover
+- **Forms:** `rgba(255,255,255,0.8)` bg, 2px sage border, `--hw-radius-md`, focus ring `rgba(135,168,120,0.15)`
+- **Navbar:** glassmorphism — `rgba(255,255,255,0.7)` + `backdrop-filter: blur(12px)`, `--hw-radius-lg`
+- **Dropdowns/Modals:** `rgba(255,255,255,0.98)` + `backdrop-filter: blur(12px)`, `--hw-radius-md`
+- **Empty states:** centered icon (4rem, 0.3 opacity), muted text, vertical flex
+
+### Animation Patterns
+- Hover lift: buttons `translateY(-2px)`, cards `translateY(-4px)`
+- Entry: `@keyframes fadeInUp` — opacity 0→1 + translateY(20px)→0, 0.5s
+- Pulse: `@keyframes pulse-glow` — box-shadow expansion, 2s infinite
+- All interactive element transitions: `var(--hw-transition-fast)` or `var(--hw-transition-base)`
+
+### Template Hierarchy
+`root_base.html` → `subpage_base.html` → per-subapp base (e.g. `metrics_base.html`) → page templates
+
+### Utility Classes
+`.text-sage`, `.text-forest`, `.text-peach`, `.bg-honeydew`, `.bg-sage`, `.border-sage`, `.shadow-soft`, `.rounded-xl`

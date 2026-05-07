@@ -1,0 +1,19 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}/dev{% endblock %}
+{% block navbar_brand %}Dev{% endblock %}
+
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link d-flex align-items-center gap-2" href="/dev">
+      <i class="bi bi-terminal-fill"></i>
+      <span>Logs</span>
+    </a>
+  </li>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('dev_api.static', filename='dev.css') }}">
+  <script src="{{ url_for('dev_api.static', filename='dev.js') }}" defer></script>
+{% endblock %}
