@@ -142,7 +142,14 @@ class DataInterface:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         new_backup = self.backups_directory / timestamp
         new_backup.mkdir(parents=True, exist_ok=True)
+        self._prune_backups()
         return new_backup
+
+    def _prune_backups(self) -> None:
+        max_count = ConfigManager().backup_max_count
+        backups = sorted(p for p in self.backups_directory.iterdir() if p.is_dir())
+        for old in backups[:-max_count]:
+            shutil.rmtree(old)
 
     def atomic_write(self, file_path: Path, data: bytes|str|None=None, stream: IO|None=None, **kwargs) -> None:
         if stream is None and data is None:

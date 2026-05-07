@@ -18,6 +18,8 @@
 
 * DO NOT write superfluous tests, add 1-2 USEFUL tests only per feature
 
+* Constants belong in `config.py`: any named constant (limits, counts, timeouts, feature flags, model names, etc.) must be defined as an attribute of `ConfigManager` in `web_app/config.py`, not hardcoded at call sites.
+
 * Project Architecture:
     - this project contains a collection of smaller subapps/subpages under web_app/ all of which share a similar ui/ux theme and share the same domain and host
     - Each subapp is a Flask Blueprint with its own templates/ and static/ folders

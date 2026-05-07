@@ -34,6 +34,7 @@ class ConfigManager:
         self.tudio_max_video_length = timedelta(minutes=10)
         self.tubio_test_video_id = "dQw4w9WgXcQ" # Default video ID for testing (Rick Astley - Never Gonna Give You Up)
         self.todoist2_default_page_size = 8
+        self.backup_max_count = 8
         # Requests matching these prefixes are silently dropped (404, no log) — automated bots/scanners probing for common vulnerabilities
         self.known_bot_prefixes = {
             '/.env',        # env file harvesting (.env, .env.local, .env.production, etc.)
