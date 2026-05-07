@@ -20,6 +20,6 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="/todoist2/static/script.js"></script>
-  <link rel="stylesheet" href="/todoist2/static/style.css">
+  <script src="{{ url_for('todoist2_api.static', filename='script.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('todoist2_api.static', filename='style.css') }}">
 {% endblock %}

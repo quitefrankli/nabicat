@@ -14,8 +14,8 @@
 <!-- New Metric Modal -->
 <div class="modal fade" id="newMetricModal" tabindex="-1" aria-labelledby="newMetricModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content" style="border-radius: 12px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%); color: white; border-radius: 12px 12px 0 0;">
+        <div class="modal-content">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border-radius: 16px 16px 0 0;">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="newMetricModalLabel">
                     <i class="bi bi-plus-circle me-2"></i>Create New Metric
                 </h1>
@@ -47,11 +47,11 @@
                         </label>
                     </div>
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
+                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
-                    <button type="submit" class="btn btn-success" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Creating...'; this.form.submit();">
+                    <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Creating...'; this.form.submit();">
                         <i class="bi bi-check-circle me-1"></i>Create Metric
                     </button>
                 </div>
@@ -64,12 +64,12 @@
     <!-- Edit Metric Modal -->
     <div class="modal fade" id="modifyMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="editModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content" style="border-radius: 12px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); color: white; border-radius: 12px 12px 0 0;">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%); color: var(--hw-forest, #2D4A3E); border-radius: 16px 16px 0 0;">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="editModalLabel{{ metric.id }}">
                         <i class="bi bi-pencil-square me-2"></i>Edit Metric
                     </h1>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form action="{{ url_for('.edit_metric', metric_id=metric.id) }}" method="post">
                     <div class="modal-body" style="padding: 2rem;">
@@ -96,11 +96,11 @@
                             </label>
                         </div>
                     </div>
-                    <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
+                    <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
-                        <button type="submit" class="btn btn-warning" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Updating...'; this.form.submit();">
+                        <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Updating...'; this.form.submit();">
                             <i class="bi bi-check-circle me-1"></i>Update Metric
                         </button>
                     </div>
@@ -112,8 +112,8 @@
     <!-- Delete Metric Modal -->
     <div class="modal fade" id="deleteMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content" style="border-radius: 12px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border-radius: 12px 12px 0 0;">
+            <div class="modal-content">
+                <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-coral, #E07A5F) 0%, #C0553A 100%); border-radius: 16px 16px 0 0;">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="deleteModalLabel{{ metric.id }}">
                         <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
                     </h1>
@@ -126,7 +126,7 @@
                     </div>
                     <p>Are you sure you want to delete the metric <strong>"{{ metric.name }}"</strong>?</p>
                 </div>
-                <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
+                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -141,8 +141,8 @@
     <!-- Log Metric Modal -->
     <div class="modal fade" id="logMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="logModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content" style="border-radius: 12px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%); color: white; border-radius: 12px 12px 0 0;">
+            <div class="modal-content">
+                <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-forest, #2D4A3E) 0%, var(--hw-moss, #4A5D4A) 100%); border-radius: 16px 16px 0 0;">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="logModalLabel{{ metric.id }}">
                         <i class="bi bi-plus-square me-2"></i>Log Progress: {{ metric.name }}
                     </h1>
@@ -163,7 +163,7 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div class="modal-footer" style="padding: 1.5rem; background: #f8f9fa; border-radius: 0 0 12px 12px;">
+                    <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
@@ -182,7 +182,7 @@
 {% block content %}
 <div class="mt-3">
     {% for metric in metrics %}
-    <div class="card shadow-sm mb-4" style="border: none; border-radius: 12px; overflow: hidden;">
+    <div class="card mb-4" style="overflow: hidden;">
         <div class="accordion" id="accordion{{ metric.id }}">
             <div class="accordion-item" style="border: none;">
                 <h2 class="accordion-header" id="heading{{ metric.id }}">
@@ -193,9 +193,9 @@
                         data-bs-target="#collapse{{ metric.id }}" 
                         aria-expanded="false" 
                         aria-controls="collapse{{ metric.id }}"
-                        style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); border: none; padding: 20px;">
+                        style="background: var(--hw-gradient-soft); border: none; padding: 1.25rem 1.5rem;">
                         <div class="d-flex align-items-center w-100">
-                            <i class="bi bi-graph-up-arrow text-success me-3" style="font-size: 1.5rem;"></i>
+                            <i class="bi bi-graph-up-arrow text-sage me-3" style="font-size: 1.5rem;"></i>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ metric.name }}</h5>
                                 {% if metric.unit %}
@@ -206,11 +206,11 @@
                     </button>
                 </h2>
                 <div id="collapse{{ metric.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ metric.id }}" data-bs-parent="#accordion{{ metric.id }}">
-                    <div class="accordion-body" style="background: #fafafa; padding: 30px;">
-                        <div class="card border-0 shadow-sm">
+                    <div class="accordion-body" style="background: rgba(250, 249, 246, 0.6); padding: 1.5rem;">
+                        <div class="card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="card-title text-primary mb-0">
+                                    <h5 class="card-title text-forest mb-0">
                                         <i class="bi bi-bar-chart me-2"></i>{{ metric.name }}
                                     </h5>
                                     <div class="btn-group" role="group">
@@ -224,8 +224,8 @@
                                         </button>
                                         <button 
                                             type="button" 
-                                            class="btn btn-outline-warning btn-sm" 
-                                            data-bs-toggle="modal" 
+                                            class="btn btn-outline-primary btn-sm"
+                                            data-bs-toggle="modal"
                                             data-bs-target="#modifyMetricModal{{ metric.id }}"
                                             title="Edit metric">
                                                 <i class="bi bi-pencil"></i>
@@ -234,8 +234,8 @@
                                 </div>
                                 
                                 {% if metric.description %}
-                                <div class="alert alert-light border-start border-4 border-info" role="alert">
-                                    <i class="bi bi-info-circle text-info me-2"></i>{{ metric.description }}
+                                <div class="alert border-start border-4" style="background: rgba(135, 168, 120, 0.08); border-color: var(--hw-sage) !important;" role="alert">
+                                    <i class="bi bi-info-circle text-sage me-2"></i>{{ metric.description }}
                                 </div>
                                 {% endif %}
                                 
@@ -247,9 +247,9 @@
                                         <div class="border rounded" style="max-height: 250px; overflow-y: auto; background: white;">
                                             {% if metric.data %}
                                                 {% for data_point in metric.data %}
-                                                <div class="d-flex justify-content-between align-items-center p-2 {% if loop.index0 % 2 == 0 %}bg-light{% endif %}">
+                                                <div class="d-flex justify-content-between align-items-center p-2">
                                                     <span class="fw-medium">
-                                                        <i class="bi bi-arrow-right me-1 text-success"></i>
+                                                        <i class="bi bi-arrow-right me-1 text-sage"></i>
                                                         {{ data_point.value }}
                                                         {% if metric.unit %}{{ metric.unit }}{% endif %}
                                                     </span>
