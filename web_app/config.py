@@ -34,6 +34,17 @@ class ConfigManager:
         self.tudio_max_video_length = timedelta(minutes=10)
         self.tubio_test_video_id = "dQw4w9WgXcQ" # Default video ID for testing (Rick Astley - Never Gonna Give You Up)
         self.todoist2_default_page_size = 8
+        # Requests matching these prefixes are silently dropped (404, no log) — automated bots/scanners probing for common vulnerabilities
+        self.known_bot_prefixes = {
+            '/.env',        # env file harvesting (.env, .env.local, .env.production, etc.)
+            '/.git/',       # git config/object exposure
+            '/wp-',         # WordPress scanners (wp-admin, wp-login, wp-includes, xmlrpc)
+            '/xmlrpc',      # WordPress XML-RPC
+            '/phpmyadmin',  # phpMyAdmin probes
+            '/.mist/',      # Juniper/Mist IoT probes
+            '/dns-query',   # DNS-over-HTTPS probes
+        }
+        self.known_bot_methods = {'PROPFIND', 'TRACK', 'TRACE'}
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
         self.smtp_port = 587
         self.project_dir = Path.cwd()

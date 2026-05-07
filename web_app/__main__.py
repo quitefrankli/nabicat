@@ -13,7 +13,7 @@ from packaging.version import Version
 from typing import * # type: ignore
 from pathlib import Path
 from email.mime.text import MIMEText
-from flask import render_template, request, send_from_directory
+from flask import abort, render_template, request, send_from_directory
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
 
@@ -155,6 +155,10 @@ def start_scheduler() -> None:
 
 @app.before_request
 def before_request():
+    config = ConfigManager()
+    if any(request.path.startswith(p) for p in config.known_bot_prefixes) or request.method in config.known_bot_methods:
+        abort(404)
+
     # Auto-login as admin in debug mode
     if ConfigManager().debug_mode and not flask_login.current_user.is_authenticated:
         di = DataInterface()
