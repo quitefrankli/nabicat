@@ -243,6 +243,23 @@ class TerminalView {
         this.clearBtn.addEventListener('click', () => this.term.clear());
         this.reconnectBtn.addEventListener('click', () => this.reconnect());
         window.addEventListener('beforeunload', () => this.closeBeacon());
+
+        const SHORTCUTS = {
+            'ctrl-c': '\x03',
+            'ctrl-d': '\x04',
+            'ctrl-z': '\x1a',
+            'ctrl-l': '\x0c',
+            'tab':    '\x09',
+            'up':     '\x1b[A',
+            'down':   '\x1b[B',
+        };
+        document.querySelectorAll('.shortcut-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const seq = SHORTCUTS[btn.dataset.shortcut];
+                if (seq) this.sendInput(seq);
+                this.term.focus();
+            });
+        });
     }
 
     async start() {
