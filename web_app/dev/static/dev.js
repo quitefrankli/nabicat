@@ -281,6 +281,7 @@ class TerminalView {
     }
 
     async poll() {
+        let consecutiveErrors = 0;
         while (this.alive) {
             try {
                 const res = await fetch(`/dev/terminal/output?sid=${this.sid}&since=${this.since}`);
@@ -290,12 +291,29 @@ class TerminalView {
                     this.term.writeln('\r\n\x1b[31m[session ended]\x1b[0m');
                     break;
                 }
+                if (!res.ok) {
+                    // Transient (rate-limit, gateway, etc.) — back off but keep session alive
+                    consecutiveErrors++;
+                    this.setStatus('connecting', `retrying (${res.status})`);
+                    if (consecutiveErrors > 30) {
+                        this.alive = false;
+                        this.setStatus('disconnected', `error ${res.status}`);
+                        this.term.writeln(`\r\n\x1b[31m[server returned ${res.status}, giving up]\x1b[0m`);
+                        break;
+                    }
+                    await new Promise(r => setTimeout(r, Math.min(2000, 200 * consecutiveErrors)));
+                    continue;
+                }
+                consecutiveErrors = 0;
                 const data = await res.json();
                 if (data.data) {
                     this.term.write(data.data);
                     this.since = data.total;
                     this.idleStreak = 0;
                     this.pollDelay = 80;
+                    if (this.statusEl.classList.contains('connecting')) {
+                        this.setStatus('connected', 'connected');
+                    }
                 } else {
                     this.idleStreak++;
                     if (this.idleStreak > 12) this.pollDelay = 400;
@@ -307,10 +325,16 @@ class TerminalView {
                     break;
                 }
             } catch (_) {
-                this.alive = false;
-                this.setStatus('disconnected', 'network error');
-                this.term.writeln('\r\n\x1b[31m[network error]\x1b[0m');
-                break;
+                consecutiveErrors++;
+                this.setStatus('connecting', 'reconnecting…');
+                if (consecutiveErrors > 30) {
+                    this.alive = false;
+                    this.setStatus('disconnected', 'network error');
+                    this.term.writeln('\r\n\x1b[31m[network error, giving up]\x1b[0m');
+                    break;
+                }
+                await new Promise(r => setTimeout(r, Math.min(2000, 200 * consecutiveErrors)));
+                continue;
             }
             await new Promise(r => setTimeout(r, this.pollDelay));
         }
