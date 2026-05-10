@@ -1,47 +1,79 @@
 {% extends "dev_base.html" %}
 
 {% block page_content %}
-<div class="dev-workspace">
-  <div class="dev-panel" id="log-panel">
-    <div class="panel-header">
-      <i class="bi bi-file-text-fill text-sage"></i>
-      <span>Application Logs</span>
-      <span class="ms-auto badge-lines" id="line-count">—</span>
+<div class="dev-workspace tab-content">
+  <div class="tab-pane" id="logs" role="tabpanel">
+    <div class="dev-panel" id="log-panel">
+      <div class="panel-header">
+        <i class="bi bi-file-text-fill text-sage"></i>
+        <span>Application Logs</span>
+        <span class="ms-auto badge-lines" id="line-count">—</span>
+      </div>
+
+      <div class="panel-toolbar">
+        <div class="search-wrapper">
+          <i class="bi bi-search search-icon"></i>
+          <input type="text" id="log-search" class="log-search-input" placeholder="Search logs…" autocomplete="off">
+          <button class="search-clear" id="search-clear" aria-label="Clear search">×</button>
+        </div>
+
+        <div class="search-wrapper search-wrapper-exclude">
+          <i class="bi bi-slash-circle search-icon"></i>
+          <input type="text" id="log-exclude" class="log-search-input" placeholder="Exclude…" autocomplete="off">
+          <button class="search-clear" id="exclude-clear" aria-label="Clear exclude">×</button>
+        </div>
+
+        <div class="level-filters d-flex gap-1">
+          <button class="level-btn active" data-level="ALL">All</button>
+          <button class="level-btn" data-level="INFO">Info</button>
+          <button class="level-btn" data-level="WARNING">Warn</button>
+          <button class="level-btn" data-level="ERROR">Error</button>
+          <button class="level-btn" data-level="DEBUG">Debug</button>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <button class="btn-icon" id="refresh-btn" title="Reload all logs">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <button class="btn-icon" id="jump-bottom-btn" title="Jump to bottom">
+            <i class="bi bi-arrow-down-circle"></i>
+          </button>
+          <button class="btn-icon follow-btn" id="follow-btn" title="Follow live output">
+            <i class="bi bi-record-circle"></i>
+            <span>Follow</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="log-output" id="log-output">
+        <div class="log-status">
+          <i class="bi bi-hourglass-split"></i> Loading logs…
+        </div>
+      </div>
     </div>
+  </div>
 
-    <div class="panel-toolbar">
-      <div class="search-wrapper">
-        <i class="bi bi-search search-icon"></i>
-        <input type="text" id="log-search" class="log-search-input" placeholder="Search logs…" autocomplete="off">
-        <button class="search-clear" id="search-clear" aria-label="Clear search">×</button>
+  <div class="tab-pane" id="terminal" role="tabpanel">
+    <div class="dev-panel" id="term-panel">
+      <div class="panel-header">
+        <i class="bi bi-terminal-fill text-sage"></i>
+        <span>Shell</span>
+        <span class="ms-auto badge-lines" id="term-status">disconnected</span>
       </div>
 
-      <div class="level-filters d-flex gap-1">
-        <button class="level-btn active" data-level="ALL">All</button>
-        <button class="level-btn" data-level="INFO">Info</button>
-        <button class="level-btn" data-level="WARNING">Warn</button>
-        <button class="level-btn" data-level="ERROR">Error</button>
-        <button class="level-btn" data-level="DEBUG">Debug</button>
+      <div class="panel-toolbar">
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <button class="btn-icon" id="term-clear-btn" title="Clear screen">
+            <i class="bi bi-eraser"></i>
+          </button>
+          <button class="btn-icon" id="term-reconnect-btn" title="Restart shell">
+            <i class="bi bi-arrow-repeat"></i>
+            <span>Reconnect</span>
+          </button>
+        </div>
       </div>
 
-      <div class="d-flex gap-2 align-items-center ms-auto">
-        <button class="btn-icon" id="refresh-btn" title="Reload all logs">
-          <i class="bi bi-arrow-clockwise"></i>
-        </button>
-        <button class="btn-icon" id="jump-bottom-btn" title="Jump to bottom">
-          <i class="bi bi-arrow-down-circle"></i>
-        </button>
-        <button class="btn-icon follow-btn" id="follow-btn" title="Follow live output">
-          <i class="bi bi-record-circle"></i>
-          <span>Follow</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="log-output" id="log-output">
-      <div class="log-status">
-        <i class="bi bi-hourglass-split"></i> Loading logs…
-      </div>
+      <div class="terminal-output" id="terminal-mount"></div>
     </div>
   </div>
 </div>

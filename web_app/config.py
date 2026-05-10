@@ -56,6 +56,13 @@ class ConfigManager:
         self.assistant_model = "claude-opus-4-7"
         self.assistant_max_tokens = 4096
 
+        # Dev terminal (in-browser shell)
+        self.dev_terminal_shell = "/bin/bash"
+        self.dev_terminal_max_sessions = 4
+        self.dev_terminal_idle_timeout_s = 1800
+        self.dev_terminal_buffer_bytes = 1_048_576
+        self.dev_terminal_read_chunk = 4096
+
         # Crosswords
         self.crosswords_model = "claude-sonnet-4-6"
         self.crosswords_word_count = 7

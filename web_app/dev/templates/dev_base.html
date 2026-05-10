@@ -5,15 +5,24 @@
 
 {% block page_nav_items %}
   <li class="nav-item mx-1">
-    <a class="nav-link d-flex align-items-center gap-2" href="/dev">
-      <i class="bi bi-terminal-fill"></i>
+    <a class="nav-link d-flex align-items-center gap-2" href="#" id="logs-nav-tab" onclick="switchTab('logs')">
+      <i class="bi bi-file-text-fill"></i>
       <span>Logs</span>
+    </a>
+  </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link d-flex align-items-center gap-2" href="#" id="terminal-nav-tab" onclick="switchTab('terminal')">
+      <i class="bi bi-terminal-fill"></i>
+      <span>Terminal</span>
     </a>
   </li>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('dev_api.static', filename='dev.css') }}">
   <script src="{{ url_for('dev_api.static', filename='dev.js') }}" defer></script>
 {% endblock %}

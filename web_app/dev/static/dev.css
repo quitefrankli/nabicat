@@ -1,10 +1,15 @@
 .dev-workspace {
-    display: flex;
-    flex-direction: row;
-    gap: 1rem;
     height: calc(100vh - 130px);
     height: calc(100dvh - 130px);
     margin-top: 1rem;
+}
+
+.dev-workspace > .tab-pane {
+    height: 100%;
+}
+
+.dev-workspace > .tab-pane.active {
+    display: flex;
 }
 
 .dev-panel {
@@ -17,6 +22,7 @@
     box-shadow: var(--hw-shadow-md);
     overflow: hidden;
     min-height: 0;
+    min-width: 0;
 }
 
 /* Panel header */
@@ -61,6 +67,15 @@
     min-width: 160px;
     max-width: 280px;
     flex: 1;
+}
+
+.search-wrapper-exclude .search-icon {
+    color: var(--hw-coral);
+}
+
+.search-wrapper-exclude .log-search-input:focus {
+    border-color: var(--hw-coral);
+    box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.15);
 }
 
 .search-icon {
@@ -215,12 +230,36 @@
     font-style: italic;
 }
 
+/* Terminal panel */
+.terminal-output {
+    flex: 1;
+    min-height: 0;
+    background: #1b2a24;
+    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.terminal-output .xterm {
+    height: 100%;
+    width: 100%;
+    padding: 0;
+}
+
+.terminal-output .xterm-viewport::-webkit-scrollbar       { width: 8px; }
+.terminal-output .xterm-viewport::-webkit-scrollbar-track { background: #141f1b; }
+.terminal-output .xterm-viewport::-webkit-scrollbar-thumb { background: #2d4a3e; border-radius: 4px; }
+.terminal-output .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #3d6350; }
+
+#term-status.connected    { color: #7dba7d; background: rgba(125, 186, 125, 0.12); border-color: rgba(125, 186, 125, 0.3); }
+#term-status.connecting   { color: #ddb96a; background: rgba(221, 185, 106, 0.12); border-color: rgba(221, 185, 106, 0.3); }
+#term-status.disconnected { color: #e07a5f; background: rgba(224, 122, 95, 0.12); border-color: rgba(224, 122, 95, 0.3); }
+
 /* Mobile */
 @media (max-width: 768px) {
     .dev-workspace {
         height: calc(100vh - 155px);
         height: calc(100dvh - 155px);
-        flex-direction: column;
     }
 
     .search-wrapper {
@@ -237,4 +276,5 @@
     }
 
     .follow-btn span { display: none; }
+    #term-reconnect-btn span { display: none; }
 }
