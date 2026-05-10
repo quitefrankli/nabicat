@@ -29,6 +29,10 @@ def index():
     return render_template("hammock_index.html", 
                            posts_by_project=posts_by_project)
 
+@hammock_api.route('/<project>/')
+def view_project(project: str):
+    return redirect(f'/hammock/?open={project}')
+
 @hammock_api.route('/<project>/<post>/')
 def view_post(project: str, post: str):
     data_interface = DataInterface()
