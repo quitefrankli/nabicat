@@ -217,6 +217,15 @@ class TerminalView {
 
         this.term.onData(d => this.sendInput(d));
 
+        this.term.attachCustomKeyEventHandler(e => {
+            if (e.ctrlKey && e.key === 'w' && e.type === 'keydown') {
+                e.preventDefault();
+                this.sendInput('\x17');
+                return false;
+            }
+            return true;
+        });
+
         this.resizeObserver = new ResizeObserver(() => this.fitAndResize());
         this.resizeObserver.observe(this.mount);
 
