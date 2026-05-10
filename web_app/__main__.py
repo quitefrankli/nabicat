@@ -171,6 +171,9 @@ def before_request():
             logging.info("Debug mode: created admin user")
         flask_login.login_user(user, remember=True)
 
+    if request.path == '/dev/terminal/output':
+        return
+
     message = f"Processing request: client={get_ip()}, path={request.path}, method={request.method}"
 
     _REDACTED_KEYS = {'password', 'csrf_token', 'cookie', 'secret', 'token'}
