@@ -28,6 +28,10 @@ function switchTab(tabName) {
         actionsContainer.classList.toggle('d-none', tabName === 'search');
     }
 
+    // Hide the trackbar in search mode.
+    const trackbar = document.getElementById('tubio-trackbar');
+    if (trackbar) trackbar.classList.toggle('d-none', tabName === 'search');
+
     // Update URL hash
     window.location.hash = '#' + tabName;
 }
