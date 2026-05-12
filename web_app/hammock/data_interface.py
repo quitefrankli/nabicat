@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 from pathlib import Path
@@ -18,16 +19,24 @@ class DataInterface(BaseDataInterface):
         self.projects_dir = self._content_dir / "projects"
         self.projects_dir.mkdir(parents=True, exist_ok=True)
 
+    def _post_sort_key(self, post_dir: Path) -> tuple:
+        meta_file = post_dir / "meta.json"
+        date = ""
+        if meta_file.exists():
+            try:
+                date = json.loads(meta_file.read_text()).get("date", "")
+            except Exception:
+                pass
+        return (date, post_dir.name)
+
     def get_posts_by_project(self) -> list[Project]:
         projects: list[Project] = []
 
         for project_dir in sorted(self.projects_dir.iterdir(), key=lambda path: path.name):
             if not project_dir.is_dir():
                 continue
-            posts = sorted(
-                [posts_dir.name for posts_dir in project_dir.iterdir() if posts_dir.is_dir()],
-                reverse=True
-            )
+            post_dirs = [d for d in project_dir.iterdir() if d.is_dir()]
+            posts = [d.name for d in sorted(post_dirs, key=self._post_sort_key, reverse=True)]
             projects.append(Project(name=project_dir.name, posts=posts))
 
         return projects

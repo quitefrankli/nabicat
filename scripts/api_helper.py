@@ -464,7 +464,8 @@ def sync_cookies(browser: str, profile: str | None) -> None:
 @click.argument("post_folder", type=click.Path(exists=True))
 @click.option("--project", required=True, help="Project name for the post")
 @click.option("--name", "post_name", default=None, help="Post name (defaults to folder name)")
-def upload_post(post_folder: str, project: str, post_name: str | None) -> None:
+@click.option("--date", default=None, help="Override post date (ISO format, e.g. 2024-03-15T10:00:00)")
+def upload_post(post_folder: str, project: str, post_name: str | None, date: str | None) -> None:
     post_path = Path(post_folder)
     if not post_path.is_dir():
         print(f"Error: {post_folder} is not a directory", file=sys.stderr)
@@ -487,11 +488,10 @@ def upload_post(post_folder: str, project: str, post_name: str | None) -> None:
     mb = len(data) / (1024 * 1024)
     print(f"Uploading post '{post_name}' to project '{project}' ({mb:.2f} MB)")
 
-    response = send_request("hammock/api/upload_post", {
-        "project": project,
-        "post_name": post_name,
-        "data": encoded_data,
-    })
+    payload = {"project": project, "post_name": post_name, "data": encoded_data}
+    if date:
+        payload["date"] = date
+    response = send_request("hammock/api/upload_post", payload)
     print(f"Response: {response.status_code} - {response.text}")
 
 @cli.command()

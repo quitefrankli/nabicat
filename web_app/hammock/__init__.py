@@ -1,7 +1,9 @@
 import base64
 import gzip
+import json
 import logging
 import zipfile
+from datetime import datetime, timezone
 from io import BytesIO
 
 from flask import Blueprint, render_template, send_file, abort, request, redirect, jsonify
@@ -31,6 +33,10 @@ def index():
 
 @hammock_api.route('/<project>/')
 def view_project(project: str):
+    posts_by_project = DataInterface().get_posts_by_project()
+    project_obj = next((p for p in posts_by_project if p.name == project), None)
+    if project_obj and project_obj.posts:
+        return redirect(f'/hammock/{project}/{project_obj.posts[0]}/')
     return redirect(f'/hammock/?open={project}')
 
 @hammock_api.route('/<project>/<post>/')
@@ -78,6 +84,10 @@ def upload_post():
             zf.extractall(post_dir)
     except zipfile.BadZipFile:
         return jsonify({"error": "Invalid zip data"}), 400
+
+    forced_date = request_body.get("date")
+    date = forced_date if forced_date else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    (post_dir / "meta.json").write_text(json.dumps({"date": date}))
 
     logging.info(f"Post uploaded: {project}/{post_name} from {get_ip()}")
     return jsonify({"success": True, "message": f"Post {project}/{post_name} uploaded"}), 200
