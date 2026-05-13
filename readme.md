@@ -104,8 +104,17 @@ c. run on server - `bash update_server.sh`
 
 ## Renewing Cert
 
+Renewal is automatic. `setup_server.sh` installs certbot via apt, which ships a `certbot.timer` systemd unit that runs `certbot renew` twice daily. Pre/post hooks (stop/start nginx) are stored in `/etc/letsencrypt/renewal/nabicat.site.conf` and run on each renewal.
+
+To verify:
+
 ```bash
-sudo systemctl stop nginx 
-sudo $(which certbot) renew
-sudo systemctl start nginx 
+systemctl list-timers certbot.timer
+sudo certbot renew --dry-run
+```
+
+To force a manual renewal:
+
+```bash
+sudo certbot renew --force-renewal
 ```

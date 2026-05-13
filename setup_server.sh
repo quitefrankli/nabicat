@@ -64,10 +64,14 @@ function run_server_side()
 		sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
 		sudo netfilter-persistent save
 
-		mamba install -y anaconda::cryptography
-		mamba install -y certbot
+		# apt's certbot ships a systemd timer (certbot.timer) that auto-renews twice daily.
+		# Pre/post hooks are persisted into /etc/letsencrypt/renewal/<domain>.conf so
+		# `certbot renew` cycles nginx automatically on each renewal.
+		sudo apt install -y certbot
 		sudo systemctl stop nginx
-		sudo $(which certbot) certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos
+		sudo certbot certonly --standalone -d $DOMAIN --staple-ocsp -m $EMAIL --agree-tos \
+			--pre-hook "systemctl stop nginx" \
+			--post-hook "systemctl start nginx"
 		sudo cp nabicat.conf /etc/nginx/conf.d/
 	}
 
