@@ -59,6 +59,7 @@ def register_all_blueprints(app):
     from web_app.hammock import hammock_api
     from web_app.assistant import assistant_api
     from web_app.dev import dev_api
+    from web_app.simulations import simulations_api
 
     blueprints = [
         todoist2_api,
@@ -73,6 +74,7 @@ def register_all_blueprints(app):
         hammock_api,
         assistant_api,
         dev_api,
+        simulations_api,
     ]
 
     for blueprint in blueprints:

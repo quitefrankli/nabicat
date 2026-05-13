@@ -1,0 +1,145 @@
+.sim-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  color: var(--hw-forest);
+  margin-bottom: 0.25rem;
+}
+
+.gol-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-md);
+  border: 1px solid var(--hw-border);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gol-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-sim {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--hw-radius-md);
+  border: 1px solid var(--hw-border);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--hw-text-primary);
+  font-family: 'Nunito', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--hw-transition-fast);
+}
+
+.btn-sim:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--hw-shadow-sm);
+  border-color: var(--hw-sage);
+}
+
+.btn-sim:active {
+  transform: translateY(0);
+}
+
+.btn-sim-primary {
+  background: var(--hw-gradient-sage);
+  color: white;
+  border-color: transparent;
+}
+
+.btn-sim-primary:hover {
+  color: white;
+  border-color: transparent;
+  box-shadow: var(--hw-shadow-glow);
+}
+
+.btn-sim-ghost {
+  background: transparent;
+}
+
+.gol-speed {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 40px;
+}
+
+.gol-speed-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--hw-text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.gol-speed input[type="range"] {
+  width: 140px;
+  accent-color: var(--hw-sage);
+  cursor: pointer;
+}
+
+.gol-canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--hw-bg-primary);
+  border-radius: var(--hw-radius-md);
+  border: 1px solid var(--hw-border);
+  overflow: hidden;
+  touch-action: none;
+}
+
+#gol-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.gol-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--hw-text-secondary);
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.gol-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+@media (max-width: 768px) {
+  .gol-toolbar {
+    justify-content: center;
+  }
+  .gol-speed input[type="range"] {
+    width: 100px;
+  }
+  .btn-sim span {
+    display: none;
+  }
+  .btn-sim {
+    padding: 0.5rem 0.7rem;
+    min-width: 40px;
+    justify-content: center;
+  }
+  .gol-canvas-wrap {
+    aspect-ratio: 1 / 1;
+  }
+}
