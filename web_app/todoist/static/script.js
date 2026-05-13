@@ -1,3 +1,127 @@
+function initMoodStars(container) {
+	const hiddenInput = container.querySelector('input[name="mood_rating"]');
+	const stars = container.querySelectorAll('.diary-star');
+	const clearBtn = container.querySelector('.diary-star-clear');
+
+	function render(value) {
+		stars.forEach((starEl, idx) => {
+			const starNum = idx + 1;
+			const icon = starEl.querySelector('i');
+			if (value >= starNum) icon.className = 'bi bi-star-fill';
+			else if (value >= starNum - 0.5) icon.className = 'bi bi-star-half';
+			else icon.className = 'bi bi-star';
+		});
+	}
+
+	function setValue(v) {
+		hiddenInput.value = v;
+		render(v);
+	}
+
+	stars.forEach((starEl, idx) => {
+		starEl.addEventListener('click', (e) => {
+			const rect = starEl.getBoundingClientRect();
+			const isHalf = (e.clientX - rect.left) < rect.width / 2;
+			setValue((idx + 1) - (isHalf ? 0.5 : 0));
+		});
+	});
+
+	if (clearBtn) clearBtn.addEventListener('click', () => setValue(0));
+	render(parseFloat(hiddenInput.value) || 0);
+}
+
+function normalizeTag(raw) {
+	return raw.trim().toLowerCase()
+		.replace(/\s+/g, '-')
+		.replace(/[^a-z0-9-]/g, '')
+		.replace(/-+/g, '-')
+		.replace(/^-|-$/g, '');
+}
+
+function initTagWidget(container) {
+	const hiddenInput = container.querySelector('input[name="tags"]');
+	const chipsContainer = container.querySelector('.diary-tag-chips');
+	const tagInput = container.querySelector('.diary-tag-input');
+	const suggestionsEl = container.querySelector('.diary-tag-suggestions');
+	const recentTags = JSON.parse(container.dataset.recentTags || '[]');
+
+	let currentTags = (hiddenInput.value || '').split(',').map(t => t.trim()).filter(Boolean);
+
+	function syncHidden() { hiddenInput.value = currentTags.join(','); }
+
+	function renderChips() {
+		chipsContainer.innerHTML = '';
+		currentTags.forEach(tag => {
+			const chip = document.createElement('span');
+			chip.className = 'badge diary-tag-chip diary-tag-chip-removable';
+			chip.textContent = '#' + tag;
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'btn-close btn-close-sm ms-1';
+			btn.setAttribute('aria-label', 'Remove tag');
+			btn.addEventListener('click', () => {
+				currentTags = currentTags.filter(t => t !== tag);
+				syncHidden();
+				renderChips();
+				renderSuggestions();
+			});
+			chip.appendChild(btn);
+			chipsContainer.appendChild(chip);
+		});
+	}
+
+	function renderSuggestions() {
+		suggestionsEl.innerHTML = '';
+		const available = recentTags.filter(t => !currentTags.includes(t));
+		if (available.length === 0) {
+			const li = document.createElement('li');
+			li.innerHTML = '<span class="dropdown-item-text text-muted fst-italic small">No suggestions</span>';
+			suggestionsEl.appendChild(li);
+			return;
+		}
+		available.forEach(tag => {
+			const li = document.createElement('li');
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'dropdown-item';
+			btn.textContent = '#' + tag;
+			btn.addEventListener('click', () => addTag(tag));
+			li.appendChild(btn);
+			suggestionsEl.appendChild(li);
+		});
+	}
+
+	function addTag(raw) {
+		const tag = normalizeTag(raw);
+		if (!tag || currentTags.includes(tag)) {
+			tagInput.value = '';
+			return;
+		}
+		currentTags.push(tag);
+		syncHidden();
+		renderChips();
+		renderSuggestions();
+		tagInput.value = '';
+	}
+
+	tagInput.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' || e.key === ',') {
+			e.preventDefault();
+			addTag(tagInput.value);
+		}
+	});
+
+	const form = container.closest('form');
+	if (form) {
+		form.addEventListener('submit', () => {
+			if (tagInput.value.trim()) addTag(tagInput.value);
+		});
+	}
+
+	renderChips();
+	renderSuggestions();
+}
+
 function toggleGoalState(switchElement, goalId) {
 	const state = switchElement.checked;
 
@@ -107,6 +231,35 @@ document.addEventListener('DOMContentLoaded', function() {
 		const btn = document.getElementById('load-more-btn');
 		if (btn) {
 			btn.onclick = loadMoreCompletedGoals;
+		}
+	}
+
+	document.querySelectorAll('textarea.diary-body-input').forEach(textarea => {
+		const autosize = () => {
+			textarea.style.height = 'auto';
+			textarea.style.height = textarea.scrollHeight + 'px';
+		};
+		textarea.addEventListener('input', autosize);
+	});
+
+	document.querySelectorAll('.diary-mood-stars').forEach(initMoodStars);
+	document.querySelectorAll('.diary-tags-widget').forEach(initTagWidget);
+
+	const hash = window.location.hash;
+	if (hash.startsWith('#entry-')) {
+		const entryId = hash.slice('#entry-'.length);
+		const collapseEl = document.getElementById('collapseEntry' + entryId);
+		if (collapseEl) {
+			const bsCollapse = new bootstrap.Collapse(collapseEl, { toggle: false });
+			bsCollapse.show();
+			collapseEl.addEventListener('shown.bs.collapse', () => {
+				const textarea = document.getElementById('entryBody' + entryId);
+				if (textarea) {
+					textarea.style.height = 'auto';
+					textarea.style.height = textarea.scrollHeight + 'px';
+					textarea.focus();
+				}
+			}, { once: true });
 		}
 	}
 });

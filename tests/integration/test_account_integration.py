@@ -47,7 +47,7 @@ class TestAccountDeletionIntegration:
 
         for directory, filename, content in [
             (api_user_dir, "payload.txt", "hello"),
-            (todoist_user_dir, "data.json", "{}"),
+            (todoist_user_dir, "goals.json", "{}"),
             (metrics_user_dir, "data.json", "{}"),
             (jswipe_user_dir, "jobs.json", '{"jobs": {}}'),
         ]:

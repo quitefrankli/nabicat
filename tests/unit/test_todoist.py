@@ -78,7 +78,7 @@ class TestTodoistHelperFunctions:
     def test_get_filtered_summary_goals(self, mock_di, test_user, test_goals):
         """Test filtering summary goals returns (list, dict) tuple"""
         mock_instance = Mock()
-        mock_instance.load_data.return_value = test_goals
+        mock_instance.load_goals.return_value = test_goals
         mock_di.return_value = mock_instance
 
         goals, all_goals = _get_filtered_summary_goals(test_user)
@@ -94,7 +94,7 @@ class TestTodoistHelperFunctions:
         child = Goal(id=2, name='Child', state=GoalState.ACTIVE,
                      last_modified=datetime(2026, 2, 1), parent=1)
         mock_instance = Mock()
-        mock_instance.load_data.return_value = Goals(goals={1: parent, 2: child})
+        mock_instance.load_goals.return_value = Goals(goals={1: parent, 2: child})
         mock_di.return_value = mock_instance
 
         goals, _ = _get_filtered_summary_goals(test_user)
@@ -112,7 +112,7 @@ class TestTodoistHelperFunctions:
         recent_child = Goal(id=3, name='Recent child', state=GoalState.ACTIVE,
                             last_modified=datetime(2026, 1, 20), parent=1)
         mock_instance = Mock()
-        mock_instance.load_data.return_value = Goals(goals={1: older_parent, 2: newer_parent, 3: recent_child})
+        mock_instance.load_goals.return_value = Goals(goals={1: older_parent, 2: newer_parent, 3: recent_child})
         mock_di.return_value = mock_instance
 
         goals, _ = _get_filtered_summary_goals(test_user)
@@ -161,7 +161,7 @@ class TestTodoistHelperFunctions:
     def test_get_completed_goals(self, mock_di, test_user, test_goals):
         """Test getting completed goals"""
         mock_instance = Mock()
-        mock_instance.load_data.return_value = test_goals
+        mock_instance.load_goals.return_value = test_goals
         mock_di.return_value = mock_instance
 
         goals = _get_completed_goals(test_user)

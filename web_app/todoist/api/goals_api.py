@@ -30,7 +30,7 @@ def new_goal():
     description = from_req('description')
     parent_id = request.form.get('parent_id')
 
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goal_id = 0 if not tld.goals else max(tld.goals.keys()) + 1
     goal = Goal(id=goal_id,
                 name=name,
@@ -43,7 +43,7 @@ def new_goal():
     if parent_id:
         tld.goals[int(parent_id)].children.append(goal_id)
 
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return get_default_redirect()
 
@@ -53,9 +53,9 @@ def fail_goal():
     req_data = request.args
 
     goal_id = int(req_data['goal_id'])
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     tld.goals[goal_id].state = GoalState.FAILED
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return get_default_redirect()
 
@@ -64,13 +64,13 @@ def fail_goal():
 def log_goal():
     goal_id = int(request.args['goal_id'])
 
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goal = tld.goals[goal_id]
     today_date = datetime.now().date()
     today_date = today_date.strftime("%d/%m/%Y")
     goal.description += f"\n\n{'-'*10}\n{today_date}\n{from_req('log')}\n{'-'*10}"
     goal.last_modified = datetime.now()
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return get_default_redirect()
 
@@ -79,7 +79,7 @@ def log_goal():
 def toggle_goal_state():
     req_data = request.get_json()
 
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goal = tld.goals[req_data['goal_id']]
     if goal.state == GoalState.ACTIVE:
         goal.state = GoalState.COMPLETED
@@ -90,7 +90,7 @@ def toggle_goal_state():
     else:
         raise ValueError(f"Cannot toggle goal state for goal in state {goal.state}")
 
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return flask.jsonify(success=True)
 
@@ -105,12 +105,12 @@ def edit_goal():
 
     goal_id = int(request.args['goal_id'])
 
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goal = tld.goals[goal_id]
     goal.name = name
     goal.description = description
     goal.last_modified = datetime.now()
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return get_default_redirect()
 
@@ -120,7 +120,7 @@ def delete_goal():
     req_data = request.args
 
     goal_id = int(req_data['goal_id'])
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goal = tld.goals[goal_id]
 
     # Remove from parent's children list
@@ -138,6 +138,6 @@ def delete_goal():
         tld.goals.pop(gid)
 
     delete_descendants(goal_id)
-    DataInterface().save_data(tld, cur_user())
+    DataInterface().save_goals(tld, cur_user())
 
     return get_default_redirect()

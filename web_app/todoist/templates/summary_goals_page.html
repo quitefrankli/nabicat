@@ -2,14 +2,6 @@
 
 {% set active = 'Home' %}
 
-{% block actions_menu %}
-<li>
-	<button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#newGoalModal">
-		<i class="bi bi-plus-circle me-1"></i>New Goal
-	</button>
-</li>
-{% endblock %}
-
 {% block actions_modal %}
 <!-- New Goal Modal -->
 <div class="modal fade" id="newGoalModal" tabindex="-1" aria-labelledby="newGoalModalLabel" aria-hidden="true">
@@ -56,6 +48,12 @@
 {% endblock %}
 
 {% block content %}
+
+<div class="d-flex justify-content-center mb-3 mt-3">
+	<button type="button" class="btn btn-primary btn-lg w-100" style="max-width: 480px;" data-bs-toggle="modal" data-bs-target="#newGoalModal">
+		<i class="bi bi-plus-circle me-2"></i>New Goal
+	</button>
+</div>
 
 <div id="goals-container">
 {% include "summary_goals.html" %}

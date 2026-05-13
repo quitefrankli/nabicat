@@ -12,6 +12,7 @@ from web_app.users import User
 from web_app.todoist.data_interface import DataInterface, GoalState, Goal
 from web_app.todoist.visualiser import plot_velocity
 from web_app.todoist.api.goals_api import goals_api
+from web_app.todoist.api.diary_api import diary_api
 
 
 PAGE_SIZE = ConfigManager().todoist_default_page_size
@@ -23,6 +24,7 @@ todoist_api = Blueprint(
     static_folder='static',
     url_prefix='/todoist')
 todoist_api.register_blueprint(goals_api)
+todoist_api.register_blueprint(diary_api)
 
 @todoist_api.context_processor
 def inject_app_name():
@@ -39,7 +41,7 @@ def get_default_redirect():
 def _get_filtered_summary_goals(user: User) -> Tuple[List[Goal], Dict[int, Goal]]:
     """Get filtered top-level summary goals and all goals dict."""
     now = datetime.now()
-    all_goals = DataInterface().load_data(user).goals
+    all_goals = DataInterface().load_goals(user).goals
 
     def should_render(goal: Goal) -> bool:
         if goal.parent is not None:
@@ -78,7 +80,7 @@ def _goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]]:
 
 def _get_completed_goals(user: User) -> List[Goal]:
     """Get all completed goals."""
-    goals = list(DataInterface().load_data(user).goals.values())
+    goals = list(DataInterface().load_goals(user).goals.values())
     goals = [goal for goal in goals if goal.state == GoalState.COMPLETED]
     goals.sort(key=lambda goal: goal.completion_date.timestamp(), reverse=True) # type: ignore
     return goals
@@ -144,7 +146,7 @@ def api_completed_goals_page():
 @todoist_api.route('/visualise/goal_velocity', methods=['GET'])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def visualise_goal_velocity():
-    tld = DataInterface().load_data(cur_user())
+    tld = DataInterface().load_goals(cur_user())
     goals = [goal for goal in tld.goals.values() if goal.state == GoalState.COMPLETED]
     if len(goals) < 2:
         flask.flash('Too few completeed goals to visualise', category='error')
