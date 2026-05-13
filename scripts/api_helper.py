@@ -508,6 +508,24 @@ def test_handshake() -> None:
         print(f"Handshake failed:\n{e}")
 
 
+@cli.command(name="sync-data-from-prod")
+@click.option("--dest", default=str(Path.home()), show_default=True,
+              help="Local destination directory (receives .nabicat/)")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Show what would be transferred without copying")
+def sync_data_from_prod(dest: str, dry_run: bool) -> None:
+    """
+    Rsync ~/.nabicat from nabicat.site to a local directory, excluding backups/.
+    """
+    cmd = ["rsync", "-azhP", "--exclude=backups/"]
+    if dry_run:
+        cmd.append("--dry-run")
+    cmd += ["nabicat.site:~/.nabicat", dest]
+    print("$", " ".join(cmd))
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
 @cli.command(name="config")
 def show_config() -> None:
     """
