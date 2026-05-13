@@ -6,8 +6,7 @@ from flask import request, Blueprint
 from datetime import datetime
 
 from web_app.helpers import limiter, from_req, cur_user
-from web_app.todoist.app_data import GoalState, Goal
-from web_app.todoist.data_interface import DataInterface
+from web_app.todoist.data_interface import DataInterface, GoalState, Goal
 
 
 goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')

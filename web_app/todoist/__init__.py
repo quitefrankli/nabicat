@@ -9,8 +9,7 @@ from datetime import datetime, date
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, cur_user
 from web_app.users import User
-from web_app.todoist.app_data import GoalState, Goal
-from web_app.todoist.data_interface import DataInterface
+from web_app.todoist.data_interface import DataInterface, GoalState, Goal
 from web_app.todoist.visualiser import plot_velocity
 from web_app.todoist.api.goals_api import goals_api
 
@@ -44,8 +43,6 @@ def _get_filtered_summary_goals(user: User) -> Tuple[List[Goal], Dict[int, Goal]
 
     def should_render(goal: Goal) -> bool:
         if goal.parent is not None:
-            return False
-        if goal.recurrence:
             return False
         if goal.state == GoalState.BACKLOGGED:
             return True

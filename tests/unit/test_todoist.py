@@ -14,7 +14,7 @@ from web_app.todoist import (
     _completed_goals_to_blocks,
     PAGE_SIZE
 )
-from web_app.todoist.app_data import Goal, GoalState, Recurrence, Goals
+from web_app.todoist.data_interface import Goal, GoalState, Goals
 
 
 @pytest.fixture
@@ -213,7 +213,7 @@ class TestSubgoalDeletion:
 
     def test_delete_cascades_to_children(self):
         """Deleting a parent goal also deletes all descendants"""
-        from web_app.todoist.app_data import Goals
+        from web_app.todoist.data_interface import Goals
 
         grandchild = Goal(id=3, name='Grandchild', state=GoalState.ACTIVE,
                           last_modified=datetime.now(), parent=2)

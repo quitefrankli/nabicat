@@ -4,11 +4,36 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import * # type: ignore
+from enum import Enum
+from pydantic import BaseModel
 
 from web_app.users import User
 from web_app.data_interface import DataInterface as BaseDataInterface
-from web_app.todoist.app_data import Goals
 from web_app.config import ConfigManager
+
+
+class GoalState(Enum):
+    ACTIVE = 0
+    COMPLETED = 1
+    FAILED = 2
+    BACKLOGGED = 3
+
+
+class Goal(BaseModel):
+    id: int
+    name: str
+    state: GoalState
+    description: str = ""
+    creation_date: datetime = datetime.now()
+    completion_date: Optional[datetime] = None
+    planned_completion_date: Optional[datetime] = None
+    last_modified: datetime = datetime.now()
+    parent: Optional[int] = None
+    children: List[int] = []
+
+
+class Goals(BaseModel):
+    goals: Dict[int, Goal] = {}
 
 
 class DataInterface(BaseDataInterface):
@@ -21,25 +46,19 @@ class DataInterface(BaseDataInterface):
         self.data_syncer.download_file(data_path)
         if not data_path.exists():
             return Goals(goals={})
-        
+
         with open(data_path, 'r') as file:
             data = json.load(file)
 
-        # TODO: delete this code once all users have last_modified populated
-        goals = Goals(**data)
-        for goal in goals.goals.values():
-            if goal.last_modified is None:
-                goal.last_modified = goal.creation_date
+        return Goals(**data)
 
-        return goals
-            
     def save_data(self, data: Goals, user: User) -> None:
         data_file = self._get_data_file(user)
-        self.atomic_write(data_file, 
-                          data=data.model_dump_json(indent=4, exclude_none=True), 
-                          mode="w", 
+        self.atomic_write(data_file,
+                          data=data.model_dump_json(indent=4, exclude_none=True),
+                          mode="w",
                           encoding='utf-8')
-        
+
     def backup_data(self, backup_dir: Path) -> None:
         shutil.copytree(self.todoist_data_directory, backup_dir / "todoist")
 
