@@ -41,13 +41,13 @@ class TestAccountDeletionIntegration:
 
         # Seed data in sub-app directories that implement delete_user_data
         api_user_dir = DEBUG_SAVE_DATA_PATH / "api_data" / user_folder
-        todoist2_user_dir = DEBUG_SAVE_DATA_PATH / "todoist2" / user_folder
+        todoist_user_dir = DEBUG_SAVE_DATA_PATH / "todoist" / user_folder
         metrics_user_dir = DEBUG_SAVE_DATA_PATH / "metrics" / user_folder
         jswipe_user_dir = DEBUG_SAVE_DATA_PATH / "jswipe" / user_folder
 
         for directory, filename, content in [
             (api_user_dir, "payload.txt", "hello"),
-            (todoist2_user_dir, "data.json", "{}"),
+            (todoist_user_dir, "data.json", "{}"),
             (metrics_user_dir, "data.json", "{}"),
             (jswipe_user_dir, "jobs.json", '{"jobs": {}}'),
         ]:
@@ -138,7 +138,7 @@ class TestAccountDeletionIntegration:
 
         # Sub-app directory cleanup checks
         assert not api_user_dir.exists()
-        assert not todoist2_user_dir.exists()
+        assert not todoist_user_dir.exists()
         assert not metrics_user_dir.exists()
         assert not jswipe_user_dir.exists()
 

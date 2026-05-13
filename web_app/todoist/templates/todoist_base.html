@@ -1,0 +1,25 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}/todoist{% endblock %}
+{% block navbar_brand %}Todoist{% endblock %}
+
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link {{'active' if active == 'Home' else ''}} d-flex align-items-center gap-2" href="/todoist">
+      <i class="bi bi-bullseye"></i>
+      <span>Goals</span>
+    </a>
+  </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link {{'active' if active == 'Completed' else ''}} d-flex align-items-center gap-2" href="/todoist/completed_goals">
+      <i class="bi bi-check-circle-fill"></i>
+      <span>Completed</span>
+    </a>
+  </li>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('todoist_api.static', filename='script.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('todoist_api.static', filename='style.css') }}">
+{% endblock %}

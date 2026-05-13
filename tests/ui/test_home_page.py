@@ -17,7 +17,7 @@ def test_home_page_loads(logged_in_page, test_server):
 
 def test_app_grid_visible(logged_in_page, test_server):
     """Test that the app grid is displayed with all expected apps for admin."""
-    expected_apps = ["Todoist2", "Metrics", "Tubio", "JSwipe", "File Store"]
+    expected_apps = ["Todoist", "Metrics", "Tubio", "JSwipe", "File Store"]
     
     for app_name in expected_apps:
         app_card = logged_in_page.locator("text=" + app_name)
@@ -27,7 +27,7 @@ def test_app_grid_visible(logged_in_page, test_server):
 def test_all_app_cards_clickable(logged_in_page, test_server):
     """Test that all app cards are clickable links for admin."""
     apps = [
-        ("Todoist2", "/todoist2"),
+        ("Todoist", "/todoist"),
         ("Metrics", "/metrics"),
         ("Tubio", "/tubio"),
         ("JSwipe", "/jswipe"),
@@ -83,6 +83,6 @@ def test_admin_only_apps_hidden_for_non_admin(page, test_server):
     expect(page.locator("text=File Store")).to_be_visible()
     
     # Verify admin-only apps are NOT visible
-    expect(page.locator("text=Todoist2")).not_to_be_visible()
+    expect(page.locator("text=Todoist")).not_to_be_visible()
     expect(page.locator("text=JSwipe")).not_to_be_visible()
     expect(page.locator("text=Crosswords")).not_to_be_visible()

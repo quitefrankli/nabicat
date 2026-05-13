@@ -6,7 +6,7 @@ function toggleGoalState(switchElement, goalId) {
 		"state": state
 	};
 
-	fetch("/todoist2/goal/toggle_state", {
+	fetch("/todoist/goal/toggle_state", {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json"
@@ -39,7 +39,7 @@ function loadMoreSummaryGoals() {
 	btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Loading...';
 	
 	summaryCurrentPage++;
-	fetch(`/todoist2/api/summary_goals_page?page=${summaryCurrentPage}`)
+	fetch(`/todoist/api/summary_goals_page?page=${summaryCurrentPage}`)
 		.then(response => response.json())
 		.then(data => {
 			const container = document.getElementById('goals-container');
@@ -72,7 +72,7 @@ function loadMoreCompletedGoals() {
 	btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Loading...';
 	
 	completedCurrentPage++;
-	fetch(`/todoist2/api/completed_goals_page?page=${completedCurrentPage}`)
+	fetch(`/todoist/api/completed_goals_page?page=${completedCurrentPage}`)
 		.then(response => response.json())
 		.then(data => {
 			const container = document.getElementById('goals-container');

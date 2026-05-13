@@ -7,14 +7,14 @@ from typing import * # type: ignore
 
 from web_app.users import User
 from web_app.data_interface import DataInterface as BaseDataInterface
-from web_app.todoist2.app_data import Goals
+from web_app.todoist.app_data import Goals
 from web_app.config import ConfigManager
 
 
 class DataInterface(BaseDataInterface):
     def __init__(self) -> None:
         super().__init__()
-        self.todoist2_data_directory = ConfigManager().save_data_path / "todoist2"
+        self.todoist_data_directory = ConfigManager().save_data_path / "todoist"
 
     def load_data(self, user: User) -> Goals:
         data_path = self._get_data_file(user)
@@ -41,10 +41,10 @@ class DataInterface(BaseDataInterface):
                           encoding='utf-8')
         
     def backup_data(self, backup_dir: Path) -> None:
-        shutil.copytree(self.todoist2_data_directory, backup_dir / "todoist2")
+        shutil.copytree(self.todoist_data_directory, backup_dir / "todoist")
 
     def delete_user_data(self, user: User) -> None:
-        shutil.rmtree(self.todoist2_data_directory / user.folder, ignore_errors=True)
+        shutil.rmtree(self.todoist_data_directory / user.folder, ignore_errors=True)
 
     def _get_data_file(self, user: User) -> Path:
-        return self.todoist2_data_directory / user.folder / "data.json"
+        return self.todoist_data_directory / user.folder / "data.json"

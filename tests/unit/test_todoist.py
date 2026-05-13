@@ -1,4 +1,4 @@
-"""Unit tests for todoist2 module"""
+"""Unit tests for todoist module"""
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -6,15 +6,15 @@ from datetime import datetime, timedelta, date
 
 from web_app.app import app
 from web_app.users import User
-from web_app.todoist2 import (
-    todoist2_api,
+from web_app.todoist import (
+    todoist_api,
     _get_filtered_summary_goals,
     _goals_to_blocks,
     _get_completed_goals,
     _completed_goals_to_blocks,
     PAGE_SIZE
 )
-from web_app.todoist2.app_data import Goal, GoalState, Recurrence, Goals
+from web_app.todoist.app_data import Goal, GoalState, Recurrence, Goals
 
 
 @pytest.fixture
@@ -71,10 +71,10 @@ def test_goals(test_goal):
     return Goals(goals={goal.id: goal for goal in goals})
 
 
-class TestTodoist2HelperFunctions:
-    """Tests for todoist2 helper functions"""
+class TestTodoistHelperFunctions:
+    """Tests for todoist helper functions"""
 
-    @patch('web_app.todoist2.DataInterface')
+    @patch('web_app.todoist.DataInterface')
     def test_get_filtered_summary_goals(self, mock_di, test_user, test_goals):
         """Test filtering summary goals returns (list, dict) tuple"""
         mock_instance = Mock()
@@ -86,7 +86,7 @@ class TestTodoist2HelperFunctions:
         assert isinstance(goals, list)
         assert isinstance(all_goals, dict)
 
-    @patch('web_app.todoist2.DataInterface')
+    @patch('web_app.todoist.DataInterface')
     def test_child_goals_excluded_from_summary(self, mock_di, test_user):
         """Child goals with a parent should not appear in the top-level summary"""
         parent = Goal(id=1, name='Parent', state=GoalState.ACTIVE,
@@ -102,7 +102,7 @@ class TestTodoist2HelperFunctions:
         assert len(goals) == 1
         assert goals[0].id == 1
 
-    @patch('web_app.todoist2.DataInterface')
+    @patch('web_app.todoist.DataInterface')
     def test_summary_sorted_by_most_recent_subgoal(self, mock_di, test_user):
         """Parent goal with a recently modified subgoal should sort above an older parent"""
         older_parent = Goal(id=1, name='Older', state=GoalState.ACTIVE,
@@ -157,7 +157,7 @@ class TestTodoist2HelperFunctions:
         blocks = _goals_to_blocks([goal1, goal2])
         assert len(blocks) == 2
 
-    @patch('web_app.todoist2.DataInterface')
+    @patch('web_app.todoist.DataInterface')
     def test_get_completed_goals(self, mock_di, test_user, test_goals):
         """Test getting completed goals"""
         mock_instance = Mock()
@@ -213,7 +213,7 @@ class TestSubgoalDeletion:
 
     def test_delete_cascades_to_children(self):
         """Deleting a parent goal also deletes all descendants"""
-        from web_app.todoist2.app_data import Goals
+        from web_app.todoist.app_data import Goals
 
         grandchild = Goal(id=3, name='Grandchild', state=GoalState.ACTIVE,
                           last_modified=datetime.now(), parent=2)

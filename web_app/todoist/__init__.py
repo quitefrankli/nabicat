@@ -9,27 +9,27 @@ from datetime import datetime, date
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, cur_user
 from web_app.users import User
-from web_app.todoist2.app_data import GoalState, Goal
-from web_app.todoist2.data_interface import DataInterface
-from web_app.todoist2.visualiser import plot_velocity
-from web_app.todoist2.api.goals_api import goals_api
+from web_app.todoist.app_data import GoalState, Goal
+from web_app.todoist.data_interface import DataInterface
+from web_app.todoist.visualiser import plot_velocity
+from web_app.todoist.api.goals_api import goals_api
 
 
-PAGE_SIZE = ConfigManager().todoist2_default_page_size
+PAGE_SIZE = ConfigManager().todoist_default_page_size
 
-todoist2_api = Blueprint(
-    'todoist2_api', 
-    __name__, 
+todoist_api = Blueprint(
+    'todoist_api',
+    __name__,
     template_folder='templates',
     static_folder='static',
-    url_prefix='/todoist2')
-todoist2_api.register_blueprint(goals_api)
+    url_prefix='/todoist')
+todoist_api.register_blueprint(goals_api)
 
-@todoist2_api.context_processor
+@todoist_api.context_processor
 def inject_app_name():
-    return dict(app_name='Todoist2')
+    return dict(app_name='Todoist')
 
-@todoist2_api.before_request
+@todoist_api.before_request
 @flask_login.login_required
 def require_login():
     pass
@@ -99,7 +99,7 @@ def _completed_goals_to_blocks(goals: List[Goal]) -> List[Tuple[str, List[Goal]]
             goal_blocks[-1] = (goal_blocks[-1][0], [goal] + goal_blocks[-1][1])
     return goal_blocks
 
-@todoist2_api.route('/')
+@todoist_api.route('/')
 @limiter.limit("2/second")
 def summary_goals():
     goals, all_goals = _get_filtered_summary_goals(cur_user())
@@ -110,7 +110,7 @@ def summary_goals():
                            all_goals=all_goals,
                            has_more=len(goals) > PAGE_SIZE)
 
-@todoist2_api.route('/completed_goals')
+@todoist_api.route('/completed_goals')
 @limiter.limit("2/second")
 def completed_goals():
     goals = _get_completed_goals(cur_user())
@@ -120,7 +120,7 @@ def completed_goals():
                            dated_goal_blocks=goal_blocks, 
                            has_more=len(goals) > PAGE_SIZE)
 
-@todoist2_api.route('/api/summary_goals_page', methods=['GET'])
+@todoist_api.route('/api/summary_goals_page', methods=['GET'])
 @limiter.limit("2/second")
 def api_summary_goals_page():
     page = int(request.args.get('page', 0))
@@ -132,7 +132,7 @@ def api_summary_goals_page():
     html = render_template('summary_goals.html', dated_goal_blocks=goal_blocks, all_goals=all_goals)
     return jsonify({'html': html, 'has_more': has_more})
 
-@todoist2_api.route('/api/completed_goals_page', methods=['GET'])
+@todoist_api.route('/api/completed_goals_page', methods=['GET'])
 @limiter.limit("2/second")
 def api_completed_goals_page():
     page = int(request.args.get('page', 0))
@@ -144,7 +144,7 @@ def api_completed_goals_page():
     html = render_template('completed_goals.html', dated_goal_blocks=goal_blocks)
     return jsonify({'html': html, 'has_more': has_more})
 
-@todoist2_api.route('/visualise/goal_velocity', methods=['GET'])
+@todoist_api.route('/visualise/goal_velocity', methods=['GET'])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def visualise_goal_velocity():
     tld = DataInterface().load_data(cur_user())

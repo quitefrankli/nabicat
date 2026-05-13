@@ -19,7 +19,7 @@ from web_app.config import ConfigManager
 
 
 class _S3Client:
-    BUCKET_NAME = 'todoist2'
+    BUCKET_NAME = 'todoist'
     
     def __init__(self) -> None:
         ACCESS_KEY = os.environ["AWS_ACCESS_KEY_ID"]

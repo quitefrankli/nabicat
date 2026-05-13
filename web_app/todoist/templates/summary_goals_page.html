@@ -1,10 +1,12 @@
-{% extends "todoist2_base.html" %}
+{% extends "todoist_base.html" %}
 
-{% set active = 'Completed' %}
+{% set active = 'Home' %}
 
 {% block actions_menu %}
 <li>
-	<a class="btn btn-outline-primary w-100" href="/todoist2/visualise/goal_velocity">Goal Velocity</a>
+	<button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#newGoalModal">
+		<i class="bi bi-plus-circle me-1"></i>New Goal
+	</button>
 </li>
 {% endblock %}
 
@@ -56,12 +58,12 @@
 {% block content %}
 
 <div id="goals-container">
-{% include "completed_goals.html" %}
+{% include "summary_goals.html" %}
 </div>
 
 {% if has_more %}
 <div class="d-flex justify-content-center mt-4">
-	<button class="btn btn-outline-primary" id="load-more-btn" onclick="loadMoreCompletedGoals()">
+	<button class="btn btn-outline-primary" id="load-more-btn" onclick="loadMoreSummaryGoals()">
 		<i class="bi bi-arrow-down me-2"></i>Load More
 	</button>
 </div>

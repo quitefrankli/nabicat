@@ -92,9 +92,9 @@ def logged_in_page(page, test_server):
 
 # Subpage fixtures for easy navigation
 @pytest.fixture
-def todoist2_page(logged_in_page, test_server):
-    """Navigate to Todoist2 page."""
-    logged_in_page.goto(f"{test_server}/todoist2")
+def todoist_page(logged_in_page, test_server):
+    """Navigate to Todoist page."""
+    logged_in_page.goto(f"{test_server}/todoist")
     logged_in_page.wait_for_load_state("networkidle")
     yield logged_in_page
 

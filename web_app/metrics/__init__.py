@@ -39,7 +39,7 @@ def get_default_redirect():
 def get_metrics():
     tld = DataInterface().load_data(cur_user())
     metrics = list(tld.metrics.values())
-    # Sort by last_modified (most recent first), similar to todoist2
+    # Sort by last_modified (most recent first), similar to todoist
     metrics.sort(key=lambda x: x.last_modified.timestamp(), reverse=True)
     for metric in metrics:
         metric.data.sort(key=lambda x: x.date, reverse=True)

@@ -6,8 +6,8 @@ from flask import request, Blueprint
 from datetime import datetime
 
 from web_app.helpers import limiter, from_req, cur_user
-from web_app.todoist2.app_data import GoalState, Goal
-from web_app.todoist2.data_interface import DataInterface
+from web_app.todoist.app_data import GoalState, Goal
+from web_app.todoist.data_interface import DataInterface
 
 
 goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')
@@ -18,7 +18,7 @@ def require_login():
     pass
 
 def get_default_redirect():
-    return flask.redirect(flask.url_for('todoist2_api.summary_goals'))
+    return flask.redirect(flask.url_for('todoist_api.summary_goals'))
 
 @goals_api.route('/new', methods=["POST"])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
