@@ -261,6 +261,7 @@ class TerminalView {
             'tab':    '\x09',
             'up':     '\x1b[A',
             'down':   '\x1b[B',
+            'esc':    '\x1b',
         };
         document.querySelectorAll('.shortcut-btn').forEach(btn => {
             btn.addEventListener('click', () => {
