@@ -204,6 +204,7 @@ class TestDataInterface:
     def test_generate_backup_dir(self, mock_config, mock_data_syncer, temp_dir):
         """Test generate_backup_dir creates timestamped directory"""
         mock_config.save_data_path = temp_dir / "data"
+        mock_config.backup_max_count = 8
         interface = DataInterface()
 
         backup_dir = interface.generate_backup_dir()

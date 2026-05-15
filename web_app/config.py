@@ -100,6 +100,10 @@ class ConfigManager:
         self.hammock_markdown_max_chars = 256 * 1024
         self.hammock_project_slug_max_chars = 64
 
+        # File Store
+        self.file_store_non_admin_quota_bytes = 30 * 1024 * 1024  # 30 MB
+        self.file_store_admin_quota_bytes = 10 * 1024 * 1024 * 1024  # 10 GB
+
     @property
     def project_name(self) -> str:
         return "nabicat" if not self.debug_mode else "nabicat_debug"

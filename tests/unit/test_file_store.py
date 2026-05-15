@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
 from web_app.users import User
+from web_app.config import ConfigManager
 from web_app.file_store import file_store_api
 from web_app.file_store.data_interface import (
     DataInterface,
@@ -447,11 +448,11 @@ class TestFileStoreBlueprint:
 
     def test_non_admin_max_storage_constant(self):
         """Test the storage limit constant"""
-        assert NON_ADMIN_MAX_STORAGE == 30 * 1024 * 1024  # 30 MB
+        assert NON_ADMIN_MAX_STORAGE == ConfigManager().file_store_non_admin_quota_bytes
 
     def test_admin_max_storage_constant(self):
         """Test the admin storage limit constant"""
-        assert ADMIN_MAX_STORAGE == 1 * 1024 * 1024 * 1024  # 1 GB
+        assert ADMIN_MAX_STORAGE == ConfigManager().file_store_admin_quota_bytes
 
 
 if __name__ == '__main__':
