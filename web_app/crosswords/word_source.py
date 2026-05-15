@@ -5,8 +5,9 @@ A ``WordSource`` takes (theme, difficulty, count) and returns a list of
 
 * ``DebugSource`` - deterministic hand-picked fixtures, used in debug mode.
 * ``MeridianSource`` - asks the Meridian LLM proxy for themed pairs.
+* ``CodexSource`` - asks the local Codex CLI for themed pairs.
 * ``FallbackSource`` - shuffled slice of a hardcoded modern pool, used
-  when Meridian is unreachable or returns nothing usable.
+  when LLM sources are unreachable or return nothing usable.
 * ``ChainedSource`` - tries each source in order, moves on if a source
   returns fewer than ``min_pairs`` usable entries.
 
@@ -28,7 +29,7 @@ from web_app.crosswords.word_bank import (
     FALLBACK_POOL,
     WordClue,
 )
-from web_app.helpers import MeridianError, meridian_text
+from web_app.helpers import MeridianError, CodexCLIError, meridian_text, codex_cli_text
 
 
 class WordSource(ABC):
@@ -46,7 +47,11 @@ class DebugSource(WordSource):
 
     def get_pairs(self, theme: str, difficulty: int, count: int) -> List[WordClue]:
         pairs = DEBUG_SETS.get((theme.lower(), difficulty))
-        return list(pairs) if pairs else []
+        if pairs:
+            logging.info("Crosswords DebugSource returned %s pairs for theme=%s difficulty=%s", len(pairs), theme, difficulty)
+            return list(pairs)
+        logging.info("Crosswords DebugSource has no fixture for theme=%s difficulty=%s", theme, difficulty)
+        return []
 
 
 class FallbackSource(WordSource):
@@ -57,7 +62,9 @@ class FallbackSource(WordSource):
 
     def get_pairs(self, theme: str, difficulty: int, count: int) -> List[WordClue]:
         count = max(2, min(count, len(FALLBACK_POOL)))
-        return self._rng.sample(FALLBACK_POOL, count)
+        pairs = self._rng.sample(FALLBACK_POOL, count)
+        logging.info("Crosswords FallbackSource returned %s hardcoded pairs", len(pairs))
+        return pairs
 
 
 class MeridianSource(WordSource):
@@ -107,7 +114,40 @@ class MeridianSource(WordSource):
             logging.warning("MeridianSource: %s", e)
             return []
 
-        return _parse_pairs(text)
+        pairs = _parse_pairs(text)
+        logging.info("Crosswords MeridianSource returned %s usable pairs for theme=%s difficulty=%s", len(pairs), theme, difficulty)
+        return pairs
+
+
+class CodexSource(WordSource):
+    """Ask local Codex CLI for themed (word, clue) pairs at the given difficulty."""
+
+    _SYSTEM = MeridianSource._SYSTEM
+
+    def __init__(self, timeout_s: float | None = None) -> None:
+        self._timeout = timeout_s
+
+    def get_pairs(self, theme: str, difficulty: int, count: int) -> List[WordClue]:
+        config = ConfigManager()
+        prompt = (
+            f"Theme: {theme}\n"
+            f"Difficulty: {difficulty} (1=easiest, 5=hardest)\n"
+            f"Return exactly {count} word/clue pairs as a JSON array."
+        )
+        try:
+            text = codex_cli_text(
+                user_message=prompt,
+                instructions=self._SYSTEM,
+                model=config.crosswords_codex_model,
+                timeout_s=self._timeout or config.crosswords_generation_timeout_s,
+            )
+        except CodexCLIError as e:
+            logging.warning("CodexSource: %s", e)
+            return []
+
+        pairs = _parse_pairs(text)
+        logging.info("Crosswords CodexSource returned %s usable pairs for theme=%s difficulty=%s", len(pairs), theme, difficulty)
+        return pairs
 
 
 class ChainedSource(WordSource):
@@ -120,9 +160,18 @@ class ChainedSource(WordSource):
     def get_pairs(self, theme: str, difficulty: int, count: int) -> List[WordClue]:
         min_pairs = self._min_pairs if self._min_pairs is not None else ConfigManager().crosswords_min_placed_words
         for source in self._sources:
+            source_name = source.__class__.__name__
+            logging.info("Crosswords trying %s for theme=%s difficulty=%s count=%s", source_name, theme, difficulty, count)
             pairs = source.get_pairs(theme, difficulty, count)
             if len(pairs) >= min_pairs:
+                logging.info("Crosswords selected %s with %s pairs", source_name, len(pairs))
                 return pairs
+            logging.warning(
+                "Crosswords %s returned too few pairs: got=%s required=%s",
+                source_name,
+                len(pairs),
+                min_pairs,
+            )
         return []
 
 
@@ -163,9 +212,19 @@ def _parse_pairs(text: str) -> List[WordClue]:
 
 
 def default_source() -> WordSource:
-    """Standard chain: DebugSource first in debug mode, Meridian in prod,
-    FallbackSource last either way so the UI never hangs on a dead chain.
-    """
-    if ConfigManager().debug_mode:
+    """Return the configured word source chain."""
+    config = ConfigManager()
+    if config.debug_mode:
         return ChainedSource([DebugSource(), FallbackSource()])
-    return ChainedSource([MeridianSource(), FallbackSource()])
+
+    provider = config.llm_api_source.lower()
+    if provider == "meridian":
+        return ChainedSource([MeridianSource(), FallbackSource()])
+    if provider == "codex":
+        return ChainedSource([CodexSource(), FallbackSource()])
+    if provider == "hardcoded":
+        logging.info("Crosswords using hardcoded provider")
+        return FallbackSource()
+
+    logging.warning("Unknown llm_api_source=%r; using hardcoded fallback", config.llm_api_source)
+    return FallbackSource()

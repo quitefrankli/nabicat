@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, jsonify, render_template, request
 
 from web_app.config import ConfigManager
@@ -42,20 +44,41 @@ def index():
 
 @crosswords_api.route('/api/new', methods=['POST'])
 def new_crossword():
+    cfg = ConfigManager()
     payload = request.get_json(silent=True) or {}
     try:
         theme = validate_theme(payload.get('theme'))
         require_real_word(theme)
     except InvalidThemeError as e:
+        logging.info("Crosswords rejected theme: raw=%r reason=%s", payload.get('theme'), e)
         return jsonify({'error': str(e), 'criteria': theme_criteria()}), 400
 
     difficulty = clamp_difficulty(payload.get('difficulty'))
-    count = ConfigManager().crosswords_word_count
+    count = cfg.crosswords_word_count
+    logging.info(
+        "Crosswords generation requested: theme=%s difficulty=%s source=%s count=%s",
+        theme,
+        difficulty,
+        cfg.llm_api_source,
+        count,
+    )
     pairs = default_source().get_pairs(theme=theme, difficulty=difficulty, count=count)
     if not pairs:
+        logging.warning("Crosswords generation failed: no word pairs theme=%s difficulty=%s source=%s", theme, difficulty, cfg.llm_api_source)
         return jsonify({'error': 'Could not generate words for that theme. Try another.'}), 503
 
     puzzle = build_crossword(pairs)
     puzzle['theme'] = theme
     puzzle['difficulty'] = difficulty
+    placed = len(puzzle['clues']['across']) + len(puzzle['clues']['down'])
+    logging.info(
+        "Crosswords generated: theme=%s difficulty=%s source=%s pairs=%s placed=%s grid=%sx%s",
+        theme,
+        difficulty,
+        cfg.llm_api_source,
+        len(pairs),
+        placed,
+        puzzle['rows'],
+        puzzle['cols'],
+    )
     return jsonify(puzzle)

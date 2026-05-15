@@ -3,6 +3,8 @@ import gzip
 import json
 import time
 import threading
+import subprocess
+import tempfile
 import flask
 import flask_login
 import logging
@@ -339,6 +341,10 @@ class MeridianError(RuntimeError):
     """Raised when the Meridian proxy is unreachable or returns an error."""
 
 
+class CodexCLIError(RuntimeError):
+    """Raised when the local Codex CLI is unavailable or returns an error."""
+
+
 def call_meridian(
     messages: list,
     system: str,
@@ -401,3 +407,57 @@ def meridian_text(
     )
     blocks = result.get("content", []) or []
     return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+
+
+def codex_cli_text(
+    user_message: str,
+    instructions: str,
+    model: str | None = None,
+    timeout_s: float = 120.0,
+) -> str:
+    """Run Codex CLI non-interactively and return its final message.
+
+    This uses the local Codex installation and its existing ChatGPT/Codex
+    authentication, not an OpenAI API key.
+    """
+    config = ConfigManager()
+    prompt = f"{instructions}\n\nUser request:\n{user_message}"
+    with tempfile.NamedTemporaryFile("r+", encoding="utf-8") as output:
+        cmd = [
+            config.crosswords_codex_cli_command,
+            "-a",
+            config.crosswords_codex_cli_approval_policy,
+            "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--sandbox",
+            config.crosswords_codex_cli_sandbox,
+            "--output-last-message",
+            output.name,
+        ]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.append(prompt)
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(config.project_dir),
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except FileNotFoundError as e:
+            raise CodexCLIError(f"codex cli not found: {config.crosswords_codex_cli_command}") from e
+        except subprocess.TimeoutExpired as e:
+            raise CodexCLIError(f"codex cli timed out after {timeout_s}s") from e
+
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            raise CodexCLIError(f"codex cli exited {proc.returncode}: {detail[:500]}")
+
+        output.seek(0)
+        text = output.read().strip()
+        if not text:
+            raise CodexCLIError("codex cli returned an empty response")
+        return text

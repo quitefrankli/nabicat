@@ -57,6 +57,7 @@ class ConfigManager:
         self.assistant_meridian_url = f"http://127.0.0.1:{self.assistant_meridian_default_port}/v1/messages"
         self.assistant_model = "claude-opus-4-7"
         self.assistant_max_tokens = 4096
+        self.llm_api_source = "codex"  # meridian | codex | hardcoded
 
         # Dev terminal (in-browser shell)
         self.dev_terminal_shell = "/bin/bash"
@@ -67,6 +68,10 @@ class ConfigManager:
 
         # Crosswords
         self.crosswords_model = "claude-sonnet-4-6"
+        self.crosswords_codex_model = ""
+        self.crosswords_codex_cli_command = "codex"
+        self.crosswords_codex_cli_sandbox = "read-only"
+        self.crosswords_codex_cli_approval_policy = "never"
         self.crosswords_word_count = 7
         self.crosswords_min_placed_words = 3
         self.crosswords_generation_max_tokens = 1024
@@ -117,7 +122,7 @@ class ConfigManager:
             return "DEBUG_X_RAPID_API_KEY"
         
         raise ValueError("API key for JSwipe is not set. Please set the 'X_RAPID_API_KEY' environment variable.")
-    
+
     @property
     def flask_secret_key(self) -> str:
         key = getenv('FLASK_SECRET_KEY')

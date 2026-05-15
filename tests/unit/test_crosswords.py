@@ -6,6 +6,7 @@ import pytest
 from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.crosswords.generator import build_crossword
+from web_app.crosswords.theme_check import require_real_word
 from web_app.crosswords.word_bank import (
     DEBUG_SETS,
     InvalidThemeError,
@@ -15,10 +16,12 @@ from web_app.crosswords.word_bank import (
 )
 from web_app.crosswords.word_source import (
     ChainedSource,
+    CodexSource,
     DebugSource,
     FallbackSource,
     MeridianSource,
     WordSource,
+    default_source,
 )
 
 
@@ -152,6 +155,53 @@ def test_meridian_source_parses_json_response():
 
     # "MEOW!" filtered (non-alpha); others uppercased.
     assert pairs == [("KITTEN", "Baby cat"), ("TAIL", "Swishes when annoyed")]
+
+
+def test_codex_source_parses_cli_text():
+    fake_text = (
+        '[{"word": "Kitten", "clue": "Baby cat"}, '
+        '{"word": "tail", "clue": "Swishes when annoyed"}]'
+    )
+    with patch('web_app.crosswords.word_source.codex_cli_text', return_value=fake_text):
+        pairs = CodexSource().get_pairs('cats', 2, count=2)
+
+    assert pairs == [("KITTEN", "Baby cat"), ("TAIL", "Swishes when annoyed")]
+
+
+def test_theme_check_allows_codex_yes_after_meridian_no():
+    prev = ConfigManager().debug_mode
+    prev_source = ConfigManager().llm_api_source
+    ConfigManager().debug_mode = False
+    ConfigManager().llm_api_source = 'codex'
+    try:
+        with patch('web_app.crosswords.theme_check.is_real_word_codex', return_value=True):
+            require_real_word('cats')
+    finally:
+        ConfigManager().debug_mode = prev
+        ConfigManager().llm_api_source = prev_source
+
+
+def test_default_source_uses_configured_provider():
+    cfg = ConfigManager()
+    prev_debug = cfg.debug_mode
+    prev_source = cfg.llm_api_source
+    cfg.debug_mode = False
+    try:
+        cfg.llm_api_source = 'meridian'
+        source = default_source()
+        assert isinstance(source, ChainedSource)
+        assert isinstance(source._sources[0], MeridianSource)
+
+        cfg.llm_api_source = 'codex'
+        source = default_source()
+        assert isinstance(source, ChainedSource)
+        assert isinstance(source._sources[0], CodexSource)
+
+        cfg.llm_api_source = 'hardcoded'
+        assert isinstance(default_source(), FallbackSource)
+    finally:
+        cfg.debug_mode = prev_debug
+        cfg.llm_api_source = prev_source
 
 
 def test_chained_source_falls_back_when_primary_empty():

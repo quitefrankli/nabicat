@@ -24,6 +24,7 @@ Cells that are not part of any entry are `None` (rendered as black).
 from __future__ import annotations
 
 import random
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -193,16 +194,28 @@ def build_crossword(pairs: List[WordClue], rng: Optional[random.Random] = None) 
     for word, clue in ordered:
         word = word.upper()
         if not word.isalpha():
+            logging.info("Crosswords skipped non-alpha word from source: %r", word)
             continue
         placed = _try_place(grid, placements, word, clue)
         if placed is not None:
             placements.append(placed)
+        else:
+            logging.info("Crosswords skipped unplaceable word: %s", word)
 
     if not placements:
         raise ValueError("No words could be placed")
 
     rows, cols, placements = _normalise(placements)
     cells, across, down = _number_clues(rows, cols, placements)
+    logging.info(
+        "Crosswords grid built: input_pairs=%s placed=%s across=%s down=%s rows=%s cols=%s",
+        len(pairs),
+        len(placements),
+        len(across),
+        len(down),
+        rows,
+        cols,
+    )
 
     # Sort clues by number for stable display.
     across.sort(key=lambda c: c["number"])
