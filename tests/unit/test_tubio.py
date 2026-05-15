@@ -234,26 +234,29 @@ class TestSearchYoutubeWithDirectUrl:
             'thumbnail_url': 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
         }
 
-        results = AudioDownloader.search_youtube(
+        search_data = AudioDownloader.search_youtube(
             'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
             set()
         )
 
+        results = search_data['results']
         assert len(results) == 1
         assert results[0]['video_id'] == 'dQw4w9WgXcQ'
         assert results[0]['thumbnail_url'] == 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'
+        assert search_data['page'] == 0
+        assert search_data['total_pages'] == 1
         mock_get_info.assert_called_once_with('dQw4w9WgXcQ', set())
 
     @patch.object(AudioDownloader, 'get_video_info')
     def test_search_with_direct_url_video_not_found(self, mock_get_info):
         mock_get_info.return_value = None
 
-        results = AudioDownloader.search_youtube(
+        search_data = AudioDownloader.search_youtube(
             'https://www.youtube.com/watch?v=invalidid12',
             set()
         )
 
-        assert results == []
+        assert search_data == {'results': [], 'page': 0, 'total_pages': 1}
 
     @patch('web_app.tubio.audio_downloader.requests.get')
     def test_search_with_regular_query_does_normal_search(self, mock_get):
