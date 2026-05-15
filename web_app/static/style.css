@@ -402,6 +402,39 @@ h6 {
   resize: vertical;
 }
 
+.auth-page-row {
+  min-height: 70vh;
+}
+
+.auth-card {
+  border-radius: var(--hw-radius-xl);
+}
+
+.auth-icon {
+  width: 80px;
+  height: 80px;
+}
+
+.auth-icon-sage {
+  background: var(--hw-gradient-sage);
+}
+
+.auth-icon-danger {
+  background: linear-gradient(135deg, var(--hw-coral) 0%, var(--hw-peach) 100%);
+}
+
+.auth-icon-lg {
+  font-size: 2.5rem;
+}
+
+.auth-icon-md {
+  font-size: 2.25rem;
+}
+
+.alert-honeydew {
+  border-radius: var(--hw-radius-md);
+}
+
 /* ============================================
    List Groups
    ============================================ */
