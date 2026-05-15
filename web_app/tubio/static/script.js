@@ -1,3 +1,44 @@
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content;
+}
+
+function createFormData(fields = {}) {
+    const formData = new FormData();
+    Object.entries(fields).forEach(([key, value]) => {
+        formData.append(key, value);
+    });
+    const csrfToken = getCsrfToken();
+    if (csrfToken) formData.append('csrf_token', csrfToken);
+    return formData;
+}
+
+function jsonPost(url, fields = {}) {
+    return fetch(url, {
+        method: 'POST',
+        body: createFormData(fields),
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    });
+}
+
+function renderSearchError(message) {
+    const resultsDiv = document.getElementById('search-results');
+    if (resultsDiv) {
+        resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${escapeHtml(message)}</h5></div>`;
+    }
+}
+
+function setPlayButtonState(playButton, isPlaying) {
+    if (!playButton) return;
+    playButton.innerHTML = isPlaying
+        ? '<i class="bi bi-pause-fill"></i>'
+        : '<i class="bi bi-play-fill"></i>';
+    playButton.classList.toggle('btn-success', isPlaying);
+    playButton.classList.toggle('btn-outline-primary', !isPlaying);
+}
+
 function switchTab(tabName) {
     // Remove active class from all navbar tabs
     document.querySelectorAll('#search-nav-tab, #playlists-nav-tab').forEach(tab => {
@@ -151,6 +192,10 @@ function displaySearchResults(data) {
 }
 
 async function searchPage(page) {
+    await runSearch(page, { scrollToResults: true });
+}
+
+async function runSearch(page, { scrollToResults = false } = {}) {
     const queryInput = document.getElementById('youtube-query');
     if (!queryInput) return;
     const query = queryInput.value;
@@ -158,34 +203,24 @@ async function searchPage(page) {
 
     const resultsDiv = document.getElementById('search-results');
     try {
-        const formData = new FormData();
-        formData.append('youtube_query', query);
-        formData.append('page', String(page));
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (csrfToken) formData.append('csrf_token', csrfToken);
-
-        const response = await fetch('/tubio/search', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+        const response = await jsonPost('/tubio/search', {
+            youtube_query: query,
+            page: String(page)
         });
 
         const data = await response.json();
         if (response.ok) {
             displaySearchResults(data);
-            if (resultsDiv) resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (resultsDiv) {
+            if (scrollToResults && resultsDiv) {
+                resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        } else {
             const errorMsg = data.error || 'Search failed. Please try again.';
-            resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${escapeHtml(errorMsg)}</h5></div>`;
+            renderSearchError(errorMsg);
         }
     } catch (error) {
         console.error('Error during search:', error);
-        if (resultsDiv) {
-            resultsDiv.innerHTML = '<div class="text-center py-5"><h5 class="text-danger">Error occurred while searching.</h5></div>';
-        }
+        renderSearchError('Error occurred while searching.');
     }
 }
 
@@ -200,42 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (searchForm) {
         searchForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const query = document.getElementById('youtube-query').value;
-            
-            try {
-                const formData = new FormData();
-                formData.append('youtube_query', query);
-                formData.append('page', '0');
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-                if (csrfToken) formData.append('csrf_token', csrfToken);
-
-                const response = await fetch('/tubio/search', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    displaySearchResults(data);
-                } else {
-                    console.error('Search failed:', data.error);
-                    const resultsDiv = document.getElementById('search-results');
-                    if (resultsDiv) {
-                        const errorMsg = data.error || 'Search failed. Please try again.';
-                        resultsDiv.innerHTML = `<div class="text-center py-5"><h5 class="text-danger">${escapeHtml(errorMsg)}</h5></div>`;
-                    }
-                }
-            } catch (error) {
-                console.error('Error during search:', error);
-                const resultsDiv = document.getElementById('search-results');
-                if (resultsDiv) {
-                    resultsDiv.innerHTML = '<div class="text-center py-5"><h5 class="text-danger">Error occurred while searching.</h5></div>';
-                }
-            }
+            await runSearch(0);
         });
     }
 });
@@ -276,12 +276,6 @@ async function downloadVideo(videoId, title, buttonElement) {
     }
 
     try {
-        const formData = new FormData();
-        formData.append('video_id', videoId);
-        formData.append('title', title);
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (csrfToken) formData.append('csrf_token', csrfToken);
-
         eventSource = new EventSource(`/tubio/download_progress/${videoId}`);
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
@@ -294,13 +288,9 @@ async function downloadVideo(videoId, title, buttonElement) {
         };
         eventSource.onerror = () => eventSource.close();
 
-        const response = await fetch('/tubio/youtube_download', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+        const response = await jsonPost('/tubio/youtube_download', {
+            video_id: videoId,
+            title
         });
 
         const data = await response.json();
@@ -483,15 +473,7 @@ async function removeTrack(crc, buttonElement) {
         const audio = document.getElementById(`audio-${crc}`);
         if (audio && !audio.paused) audio.pause();
 
-        const formData = new FormData();
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (csrfToken) formData.append('csrf_token', csrfToken);
-
-        const response = await fetch(`/tubio/delete_audio/${crc}`, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
+        const response = await jsonPost(`/tubio/delete_audio/${crc}`);
 
         if (!response.ok) throw new Error('Failed to remove track');
 
@@ -537,9 +519,7 @@ function togglePlayTrack(crc) {
                 const otherCrc = audio.id.replace('audio-', '');
                 const otherButton = document.getElementById(`play-btn-${otherCrc}`);
                 if (otherButton) {
-                    otherButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-                    otherButton.classList.remove('btn-success');
-                    otherButton.classList.add('btn-outline-primary');
+                    setPlayButtonState(otherButton, false);
                 }
             }
         });
@@ -559,17 +539,13 @@ function togglePlayTrack(crc) {
         });
 
         // Update button to show pause icon
-        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        playButton.classList.remove('btn-outline-primary');
-        playButton.classList.add('btn-success');
+        setPlayButtonState(playButton, true);
     } else {
         // Pause this track
         audioElement.pause();
 
         // Update button to show play icon
-        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-        playButton.classList.remove('btn-success');
-        playButton.classList.add('btn-outline-primary');
+        setPlayButtonState(playButton, false);
     }
 
     // Add event listener to reset button when track ends naturally
@@ -584,9 +560,7 @@ function togglePlayTrack(crc) {
             return;
         }
 
-        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-        playButton.classList.remove('btn-success');
-        playButton.classList.add('btn-outline-primary');
+        setPlayButtonState(playButton, false);
     };
 }
 
@@ -702,9 +676,7 @@ function pausePlaylist() {
     }
 
     if (playButton) {
-        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-        playButton.classList.remove('btn-success');
-        playButton.classList.add('btn-outline-primary');
+        setPlayButtonState(playButton, false);
     }
 
     // Update playlist play button to show play icon
@@ -727,9 +699,7 @@ function resumePlaylist() {
     }
 
     if (playButton) {
-        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        playButton.classList.remove('btn-outline-primary');
-        playButton.classList.add('btn-success');
+        setPlayButtonState(playButton, true);
     }
 
     // Update playlist play button to show pause icon
@@ -788,9 +758,7 @@ function playAllInPlaylist(playlistName) {
             audio.pause();
             
             if (playButton) {
-                playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-                playButton.classList.remove('btn-success');
-                playButton.classList.add('btn-outline-primary');
+                setPlayButtonState(playButton, false);
             }
             
             if (trackItem) {
@@ -871,9 +839,7 @@ function playNextInQueue() {
     
     // Update button to show pause icon (same as togglePlayTrack)
     if (playButton) {
-        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        playButton.classList.remove('btn-outline-primary');
-        playButton.classList.add('btn-success');
+        setPlayButtonState(playButton, true);
     }
     
     // Highlight this track (same as togglePlayTrack)
@@ -898,9 +864,7 @@ function playNextInQueue() {
 
         // Reset button and highlight
         if (playButton) {
-            playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-            playButton.classList.remove('btn-success');
-            playButton.classList.add('btn-outline-primary');
+            setPlayButtonState(playButton, false);
         }
 
         if (trackItem) {
@@ -954,13 +918,9 @@ function syncAudioButtonUI(crc) {
     }
 
     if (audioElement.paused) {
-        playButton.innerHTML = '<i class="bi bi-play-fill"></i>';
-        playButton.classList.remove('btn-success');
-        playButton.classList.add('btn-outline-primary');
+        setPlayButtonState(playButton, false);
     } else {
-        playButton.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        playButton.classList.remove('btn-outline-primary');
-        playButton.classList.add('btn-success');
+        setPlayButtonState(playButton, true);
     }
 }
 
@@ -1040,11 +1000,7 @@ function togglePlayPause() {
 function resetTrackPlayingUI(crc) {
     const button = document.getElementById(`play-btn-${crc}`);
     const item = document.querySelector(`.accordion-item[data-audio-crc="${crc}"]`);
-    if (button) {
-        button.innerHTML = '<i class="bi bi-play-fill"></i>';
-        button.classList.remove('btn-success');
-        button.classList.add('btn-outline-primary');
-    }
+    setPlayButtonState(button, false);
     if (item) item.classList.remove('track-playing');
 }
 
@@ -1209,18 +1165,7 @@ async function resyncTrack(crc, buttonElement) {
     if (tooltip) tooltip.dispose();
 
     try {
-        const formData = new FormData();
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (csrfToken) formData.append('csrf_token', csrfToken);
-
-        const response = await fetch(`/tubio/resync/${crc}`, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
+        const response = await jsonPost(`/tubio/resync/${crc}`);
 
         const data = await response.json();
         if (response.ok && data.success) {
