@@ -34,7 +34,6 @@ def get_all_data_interfaces() -> list[DataInterface]:
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
     from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
     from web_app.hammock.data_interface import DataInterface as HammockDataInterface
-    from web_app.assistant.data_interface import DataInterface as AssistantDataInterface
 
     return [
         APIDataInterface,
@@ -44,7 +43,6 @@ def get_all_data_interfaces() -> list[DataInterface]:
         TubioDataInterface,
         FileStoreDataInterface,
         HammockDataInterface,
-        AssistantDataInterface,
     ]
 
 
@@ -59,7 +57,6 @@ def register_all_blueprints(app):
     from web_app.jswipe import jswipe_api
     from web_app.proxy import proxy_api
     from web_app.hammock import hammock_api
-    from web_app.assistant import assistant_api
     from web_app.dev import dev_api
     from web_app.simulations import simulations_api
 
@@ -74,7 +71,6 @@ def register_all_blueprints(app):
         jswipe_api,
         proxy_api,
         hammock_api,
-        assistant_api,
         dev_api,
         simulations_api,
     ]
@@ -362,7 +358,7 @@ def call_meridian(
     config = ConfigManager()
     headers = {"Content-Type": "application/json", "x-meridian-agent": agent}
     body = {
-        "model": model or config.assistant_model,
+        "model": model or config.llm_meridian_model,
         "max_tokens": max_tokens,
         "system": system,
         "messages": messages,
@@ -371,7 +367,7 @@ def call_meridian(
         body["tools"] = tools
 
     try:
-        resp = http_requests.post(config.assistant_meridian_url, headers=headers, json=body, timeout=timeout_s)
+        resp = http_requests.post(config.llm_meridian_url, headers=headers, json=body, timeout=timeout_s)
     except http_requests.RequestException as e:
         raise MeridianError(f"meridian unreachable: {e}") from e
 

@@ -23,7 +23,7 @@
 * Project Architecture:
     - this project contains a collection of smaller subapps/subpages under web_app/ all of which share a similar ui/ux theme and share the same domain and host
     - Each subapp is a Flask Blueprint with its own templates/ and static/ folders
-    - CSS and JS must live in the subapp's static/ folder (e.g. `assistant/static/assistant.css`), never inline in HTML templates
+    - CSS and JS must live in the subapp's static/ folder (e.g. `metrics/static/style.css`), never inline in HTML templates
     - Link them via `{% block scripts %}` using `url_for('.static', filename='...')`
 
 * Cross-browser / cross-device UI: this is a web app served to real users on a mix of browsers (Chrome, Firefox, Safari — including iOS Safari) and devices (desktop, tablet, phone). When making UI/CSS/JS changes:

@@ -52,11 +52,10 @@ class ConfigManager:
         self.smtp_port = 587
         self.project_dir = Path.cwd()
 
-        # Assistant
-        self.assistant_meridian_default_port = 3456
-        self.assistant_meridian_url = f"http://127.0.0.1:{self.assistant_meridian_default_port}/v1/messages"
-        self.assistant_model = "claude-opus-4-7"
-        self.assistant_max_tokens = 4096
+        # LLM API
+        self.llm_meridian_default_port = 3456
+        self.llm_meridian_url = f"http://127.0.0.1:{self.llm_meridian_default_port}/v1/messages"
+        self.llm_meridian_model = "claude-opus-4-7"
         self.llm_api_source = "codex"  # meridian | codex | hardcoded
 
         # Dev terminal (in-browser shell)

@@ -216,7 +216,7 @@ DEBUG_SETS: Dict[Tuple[str, int], List[WordClue]] = {
     ("ai", 2): [
         ("TOKEN", "Unit of model input"),
         ("AGENT", "AI that takes actions"),
-        ("CLAUDE", "Anthropic's assistant"),
+        ("CLAUDE", "Anthropic's chatbot"),
         ("GPU", "Parallel chip used for training"),
         ("EMBED", "Turn text into vectors, for short"),
     ],

@@ -67,7 +67,7 @@ Make sure to replace the email with your own for certbot
 `update_server.sh` generates and manages two systemd units:
 
 * `nabicat.service` — the gunicorn web app
-* `meridian.service` — the Meridian LLM proxy used by `/assistant`
+* `meridian.service` — the Meridian LLM proxy used by LLM-backed app features
 
 sudo systemctl status nabicat meridian
 
@@ -80,7 +80,7 @@ journalctl -u nabicat -f      # for stdout/stderr from update_server.sh bash scr
 journalctl -u meridian -f     # live meridian logs
 ```
 
-### Claude Login (first-time `/assistant` setup)
+### Claude Login (first-time Meridian setup)
 
 Meridian proxies requests to the `claude` CLI, which needs to be authenticated once on the server as the same user the service runs under (whoever ran `setup_server.sh`):
 
