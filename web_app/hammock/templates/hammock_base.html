@@ -9,12 +9,10 @@
 {% endblock %}
 
 {% block page_actions %}
-  {% if current_user.is_authenticated %}
   <li>
     <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('hammock.new_post') }}">
       <i class="bi bi-plus-lg text-success"></i>
       <span>New post</span>
     </a>
   </li>
-  {% endif %}
 {% endblock %}
