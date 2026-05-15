@@ -12,8 +12,8 @@
 <!-- New Goal Modal -->
 <div class="modal fade" id="newGoalModal" tabindex="-1" aria-labelledby="newGoalModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border-radius: 16px 16px 0 0;">
+        <div class="modal-content border-0 modal-content-honeydew">
+            <div class="modal-header text-white modal-header-sage">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="newGoalModalLabel">
                     <i class="bi bi-plus-circle me-2"></i>Create New Goal
                 </h1>
@@ -29,17 +29,16 @@
                     </div>
                     <div class="form-floating mb-3">
                         <textarea 
-                            class="form-control" 
+                            class="form-control textarea-sm"
                             name="description" 
                             id="description" 
-                            placeholder="Enter goal description"
-                            style="height: 120px;"></textarea>
+                            placeholder="Enter goal description"></textarea>
                         <label for="description">
                             <i class="bi bi-text-paragraph me-2 text-sage"></i>Description
                         </label>
                     </div>
                 </div>
-                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05); border-radius: 0 0 16px 16px;">
+                <div class="modal-footer border-0 modal-footer-soft">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>

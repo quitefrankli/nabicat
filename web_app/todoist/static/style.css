@@ -127,6 +127,46 @@
   border-radius: var(--hw-radius-lg) var(--hw-radius-lg) 0 0;
 }
 
+.goal-action-wrap {
+  max-width: 480px;
+}
+
+.goal-velocity-card {
+  border-radius: var(--hw-radius-lg);
+  overflow: hidden;
+}
+
+.diary-delete-body {
+  padding: 2rem;
+}
+
+.diary-new-entry-form {
+  max-width: 480px;
+}
+
+.diary-entry-card {
+  overflow: hidden;
+}
+
+.diary-accordion-item {
+  border: none;
+}
+
+.diary-accordion-button {
+  background: var(--hw-gradient-soft);
+  border: none;
+  padding: 1.25rem 1.5rem;
+}
+
+.diary-entry-icon {
+  font-size: 1.5rem;
+}
+
+.diary-entry-body {
+  background: rgba(250, 249, 246, 0.6);
+  padding: 1.5rem;
+}
+
 /* Priority indicators */
 .priority-high {
   border-left-color: var(--hw-coral, #E07A5F) !important;
