@@ -9,8 +9,7 @@ from playwright.sync_api import expect
 
 def test_crosswords_page_loads(crosswords_page):
     """Test that Crosswords page loads correctly (admin only)."""
-    # Crosswords uses the default app title "NabiCat"
-    expect(crosswords_page).to_have_title("NabiCat")
+    expect(crosswords_page).to_have_title("Crosswords")
 
 
 def test_generate_button_present(crosswords_page):
