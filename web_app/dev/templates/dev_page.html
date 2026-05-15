@@ -86,5 +86,73 @@
       <div class="terminal-output" id="terminal-mount"></div>
     </div>
   </div>
+
+  <div class="tab-pane" id="map" role="tabpanel">
+    <div class="dev-panel" id="map-panel">
+      <div class="panel-header">
+        <i class="bi bi-globe-americas text-sage"></i>
+        <span>Client IP Map</span>
+        <span class="ms-auto badge-lines" id="map-status">not loaded</span>
+      </div>
+
+      <div class="panel-toolbar map-toolbar">
+        <div class="search-wrapper map-path-wrapper">
+          <i class="bi bi-signpost search-icon"></i>
+          <input type="text" id="map-path-filter" class="log-search-input" placeholder="Path filter, e.g. /hammock/*" autocomplete="off">
+          <button class="search-clear" id="map-path-clear" aria-label="Clear path filter">×</button>
+        </div>
+        <div class="search-wrapper map-ip-wrapper">
+          <i class="bi bi-ban search-icon"></i>
+          <input type="text" id="map-ip-exclude" class="log-search-input" placeholder="Exclude IPs, e.g. 127.0.0.1, 1.145.*" autocomplete="off">
+          <button class="search-clear" id="map-ip-clear" aria-label="Clear IP exclusions">×</button>
+        </div>
+        <div class="map-range-controls">
+          <input type="datetime-local" id="map-from" class="map-date-input" aria-label="Start date and time">
+          <input type="datetime-local" id="map-to" class="map-date-input" aria-label="End date and time">
+          <select id="map-interval" class="map-select" aria-label="Chart interval">
+            <option value="auto">Auto</option>
+            <option value="hour">Hourly</option>
+            <option value="day">Daily</option>
+          </select>
+        </div>
+        <div class="map-stat">
+          <span class="map-stat-label">Unique</span>
+          <strong id="map-unique">—</strong>
+        </div>
+        <div class="map-stat">
+          <span class="map-stat-label">Located</span>
+          <strong id="map-located">—</strong>
+        </div>
+        <div class="map-stat">
+          <span class="map-stat-label">Requests</span>
+          <strong id="map-requests">—</strong>
+        </div>
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <button class="btn-icon" id="map-refresh-btn" title="Reload map data">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="map-layout">
+        <div class="client-map" id="client-map"></div>
+        <div class="map-list" id="map-list">
+          <div class="log-status">
+            <i class="bi bi-hourglass-split"></i> Loading map…
+          </div>
+        </div>
+      </div>
+      <div class="map-chart-panel">
+        <div class="map-chart-header">
+          <span>Hits over time</span>
+          <span id="map-chart-range">—</span>
+        </div>
+        <div class="map-chart-wrap">
+          <canvas id="map-hit-chart" class="map-hit-chart"></canvas>
+          <div id="map-chart-tooltip" class="map-chart-tooltip"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

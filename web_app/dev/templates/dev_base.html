@@ -16,6 +16,12 @@
       <span>Terminal</span>
     </a>
   </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link d-flex align-items-center gap-2" href="#" id="map-nav-tab" onclick="switchTab('map')">
+      <i class="bi bi-globe-americas"></i>
+      <span>Map</span>
+    </a>
+  </li>
 {% endblock %}
 
 {% block scripts %}
@@ -23,6 +29,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('dev_api.static', filename='dev.css') }}">
+  <script src="{{ url_for('dev_api.static', filename='logs.js') }}" defer></script>
+  <script src="{{ url_for('dev_api.static', filename='terminal.js') }}" defer></script>
+  <script src="{{ url_for('dev_api.static', filename='map.js') }}" defer></script>
   <script src="{{ url_for('dev_api.static', filename='dev.js') }}" defer></script>
 {% endblock %}

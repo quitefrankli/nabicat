@@ -64,6 +64,11 @@ class ConfigManager:
         self.dev_terminal_idle_timeout_s = 1800
         self.dev_terminal_buffer_bytes = 1_048_576
         self.dev_terminal_read_chunk = 4096
+        self.dev_map_geo_timeout_s = 8
+        self.dev_map_geo_cache_ttl_s = 3600
+        self.dev_map_geo_batch_size = 100
+        self.dev_map_max_ips = 500
+        self.dev_map_geo_url = "http://ip-api.com/batch"
 
         # Crosswords
         self.crosswords_model = "claude-sonnet-4-6"
