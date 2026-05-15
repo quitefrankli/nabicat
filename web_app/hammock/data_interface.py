@@ -123,19 +123,29 @@ class DataInterface(BaseDataInterface):
             return True
         return bool(owner) and owner == user.id
 
+    # ---------- input validation ----------
+
+    @staticmethod
+    def _validate_text(value: str, field: str, max_chars: int) -> str:
+        """Length-cap a user-supplied string and raise APIError if over budget."""
+        if value is None:
+            return ""
+        if len(value) > max_chars:
+            raise APIError(f"{field} is too long (max {max_chars} characters)")
+        return value
+
     # ---------- slug helpers ----------
 
-    def unique_post_slug(self, project_slug: str, title: str) -> str:
-        base = slugify(title)
-        project_path = self.projects_dir / project_slug
-        if not project_path.exists():
-            return base
-        candidate = base
-        i = 2
-        while (project_path / candidate).exists():
-            candidate = f"{base}-{i}"
-            i += 1
-        return candidate
+    def reserve_post_slug(self, project_slug: str, title: str) -> str:
+        """Return the slug for `title` under `project_slug`, or raise APIError
+        if a post with the same slug already exists in that project."""
+        slug = slugify(title)
+        if (self.projects_dir / project_slug / slug).exists():
+            raise APIError(
+                f'A post titled "{title}" already exists in project '
+                f'"{project_slug}". Pick a different title.'
+            )
+        return slug
 
     # ---------- quota ----------
 
@@ -179,10 +189,14 @@ class DataInterface(BaseDataInterface):
     # ---------- markdown ----------
 
     def create_markdown_post(self, user: User, project_input: str, title: str, source_md: str) -> tuple[str, str]:
+        cfg = ConfigManager()
+        self._validate_text(project_input, "Project name", cfg.hammock_project_slug_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
+        source_md = self._validate_text(source_md, "Markdown", cfg.hammock_markdown_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
             raise APIError("Title is required")
-        post_slug = self.unique_post_slug(project_slug, title)
+        post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
 
         body_bytes = len(source_md.encode("utf-8"))
@@ -202,6 +216,9 @@ class DataInterface(BaseDataInterface):
         return project_slug, post_slug
 
     def update_markdown_post(self, project: str, post: str, title: str, source_md: str) -> None:
+        cfg = ConfigManager()
+        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
+        source_md = self._validate_text(source_md, "Markdown", cfg.hammock_markdown_max_chars)
         post_dir = self._post_dir(project, post)
         meta = self._read_meta(post_dir)
         if meta.get("template") != "markdown":
@@ -221,10 +238,14 @@ class DataInterface(BaseDataInterface):
     # ---------- gallery ----------
 
     def create_gallery_post(self, user: User, project_input: str, title: str, description: str) -> tuple[str, str]:
+        cfg = ConfigManager()
+        self._validate_text(project_input, "Project name", cfg.hammock_project_slug_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
+        description = self._validate_text(description, "Description", cfg.hammock_description_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
             raise APIError("Title is required")
-        post_slug = self.unique_post_slug(project_slug, title)
+        post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
         post_dir.mkdir(parents=True, exist_ok=True)
         (post_dir / "thumbs").mkdir(exist_ok=True)
@@ -252,6 +273,9 @@ class DataInterface(BaseDataInterface):
                           mode="w", encoding="utf-8")
 
     def update_gallery_meta(self, project: str, post: str, title: str, description: str) -> None:
+        cfg = ConfigManager()
+        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
+        description = self._validate_text(description, "Description", cfg.hammock_description_max_chars)
         post_dir = self._post_dir(project, post)
         meta = self._read_meta(post_dir)
         if meta.get("template") != "gallery":
@@ -308,8 +332,15 @@ class DataInterface(BaseDataInterface):
 
         added: list[str] = []
         for name, data in prepared:
-            self.atomic_write(post_dir / name, data=data, mode="wb")
-            self._make_thumbnail(post_dir / name, thumbs_dir / f"{name}.webp")
+            orig = post_dir / name
+            self.atomic_write(orig, data=data, mode="wb")
+            try:
+                self._make_thumbnail(orig, thumbs_dir / f"{name}.webp")
+            except APIError:
+                # Reject the original too — if Pillow can't decode it, we won't
+                # serve unknown bytes from the gallery.
+                self.atomic_delete(orig)
+                raise
             added.append(name)
 
         gallery = self.get_gallery(project, post)
@@ -338,6 +369,10 @@ class DataInterface(BaseDataInterface):
 
     def _make_thumbnail(self, src: Path, dst: Path) -> None:
         cfg = ConfigManager()
+        # Enforce a per-process decoded-pixel ceiling so a small file can't
+        # decompress into gigabytes of RGB data. Pillow raises
+        # DecompressionBombError at 2x this value automatically.
+        Image.MAX_IMAGE_PIXELS = cfg.hammock_max_image_pixels
         try:
             with Image.open(src) as img:
                 img = ImageOps.exif_transpose(img)
@@ -347,8 +382,12 @@ class DataInterface(BaseDataInterface):
                 img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 img.save(dst, "WEBP", quality=cfg.hammock_gallery_thumb_quality, method=6)
+        except Image.DecompressionBombError as e:
+            logging.warning(f"Hammock thumbnail rejected (pixel bomb) for {src.name}: {e}")
+            raise APIError(f"Image {src.name} is too large to process") from e
         except Exception as e:
             logging.warning(f"Hammock thumbnail failed for {src.name}: {e}")
+            raise APIError(f"Could not process {src.name} as an image") from e
 
     # ---------- delete post ----------
 

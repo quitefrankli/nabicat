@@ -85,6 +85,11 @@ class ConfigManager:
         self.hammock_admin_quota_bytes = 10 * 1024 * 1024 * 1024  # 10 GB
         self.hammock_gallery_thumb_max_px = 1400
         self.hammock_gallery_thumb_quality = 80
+        self.hammock_max_image_pixels = 40_000_000  # decoded pixel cap (~40 MP) to bound RAM
+        self.hammock_title_max_chars = 120
+        self.hammock_description_max_chars = 2048
+        self.hammock_markdown_max_chars = 256 * 1024
+        self.hammock_project_slug_max_chars = 64
 
     @property
     def project_name(self) -> str:
