@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 import requests
 
+from tests.integration.helpers import with_csrf
+
 
 DEBUG_SAVE_DATA_PATH = Path.home() / ".nabicat_debug" / "data"
 USERS_FILE = DEBUG_SAVE_DATA_PATH / "users.json"
@@ -30,7 +32,7 @@ class TestAccountDeletionIntegration:
 
         register_response = session.post(
             f"{server_url}/account/register",
-            data={"username": username, "password": password},
+            data=with_csrf(session, server_url, {"username": username, "password": password}, "/account/login"),
             allow_redirects=False,
         )
         assert register_response.status_code == 302
@@ -128,7 +130,7 @@ class TestAccountDeletionIntegration:
 
         delete_response = session.post(
             f"{server_url}/account/delete",
-            data={"password": password},
+            data=with_csrf(session, server_url, {"password": password}, "/account/delete"),
             allow_redirects=False,
         )
         assert delete_response.status_code == 302
@@ -159,8 +161,8 @@ class TestAccountDeletionIntegration:
         assert not (file_store_thumb_dir / f"{file_store_crc}.jpg").exists()
 
     def test_delete_last_admin_account_is_blocked(self, server_url):
-        username = f"integration_admin_{uuid.uuid4().hex[:8]}"
-        password = "integration_admin_pass_123"
+        username = "admin"
+        password = "admin"
         folder = f"admin_folder_{uuid.uuid4().hex[:8]}"
 
         original_exists = USERS_FILE.exists()
@@ -181,14 +183,14 @@ class TestAccountDeletionIntegration:
             session = requests.Session()
             login_response = session.post(
                 f"{server_url}/account/login",
-                data={"username": username, "password": password},
+                data=with_csrf(session, server_url, {"username": username, "password": password}, "/account/login"),
                 allow_redirects=False,
             )
             assert login_response.status_code == 302
 
             delete_response = session.post(
                 f"{server_url}/account/delete",
-                data={"password": password},
+                data=with_csrf(session, server_url, {"password": password}, "/account/delete"),
                 allow_redirects=False,
             )
             assert delete_response.status_code == 302

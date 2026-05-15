@@ -5,6 +5,8 @@ import requests
 import io
 import uuid
 
+from tests.integration.helpers import with_csrf
+
 
 USERNAME = "admin"
 PASSWORD = "admin"
@@ -25,12 +27,13 @@ class TestFileStoreIntegration:
 
     def test_upload_file(self, server_url):
         """Test uploading a file"""
+        session = requests.Session()
         url = f"{server_url}/file_store/upload"
         
         files = {'file': (TEST_FILENAME, io.BytesIO(TEST_CONTENT.encode()), 'text/plain')}
-        data = {'username': USERNAME, 'password': PASSWORD}
+        data = with_csrf(session, server_url, get_auth_payload(), "/file_store/")
         
-        response = requests.post(url, files=files, data=data, allow_redirects=False)
+        response = session.post(url, files=files, data=data, allow_redirects=False)
         
         # Should redirect to index on success
         assert response.status_code == 302
@@ -51,15 +54,16 @@ class TestFileStoreIntegration:
 
     def test_download_file(self, server_url):
         """Test downloading a file"""
+        session = requests.Session()
         # First upload a file
         upload_url = f"{server_url}/file_store/upload"
         files = {'file': (TEST_FILENAME, io.BytesIO(TEST_CONTENT.encode()), 'text/plain')}
-        data = {'username': USERNAME, 'password': PASSWORD}
-        requests.post(upload_url, files=files, data=data, allow_redirects=False)
+        data = with_csrf(session, server_url, get_auth_payload(), "/file_store/")
+        session.post(upload_url, files=files, data=data, allow_redirects=False)
         
         # Now download it
         download_url = f"{server_url}/file_store/download/{TEST_FILENAME}"
-        response = requests.get(download_url)
+        response = session.get(download_url)
         
         assert response.status_code == 200
         # The content might be returned as bytes or string depending on how send_file works
@@ -68,59 +72,69 @@ class TestFileStoreIntegration:
 
     def test_delete_file(self, server_url):
         """Test deleting a file"""
+        session = requests.Session()
         # First upload a file to delete
         test_file = "file_to_delete.txt"
         upload_url = f"{server_url}/file_store/upload"
         files = {'file': (test_file, io.BytesIO(b'delete me'), 'text/plain')}
-        data = {'username': USERNAME, 'password': PASSWORD}
-        requests.post(upload_url, files=files, data=data, allow_redirects=False)
+        data = with_csrf(session, server_url, get_auth_payload(), "/file_store/")
+        session.post(upload_url, files=files, data=data, allow_redirects=False)
         
         # Now delete it
         delete_url = f"{server_url}/file_store/delete/{test_file}"
-        response = requests.post(delete_url, data={'username': USERNAME, 'password': PASSWORD}, allow_redirects=False)
+        response = session.post(
+            delete_url,
+            data=with_csrf(session, server_url, get_auth_payload(), "/file_store/"),
+            allow_redirects=False,
+        )
         
         # Should redirect to index on success
         assert response.status_code == 302
         
         # Verify file is gone by checking the file list
         list_url = f"{server_url}/file_store/files_list"
-        response = requests.get(list_url)
+        response = session.get(list_url)
         files = response.json()['files']
         assert test_file not in files
 
     def test_upload_and_full_lifecycle(self, server_url):
         """Test complete file lifecycle: upload, list, download, delete"""
+        session = requests.Session()
         test_file = "lifecycle_test.txt"
         test_content = "Testing full lifecycle"
         
         # Upload
         upload_url = f"{server_url}/file_store/upload"
         files = {'file': (test_file, io.BytesIO(test_content.encode()), 'text/plain')}
-        data = {'username': USERNAME, 'password': PASSWORD}
-        response = requests.post(upload_url, files=files, data=data, allow_redirects=False)
+        data = with_csrf(session, server_url, get_auth_payload(), "/file_store/")
+        response = session.post(upload_url, files=files, data=data, allow_redirects=False)
         assert response.status_code == 302
         
         # List - verify file appears
         list_url = f"{server_url}/file_store/files_list"
-        response = requests.get(list_url)
+        response = session.get(list_url)
         assert response.status_code == 200
         files = response.json()['files']
         assert test_file in files
         
         # Download - verify content
         download_url = f"{server_url}/file_store/download/{test_file}"
-        response = requests.get(download_url)
+        response = session.get(download_url)
         assert response.status_code == 200
         content = response.content.decode() if isinstance(response.content, bytes) else response.text
         assert test_content in content
         
         # Delete
         delete_url = f"{server_url}/file_store/delete/{test_file}"
-        response = requests.post(delete_url, data={'username': USERNAME, 'password': PASSWORD}, allow_redirects=False)
+        response = session.post(
+            delete_url,
+            data=with_csrf(session, server_url, get_auth_payload(), "/file_store/"),
+            allow_redirects=False,
+        )
         assert response.status_code == 302
         
         # Verify deleted
-        response = requests.get(list_url)
+        response = session.get(list_url)
         files = response.json()['files']
         assert test_file not in files
 
@@ -135,7 +149,7 @@ class TestFileStoreIntegration:
 
         register_response = session.post(
             f"{server_url}/account/register",
-            data={"username": username, "password": password},
+            data=with_csrf(session, server_url, {"username": username, "password": password}, "/account/login"),
             allow_redirects=False,
         )
         assert register_response.status_code == 302
@@ -144,6 +158,7 @@ class TestFileStoreIntegration:
         response = session.post(
             upload_url,
             files={'file': (file_a, io.BytesIO(b'file a content'), 'text/plain')},
+            data=with_csrf(session, server_url, path="/file_store/"),
             allow_redirects=False,
         )
         assert response.status_code == 302
@@ -151,6 +166,7 @@ class TestFileStoreIntegration:
         response = session.post(
             upload_url,
             files={'file': (file_b, io.BytesIO(b'file b content'), 'text/plain')},
+            data=with_csrf(session, server_url, path="/file_store/"),
             allow_redirects=False,
         )
         assert response.status_code == 302
@@ -161,7 +177,11 @@ class TestFileStoreIntegration:
         assert file_b in files_before_delete
 
         delete_all_url = f"{server_url}/file_store/delete_all"
-        delete_all_response = session.post(delete_all_url, allow_redirects=False)
+        delete_all_response = session.post(
+            delete_all_url,
+            data=with_csrf(session, server_url, path="/file_store/"),
+            allow_redirects=False,
+        )
         assert delete_all_response.status_code == 302
         assert '/file_store' in delete_all_response.headers.get('Location', '')
 

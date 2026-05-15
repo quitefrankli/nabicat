@@ -66,6 +66,9 @@ import web_app.helpers
 web_app.helpers.limiter.enabled = False
 
 # Now run the app
+from web_app.app import app
+app.config["SESSION_COOKIE_SECURE"] = False
+
 from web_app.__main__ import cli_start
 cli_start(["--port", "{port}", "--debug"])
 '''
