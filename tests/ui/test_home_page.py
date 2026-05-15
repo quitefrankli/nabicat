@@ -11,8 +11,7 @@ from playwright.sync_api import expect
 def test_home_page_loads(logged_in_page, test_server):
     """Test that the home page loads successfully."""
     expect(logged_in_page).to_have_title("NabiCat")
-    welcome_heading = logged_in_page.locator("h1", has_text="Welcome to")
-    expect(welcome_heading).to_be_visible()
+    expect(logged_in_page.locator("img.home-logo[alt='Nabicat']")).to_be_visible()
 
 
 def test_app_grid_visible(logged_in_page, test_server):
@@ -63,8 +62,8 @@ def test_logout_button_present(logged_in_page):
     expect(logged_in_page.locator("a:has-text('Logout')")).to_be_visible()
 
 
-def test_admin_only_apps_hidden_for_non_admin(page, test_server):
-    """Test that admin-only apps are hidden for non-admin users."""
+def test_admin_only_apps_disabled_for_non_admin(page, test_server):
+    """Test that admin-only apps are visible but disabled for non-admin users."""
     # Register and log in as a fresh non-admin user (self-contained test)
     username = f"ui_non_admin_{int(time.time() * 1000)}"
     password = "testpass123"
@@ -82,7 +81,12 @@ def test_admin_only_apps_hidden_for_non_admin(page, test_server):
     expect(page.locator("text=Tubio")).to_be_visible()
     expect(page.locator("text=File Store")).to_be_visible()
     
-    # Verify admin-only apps are NOT visible
-    expect(page.locator("text=Todoist")).not_to_be_visible()
-    expect(page.locator("text=JSwipe")).not_to_be_visible()
-    expect(page.locator("text=Crosswords")).not_to_be_visible()
+    # Verify public/private apps are still available.
+    expect(page.locator("text=Todoist")).to_be_visible()
+    expect(page.locator("text=Crosswords")).to_be_visible()
+
+    # Verify admin-only apps are shown as disabled entries.
+    for app_name in ["JSwipe", "Proxy", "Dev"]:
+        link = page.locator(f"a.app-disabled:has-text('{app_name}')")
+        expect(link).to_be_visible()
+        expect(link).to_have_attribute("href", "#")
