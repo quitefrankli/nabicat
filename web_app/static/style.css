@@ -61,12 +61,22 @@
    ============================================ */
 
 body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--hw-gradient-warm);
   background-attachment: fixed;
   color: var(--hw-text-primary);
   min-height: 100vh;
   line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 600;
 }
 
 /* Custom Scrollbar */
@@ -363,6 +373,35 @@ body {
   padding: 1.25rem 1.5rem;
 }
 
+.modal-content-honeydew {
+  border-radius: var(--hw-radius-lg);
+}
+
+.modal-header-sage {
+  background: linear-gradient(135deg, var(--hw-sage) 0%, var(--hw-sage-dark) 100%);
+  border-radius: var(--hw-radius-lg) var(--hw-radius-lg) 0 0;
+}
+
+.modal-header-danger {
+  background: linear-gradient(135deg, var(--hw-coral) 0%, #D35400 100%);
+  border-radius: var(--hw-radius-lg) var(--hw-radius-lg) 0 0;
+}
+
+.modal-footer-soft {
+  background: rgba(135, 168, 120, 0.05);
+  border-radius: 0 0 var(--hw-radius-lg) var(--hw-radius-lg);
+}
+
+.textarea-md {
+  min-height: 150px;
+  resize: vertical;
+}
+
+.textarea-sm {
+  min-height: 120px;
+  resize: vertical;
+}
+
 /* ============================================
    List Groups
    ============================================ */
@@ -485,9 +524,165 @@ body {
   background: rgba(135, 168, 120, 0.1);
   border: 1px solid var(--hw-border);
   border-radius: var(--hw-radius-md);
-  padding: 0.75rem 1.5rem;
+  padding: 0.3rem 0.75rem;
   font-family: 'SF Mono', monospace;
   color: var(--hw-text-secondary);
+}
+
+.home-logo {
+  width: clamp(180px, 55vw, 420px);
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+.home-app-card {
+  transition: var(--hw-transition-base);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 20px !important;
+}
+
+.home-app-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(45, 74, 62, 0.15) !important;
+}
+
+.app-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--hw-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: white;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease;
+}
+
+.home-app-card:hover .app-icon-wrapper {
+  transform: scale(1.1) rotate(-5deg);
+}
+
+.app-icon-hammock {
+  background: linear-gradient(135deg, #4A7C59 0%, #6B9E78 100%);
+}
+
+.app-icon-crosswords {
+  background: linear-gradient(135deg, #8B7355 0%, #A0826D 100%);
+}
+
+.app-icon-simulations {
+  background: linear-gradient(135deg, #5B8FB9 0%, var(--hw-sage) 100%);
+}
+
+.app-icon-metrics {
+  background: var(--hw-gradient-golden);
+}
+
+.app-icon-tubio {
+  background: linear-gradient(135deg, var(--hw-forest) 0%, var(--hw-moss) 100%);
+}
+
+.app-icon-todoist {
+  background: var(--hw-gradient-sage);
+}
+
+.app-icon-file-store {
+  background: linear-gradient(135deg, var(--hw-sage-dark) 0%, var(--hw-sage) 100%);
+}
+
+.app-icon-jswipe {
+  background: linear-gradient(135deg, var(--hw-coral) 0%, var(--hw-peach) 100%);
+}
+
+.app-icon-proxy {
+  background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);
+}
+
+.app-icon-dev {
+  background: linear-gradient(135deg, var(--hw-forest) 0%, #1b2a24 100%);
+}
+
+.app-disabled {
+  pointer-events: none;
+  cursor: default;
+}
+
+.app-disabled .home-app-card {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.cache-info-card {
+  display: none;
+}
+
+.info-col-divider {
+  position: relative;
+}
+
+.info-col-divider::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 15%;
+  height: 70%;
+  width: 1px;
+  background-color: var(--bs-border-color);
+}
+
+.app-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.commit-hash .hash-short {
+  display: none;
+}
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hw-border);
+}
+
+.section-label {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hw-text-muted);
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .app-icon-wrapper {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--hw-radius-lg);
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .commit-hash .hash-long {
+    display: none;
+  }
+
+  .commit-hash .hash-short {
+    display: inline;
+  }
 }
 
 /* ============================================

@@ -110,4 +110,27 @@ document.addEventListener("DOMContentLoaded", function() {
         lb.addEventListener("click", e => { if (e.target === lb) close(); });
         document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
     }
+
+    const templateRadios = document.querySelectorAll('input[name="template"]');
+    const templateFields = document.querySelectorAll("[data-template-field]");
+    const syncTemplateFields = () => {
+        const selected = document.querySelector('input[name="template"]:checked');
+        if (!selected) return;
+        templateFields.forEach(field => {
+            field.hidden = field.dataset.templateField !== selected.value;
+        });
+    };
+    templateRadios.forEach(radio => radio.addEventListener("change", syncTemplateFields));
+    syncTemplateFields();
+
+    const existingProject = document.getElementById("project-existing");
+    const newProject = document.getElementById("project-new");
+    if (existingProject && newProject) {
+        existingProject.addEventListener("change", () => {
+            if (existingProject.value) newProject.value = "";
+        });
+        newProject.addEventListener("input", () => {
+            if (newProject.value) existingProject.value = "";
+        });
+    }
 });

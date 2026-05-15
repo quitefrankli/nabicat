@@ -64,12 +64,12 @@
                                   placeholder="# Hello&#10;&#10;Write your post here..."></textarea>
                     </div>
 
-                    <div class="hammock-field" data-template-field="gallery" style="display:none;">
+                    <div class="hammock-field" data-template-field="gallery" hidden>
                         <label class="hammock-label">Description (optional)</label>
                         <textarea name="description" class="hammock-input" rows="3"></textarea>
                     </div>
 
-                    <div class="hammock-field" data-template-field="gallery" style="display:none;">
+                    <div class="hammock-field" data-template-field="gallery" hidden>
                         <label class="hammock-label">Images</label>
                         <input type="file" name="files" multiple accept="image/*" class="hammock-input">
                         <div class="hammock-field-hint">You can add more images later.</div>
@@ -84,25 +84,4 @@
         </div>
     </div>
 </div>
-<script>
-(function() {
-    const radios = document.querySelectorAll('input[name="template"]');
-    const fields = document.querySelectorAll('[data-template-field]');
-    function sync() {
-        const val = document.querySelector('input[name="template"]:checked').value;
-        fields.forEach(f => {
-            f.style.display = (f.dataset.templateField === val) ? '' : 'none';
-        });
-    }
-    radios.forEach(r => r.addEventListener('change', sync));
-    sync();
-
-    // Project picker: existing-dropdown and new-name input are mutually exclusive.
-    // Touching one clears the other so the submitted form only ever carries one.
-    const existing = document.getElementById('project-existing');
-    const fresh = document.getElementById('project-new');
-    existing.addEventListener('change', () => { if (existing.value) fresh.value = ''; });
-    fresh.addEventListener('input', () => { if (fresh.value) existing.value = ''; });
-})();
-</script>
 {% endblock %}

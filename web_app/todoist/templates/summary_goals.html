@@ -1,30 +1,28 @@
 {% macro render_goal(goal, all_goals, depth=0) %}
-<div class="accordion mb-2" id="accordion{{ goal.id }}" {% if depth > 0 %}style="margin-left: {{ depth * 20 }}px;"{% endif %}>
-    <div class="accordion-item" style="border: none; border-radius: 12px; overflow: hidden; background: white;">
+<div class="accordion mb-2 goal-tree" id="accordion{{ goal.id }}">
+    <div class="accordion-item goal-accordion-item">
         <h2 class="accordion-header" id="heading{{ goal.id }}">
             <button
-                class="accordion-button collapsed"
+                class="accordion-button collapsed goal-accordion-button"
                 type="button"
                 data-bs-toggle="collapse"
                 data-bs-target="#collapse{{ goal.id }}"
                 aria-expanded="false"
-                aria-controls="collapse{{ goal.id }}"
-                style="background: var(--hw-bg-secondary, #FAF9F6); border: none; padding: 0.75rem 1rem; border-radius: 12px;">
+                aria-controls="collapse{{ goal.id }}">
                 <div class="d-flex align-items-center w-100 justify-content-between">
-                    <div class="d-flex align-items-center flex-grow-1" style="overflow: hidden;">
+                    <div class="d-flex align-items-center flex-grow-1 goal-title-wrap">
                         {% if depth > 0 %}
                         <i class="bi bi-arrow-return-right text-muted me-2"></i>
                         {% endif %}
                         <i class="bi bi-target text-sage me-2"></i>
-                        <span class="fw-medium" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ goal.name }}</span>
+                        <span class="fw-medium goal-title">{{ goal.name }}</span>
                         {% if goal.children %}
-                        <span class="badge rounded-pill ms-2" style="background: var(--hw-sage, #87A878); font-size: 0.7em;">{{ goal.children|length }}</span>
+                        <span class="badge rounded-pill ms-2 goal-child-count">{{ goal.children|length }}</span>
                         {% endif %}
                     </div>
                     <div class="form-check ms-2">
-                        <input class="form-check-input"
+                        <input class="form-check-input goal-state-check"
                                type="checkbox"
-                               style="width: 1.25em; height: 1.25em; border-color: var(--hw-sage, #87A878); accent-color: var(--hw-sage, #87A878);"
                                id="checkbox-{{ goal.id }}"
                                {{ "checked" if goal.state.name == "COMPLETED" else "" }}
                                onchange="toggleGoalState(this, {{ goal.id }})"
@@ -34,13 +32,13 @@
             </button>
         </h2>
         <div id="collapse{{ goal.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ goal.id }}" data-bs-parent="#accordion{{ goal.id }}">
-            <div class="accordion-body" style="background: rgba(250, 249, 246, 0.6); padding: 1rem 1.25rem;">
+            <div class="accordion-body goal-accordion-body">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title mb-3" style="color: var(--hw-sage-dark, #6B8E5A);">
+                        <h5 class="card-title mb-3 goal-card-title">
                             <i class="bi bi-target me-2"></i>{{ goal.name }}
                         </h5>
-                        <div class="card-text" style="white-space: pre-line; line-height: 1.6; color: var(--hw-text-secondary, #5A6B5A);">
+                        <div class="card-text goal-description">
                             {{ goal.description or "No description provided." }}
                         </div>
                         <div class="d-flex gap-2 flex-wrap justify-content-end mt-3">
@@ -95,8 +93,8 @@
 <!-- Edit Goal Modal -->
 <div class="modal fade" id="modifyGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="modalLabel{{ goal.id }}" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);">
+        <div class="modal-content border-0 shadow modal-content-honeydew">
+            <div class="modal-header text-white modal-header-sage">
                 <h1 class="modal-title fs-5" id="modalLabel{{goal.id}}">
                     <i class="bi bi-pencil me-2"></i>Edit Goal
                 </h1>
@@ -105,19 +103,19 @@
             <form action="{{ url_for('.goals_api.edit_goal', goal_id=goal.id) }}" method="post">
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label for="name-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
+                        <label for="name-{{goal.id}}" class="form-label fw-semibold goal-modal-label">
                             <i class="bi bi-tag me-1"></i>Goal Name
                         </label>
                         <input type="text" class="form-control form-control-lg" name="name" id="name-{{goal.id}}" value="{{ goal.name }}" required>
                     </div>
                     <div class="mb-3">
-                        <label for="description-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
+                        <label for="description-{{goal.id}}" class="form-label fw-semibold goal-modal-label">
                             <i class="bi bi-text-paragraph me-1"></i>Description
                         </label>
-                        <textarea class="form-control" name="description" id="description-{{goal.id}}" rows="6" style="min-height: 150px; resize: vertical;" placeholder="Describe your goal in detail...">{{ goal.description }}</textarea>
+                        <textarea class="form-control textarea-md" name="description" id="description-{{goal.id}}" rows="6" placeholder="Describe your goal in detail...">{{ goal.description }}</textarea>
                     </div>
                 </div>
-                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                <div class="modal-footer modal-footer-soft">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -133,8 +131,8 @@
 <!-- Delete Goal Modal -->
 <div class="modal fade" id="deleteGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="deleteModalLabel{{goal.id}}" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content border-0 shadow" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, #E07A5F 0%, #D35400 100%);">
+        <div class="modal-content border-0 shadow modal-content-honeydew">
+            <div class="modal-header text-white modal-header-danger">
                 <h1 class="modal-title fs-5" id="deleteModalLabel{{goal.id}}">
                     <i class="bi bi-exclamation-triangle me-2"></i>Confirm Action
                 </h1>
@@ -142,11 +140,11 @@
             </div>
             <div class="modal-body p-4">
                 <p class="mb-3">What would you like to do with this goal?</p>
-                <div class="alert alert-warning" style="background: rgba(233, 196, 106, 0.15); border-color: rgba(233, 196, 106, 0.3);">
-                    <strong style="color: var(--hw-forest, #2D4A3E);">{{ goal.name }}</strong>
+                <div class="alert alert-warning goal-warning">
+                    <strong class="goal-warning-title">{{ goal.name }}</strong>
                 </div>
                 {% if goal.children %}
-                <div class="alert alert-danger" style="font-size: 0.9em;">
+                <div class="alert alert-danger goal-danger-note">
                     <i class="bi bi-exclamation-triangle me-1"></i>This will also delete {{ goal.children|length }} subgoal(s).
                 </div>
                 {% endif %}
@@ -159,7 +157,7 @@
                     </a>
                 </div>
             </div>
-            <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+            <div class="modal-footer modal-footer-soft">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-arrow-left me-1"></i>Cancel
                 </button>
@@ -171,8 +169,8 @@
 <!-- Log Goal Modal -->
 <div class="modal fade" id="logGoalModal{{goal.id}}" tabindex="-1" aria-labelledby="logModalLabel{{goal.id}}" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);">
+        <div class="modal-content border-0 shadow modal-content-honeydew">
+            <div class="modal-header text-white modal-header-sage">
                 <h1 class="modal-title fs-5" id="logModalLabel{{goal.id}}">
                     <i class="bi bi-journal-plus me-2"></i>Log Progress
                 </h1>
@@ -181,19 +179,19 @@
             <form action="{{ url_for('.goals_api.log_goal', goal_id=goal.id) }}" method="post">
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label for="goal-desc-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
+                        <label for="goal-desc-{{goal.id}}" class="form-label fw-semibold goal-modal-label">
                             <i class="bi bi-info-circle me-1"></i>Goal Description
                         </label>
-                        <div class="form-control text-muted" style="min-height: 80px; white-space: pre-line; background: rgba(135, 168, 120, 0.05);">{{ goal.description or 'No description provided.' }}</div>
+                        <div class="form-control text-muted goal-description-preview">{{ goal.description or 'No description provided.' }}</div>
                     </div>
                     <div class="mb-3">
-                        <label for="log-{{goal.id}}" class="form-label fw-semibold" style="color: var(--hw-sage-dark, #6B8E5A);">
+                        <label for="log-{{goal.id}}" class="form-label fw-semibold goal-modal-label">
                             <i class="bi bi-pencil-square me-1"></i>Progress Log
                         </label>
-                        <textarea class="form-control" name="log" id="log-{{goal.id}}" rows="5" style="min-height: 120px; resize: vertical;" placeholder="Describe the progress you've made on this goal..." required></textarea>
+                        <textarea class="form-control textarea-sm" name="log" id="log-{{goal.id}}" rows="5" placeholder="Describe the progress you've made on this goal..." required></textarea>
                     </div>
                 </div>
-                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                <div class="modal-footer modal-footer-soft">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -209,8 +207,8 @@
 <!-- New Subgoal Modal -->
 <div class="modal fade" id="newSubgoalModal{{goal.id}}" tabindex="-1" aria-labelledby="newSubgoalModalLabel{{goal.id}}" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow" style="border-radius: 16px;">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%);">
+        <div class="modal-content border-0 shadow modal-content-honeydew">
+            <div class="modal-header text-white modal-header-sage">
                 <h1 class="modal-title fs-5" id="newSubgoalModalLabel{{goal.id}}">
                     <i class="bi bi-diagram-3 me-2"></i>Add Subgoal to "{{ goal.name }}"
                 </h1>
@@ -227,17 +225,16 @@
                     </div>
                     <div class="form-floating mb-3">
                         <textarea
-                            class="form-control"
+                            class="form-control textarea-sm"
                             name="description"
                             id="subgoal-description-{{goal.id}}"
-                            placeholder="Enter subgoal description"
-                            style="height: 120px;"></textarea>
+                            placeholder="Enter subgoal description"></textarea>
                         <label for="subgoal-description-{{goal.id}}">
                             <i class="bi bi-text-paragraph me-2 text-sage"></i>Description
                         </label>
                     </div>
                 </div>
-                <div class="modal-footer border-0" style="background: rgba(135, 168, 120, 0.05);">
+                <div class="modal-footer border-0 modal-footer-soft">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -258,8 +255,8 @@
 {% endmacro %}
 
 {% for dated_goal_block in dated_goal_blocks %}
-<div class="card shadow-sm my-3" style="background: linear-gradient(135deg, rgba(135, 168, 120, 0.07) 0%, rgba(168, 198, 134, 0.07) 100%); border-radius: 16px;">
-    <div class="card-header" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border: none; border-radius: 16px 16px 0 0;">
+<div class="card shadow-sm my-3 dated-goal-card">
+    <div class="card-header dated-goal-header">
         <h5 class="text-white mb-0">
             <i class="bi bi-calendar-event me-2"></i>{{ dated_goal_block[0] }}
         </h5>
