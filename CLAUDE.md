@@ -35,6 +35,16 @@
 
 * start every new session with "CLAUDE.md read!"
 
+## Hammock subapp
+
+- Posts live on the filesystem: `~/.nabicat/data/hammock/projects/<project>/<post>/`. Each post has a `meta.json` with `template` (`markdown`/`gallery`/`raw`), `owner` (username), `title`, `date`.
+- Authorization: post owner OR admin can edit/delete. Legacy posts (no `owner` field) are admin-only.
+- Templated posts store source-of-truth alongside the rendered `index.html`:
+    - `markdown` → `source.md`
+    - `gallery` → `gallery.json` (`title`, `description`, `images`); originals in the post dir, WebP thumbnails in `thumbs/<filename>.webp`
+- `DataInterface.get_post_content` re-renders templated posts on every view, so renderer/style changes propagate without re-saving existing posts.
+- Per-user storage quotas: `hammock_non_admin_quota_bytes`, `hammock_admin_quota_bytes`; thumb size: `hammock_gallery_thumb_max_px`.
+
 ## UI/UX Design System — Honeydew Theme
 
 All UI work must stay consistent with the established design system in `web_app/static/style.css`.

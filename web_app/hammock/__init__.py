@@ -4,13 +4,18 @@ import json
 import logging
 import zipfile
 from datetime import datetime, timezone
+from functools import wraps
 from io import BytesIO
 
-from flask import Blueprint, render_template, send_file, abort, request, redirect, jsonify
-from web_app.hammock.data_interface import DataInterface
-from web_app.helpers import limiter, parse_request, get_ip
-from web_app.errors import APIError
+import flask_login
+from flask import (
+    Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for,
+)
+
 from web_app.app import csrf
+from web_app.errors import APIError
+from web_app.hammock.data_interface import DataInterface, slugify
+from web_app.helpers import cur_user, get_ip, limiter, parse_request
 
 hammock_api = Blueprint(
     'hammock',
@@ -20,16 +25,84 @@ hammock_api = Blueprint(
     url_prefix='/hammock'
 )
 
+
 @hammock_api.context_processor
 def inject_app_name():
     return dict(app_name='Hammock')
 
+
+def _require_post_owner(project: str, post: str):
+    """Abort with 403 unless the current user can edit this post."""
+    if not flask_login.current_user.is_authenticated:
+        abort(403)
+    if not DataInterface().user_can_edit(flask_login.current_user, project, post):
+        abort(403)
+
+
+def owner_or_admin(func):
+    @wraps(func)
+    def wrapper(project, post, *args, **kwargs):
+        _require_post_owner(project, post)
+        return func(project, post, *args, **kwargs)
+    return wrapper
+
+
 @hammock_api.route('/')
 def index():
     posts_by_project = DataInterface().get_posts_by_project()
+    return render_template("hammock_index.html", posts_by_project=posts_by_project)
 
-    return render_template("hammock_index.html", 
-                           posts_by_project=posts_by_project)
+
+@hammock_api.route('/new', methods=['GET', 'POST'])
+@flask_login.login_required
+def new_post():
+    di = DataInterface()
+    if request.method == 'POST':
+        project_input = (request.form.get('project_existing') or request.form.get('project_new') or '').strip()
+        template = (request.form.get('template') or '').strip()
+        title = (request.form.get('title') or '').strip()
+
+        if not project_input:
+            flash("Project is required", "error")
+            return redirect(url_for('.new_post'))
+        if template not in ('markdown', 'gallery'):
+            flash("Pick a template", "error")
+            return redirect(url_for('.new_post'))
+        if not title:
+            flash("Title is required", "error")
+            return redirect(url_for('.new_post'))
+
+        user = cur_user()
+        try:
+            if template == 'markdown':
+                source_md = request.form.get('source_md') or ''
+                project_slug, post_slug = di.create_markdown_post(user, project_input, title, source_md)
+            else:
+                description = (request.form.get('description') or '').strip()
+                project_slug, post_slug = di.create_gallery_post(user, project_input, title, description)
+                files = [f for f in request.files.getlist('files') if f and f.filename]
+                if files:
+                    try:
+                        di.add_gallery_images(user, project_slug, post_slug, files)
+                    except APIError:
+                        # Roll back the empty post so create-with-images is atomic.
+                        di.delete_post(project_slug, post_slug)
+                        raise
+        except APIError as e:
+            flash(str(e), "error")
+            return redirect(url_for('.new_post'))
+
+        logging.info(
+            f"Hammock post created: {project_slug}/{post_slug} template={template} "
+            f"by={user.id} from={get_ip()}"
+        )
+        return redirect(url_for('.view_post', project=project_slug, post=post_slug))
+
+    return render_template(
+        "hammock_new.html",
+        posts_by_project=di.get_posts_by_project(),
+    )
+
 
 @hammock_api.route('/<project>/')
 def view_project(project: str):
@@ -39,16 +112,129 @@ def view_project(project: str):
         return redirect(f'/hammock/{project}/{project_obj.posts[0]}/')
     return redirect(f'/hammock/?open={project}')
 
+
 @hammock_api.route('/<project>/<post>/')
 def view_post(project: str, post: str):
-    data_interface = DataInterface()
-    posts_by_project = data_interface.get_posts_by_project()
-    post_content = data_interface.get_post_content(project, post)
-    return render_template("hammock_post.html",
-                           project_name=project,
-                           post_name=post,
-                           posts_by_project=posts_by_project,
-                           post_content=post_content)
+    di = DataInterface()
+    posts_by_project = di.get_posts_by_project()
+    try:
+        post_content = di.get_post_content(project, post)
+    except FileNotFoundError:
+        abort(404)
+    meta = di.get_post_meta(project, post)
+    can_edit = di.user_can_edit(flask_login.current_user, project, post)
+    return render_template(
+        "hammock_post.html",
+        project_name=project,
+        post_name=post,
+        posts_by_project=posts_by_project,
+        post_content=post_content,
+        meta=meta,
+        can_edit=can_edit,
+    )
+
+
+@hammock_api.route('/<project>/<post>/edit', methods=['GET', 'POST'])
+@owner_or_admin
+def edit_post(project: str, post: str):
+    di = DataInterface()
+    meta = di.get_post_meta(project, post)
+    template = meta.get("template")
+
+    if request.method == 'POST':
+        title = (request.form.get('title') or '').strip()
+        try:
+            if template == 'markdown':
+                source_md = request.form.get('source_md') or ''
+                di.update_markdown_post(project, post, title, source_md)
+            elif template == 'gallery':
+                description = (request.form.get('description') or '').strip()
+                di.update_gallery_meta(project, post, title, description)
+            else:
+                # raw/legacy posts: meta-only updates aren't supported
+                flash("This post type can't be edited in the browser.", "error")
+                return redirect(url_for('.view_post', project=project, post=post))
+        except APIError as e:
+            flash(str(e), "error")
+            return redirect(url_for('.edit_post', project=project, post=post))
+        logging.info(
+            f"Hammock post edited: {project}/{post} template={template} "
+            f"by={cur_user().id} from={get_ip()}"
+        )
+        flash("Saved.", "success")
+        return redirect(url_for('.view_post', project=project, post=post))
+
+    posts_by_project = di.get_posts_by_project()
+    if template == 'markdown':
+        return render_template(
+            "hammock_edit_markdown.html",
+            project_name=project,
+            post_name=post,
+            meta=meta,
+            source_md=di.get_markdown_source(project, post),
+            posts_by_project=posts_by_project,
+        )
+    if template == 'gallery':
+        return render_template(
+            "hammock_edit_gallery.html",
+            project_name=project,
+            post_name=post,
+            meta=meta,
+            gallery=di.get_gallery(project, post),
+            posts_by_project=posts_by_project,
+        )
+    flash("This post type can't be edited in the browser.", "error")
+    return redirect(url_for('.view_post', project=project, post=post))
+
+
+@hammock_api.route('/<project>/<post>/images', methods=['POST'])
+@owner_or_admin
+def add_gallery_images(project: str, post: str):
+    di = DataInterface()
+    files = request.files.getlist('files')
+    user = cur_user()
+    try:
+        n = di.add_gallery_images(user, project, post, files)
+    except APIError as e:
+        flash(str(e), "error")
+        return redirect(url_for('.edit_post', project=project, post=post))
+    logging.info(
+        f"Hammock gallery images added: {project}/{post} count={n} "
+        f"by={user.id} from={get_ip()}"
+    )
+    flash(f"Uploaded {n} image{'s' if n != 1 else ''}.", "success")
+    return redirect(url_for('.edit_post', project=project, post=post))
+
+
+@hammock_api.route('/<project>/<post>/images/<path:filename>/delete', methods=['POST'])
+@owner_or_admin
+def delete_gallery_image(project: str, post: str, filename: str):
+    di = DataInterface()
+    try:
+        di.delete_gallery_image(project, post, filename)
+    except APIError as e:
+        flash(str(e), "error")
+        return redirect(url_for('.edit_post', project=project, post=post))
+    logging.info(
+        f"Hammock gallery image deleted: {project}/{post}/{filename} "
+        f"by={cur_user().id} from={get_ip()}"
+    )
+    return redirect(url_for('.edit_post', project=project, post=post))
+
+
+@hammock_api.route('/<project>/<post>/delete', methods=['POST'])
+@owner_or_admin
+def delete_post(project: str, post: str):
+    di = DataInterface()
+    meta = di.get_post_meta(project, post)
+    di.delete_post(project, post)
+    logging.info(
+        f"Hammock post deleted: {project}/{post} owner={meta.get('owner', '<legacy>')} "
+        f"template={meta.get('template', '?')} by={cur_user().id} from={get_ip()}"
+    )
+    flash("Post deleted.", "success")
+    return redirect(url_for('.index'))
+
 
 @hammock_api.route('/api/upload_post', methods=['POST'])
 @csrf.exempt
@@ -87,10 +273,20 @@ def upload_post():
 
     forced_date = request_body.get("date")
     date = forced_date if forced_date else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    (post_dir / "meta.json").write_text(json.dumps({"date": date}))
+    existing_meta = {}
+    meta_file = post_dir / "meta.json"
+    if meta_file.exists():
+        try:
+            existing_meta = json.loads(meta_file.read_text())
+        except Exception:
+            existing_meta = {}
+    existing_meta.update({"date": date, "template": existing_meta.get("template", "raw")})
+    meta_file.write_text(json.dumps(existing_meta))
 
-    logging.info(f"Post uploaded: {project}/{post_name} from {get_ip()}")
+    actor = request_body.get("username") or "<api>"
+    logging.info(f"Hammock post uploaded (raw API): {project}/{post_name} by={actor} from={get_ip()}")
     return jsonify({"success": True, "message": f"Post {project}/{post_name} uploaded"}), 200
+
 
 @hammock_api.route('/<project>/<post>/<path:filename>')
 @limiter.limit("20/second")

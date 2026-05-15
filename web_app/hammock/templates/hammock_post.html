@@ -1,11 +1,4 @@
-{% extends "subpage_base.html" %}
-
-{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
-{% block navbar_brand %}Hammock{% endblock %}
-{% block scripts %}
-<link rel="stylesheet" href="{{ url_for('.static', filename='hammock.css') }}">
-<script defer src="{{ url_for('.static', filename='hammock.js') }}"></script>
-{% endblock %}
+{% extends "hammock_base.html" %}
 
 {% block page_content %}
 <div class="container-fluid">
@@ -17,6 +10,23 @@
 
         <!-- Main Content -->
         <div class="col-12 col-md-9 col-lg-10">
+            {% if can_edit %}
+            <div class="hammock-post-toolbar">
+                <a href="{{ url_for('.edit_post', project=project_name, post=post_name) }}"
+                   class="hammock-btn hammock-btn-ghost">
+                    <i class="bi bi-pencil"></i> Edit
+                </a>
+                <form method="post"
+                      action="{{ url_for('.delete_post', project=project_name, post=post_name) }}"
+                      onsubmit="return confirm('Delete this post permanently?');"
+                      style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="hammock-btn hammock-btn-danger-ghost">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </form>
+            </div>
+            {% endif %}
             <article>
                 <div class="post-content mb-5">
                     {{ post_content | safe }}

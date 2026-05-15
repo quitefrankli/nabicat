@@ -1,0 +1,108 @@
+{% extends "hammock_base.html" %}
+
+{% block page_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12 col-md-3 col-lg-2">
+            {% include "hammock_sidebar.html" %}
+        </div>
+        <div class="col-12 col-md-9 col-lg-10">
+            <div class="hammock-form-card">
+                <h1 class="hammock-form-title">New post</h1>
+
+                <p class="hammock-form-note">
+                    <i class="bi bi-info-circle"></i>
+                    Don't worry about getting it perfect — you can edit or delete
+                    your post anytime after creating it.
+                </p>
+
+                <form method="post" action="{{ url_for('.new_post') }}"
+                      enctype="multipart/form-data" class="hammock-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="hammock-field">
+                        <label class="hammock-label">Project</label>
+                        <div class="hammock-field-hint">Pick an existing project <strong>or</strong> name a new one — not both.</div>
+                        <select id="project-existing" name="project_existing" class="hammock-input">
+                            <option value="">— choose existing —</option>
+                            {% for project in posts_by_project %}
+                            <option value="{{ project.name }}">{{ project.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="hammock-project-or">or</div>
+                        <input id="project-new" type="text" name="project_new" class="hammock-input"
+                               placeholder="new project name" maxlength="64">
+                    </div>
+
+                    <div class="hammock-field">
+                        <label class="hammock-label">Post title</label>
+                        <input type="text" name="title" class="hammock-input" required maxlength="120">
+                    </div>
+
+                    <div class="hammock-field">
+                        <label class="hammock-label">Template</label>
+                        <div class="hammock-radio-row">
+                            <label class="hammock-radio">
+                                <input type="radio" name="template" value="markdown" checked>
+                                <span>
+                                    <strong>Markdown</strong>
+                                    <a href="https://www.markdownguide.org/basic-syntax/" target="_blank" rel="noopener"
+                                       class="hammock-radio-link">syntax reference</a>
+                                </span>
+                            </label>
+                            <label class="hammock-radio">
+                                <input type="radio" name="template" value="gallery">
+                                <span><strong>Gallery</strong></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="hammock-field" data-template-field="markdown">
+                        <label class="hammock-label">Markdown</label>
+                        <textarea name="source_md" class="hammock-input hammock-md-editor"
+                                  rows="18" spellcheck="false"
+                                  placeholder="# Hello&#10;&#10;Write your post here..."></textarea>
+                    </div>
+
+                    <div class="hammock-field" data-template-field="gallery" style="display:none;">
+                        <label class="hammock-label">Description (optional)</label>
+                        <textarea name="description" class="hammock-input" rows="3"></textarea>
+                    </div>
+
+                    <div class="hammock-field" data-template-field="gallery" style="display:none;">
+                        <label class="hammock-label">Images</label>
+                        <input type="file" name="files" multiple accept="image/*" class="hammock-input">
+                        <div class="hammock-field-hint">You can add more images later.</div>
+                    </div>
+
+                    <div class="hammock-actions">
+                        <a href="{{ url_for('.index') }}" class="hammock-btn hammock-btn-ghost">Cancel</a>
+                        <button type="submit" class="hammock-btn hammock-btn-primary">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    const radios = document.querySelectorAll('input[name="template"]');
+    const fields = document.querySelectorAll('[data-template-field]');
+    function sync() {
+        const val = document.querySelector('input[name="template"]:checked').value;
+        fields.forEach(f => {
+            f.style.display = (f.dataset.templateField === val) ? '' : 'none';
+        });
+    }
+    radios.forEach(r => r.addEventListener('change', sync));
+    sync();
+
+    // Project picker: existing-dropdown and new-name input are mutually exclusive.
+    // Touching one clears the other so the submitted form only ever carries one.
+    const existing = document.getElementById('project-existing');
+    const fresh = document.getElementById('project-new');
+    existing.addEventListener('change', () => { if (existing.value) fresh.value = ''; });
+    fresh.addEventListener('input', () => { if (fresh.value) existing.value = ''; });
+})();
+</script>
+{% endblock %}

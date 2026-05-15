@@ -80,6 +80,12 @@ class ConfigManager:
         self.crosswords_theme_min_len = 2
         self.crosswords_theme_max_len = 13
 
+        # Hammock
+        self.hammock_non_admin_quota_bytes = 50 * 1024 * 1024  # 50 MB
+        self.hammock_admin_quota_bytes = 10 * 1024 * 1024 * 1024  # 10 GB
+        self.hammock_gallery_thumb_max_px = 1400
+        self.hammock_gallery_thumb_quality = 80
+
     @property
     def project_name(self) -> str:
         return "nabicat" if not self.debug_mode else "nabicat_debug"

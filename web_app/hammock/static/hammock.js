@@ -25,4 +25,25 @@ document.addEventListener("DOMContentLoaded", function() {
             posts.classList.toggle("show");
         });
     });
+
+    // Gallery lightbox
+    const galleryButtons = document.querySelectorAll(".hammock-gallery-photo-btn");
+    if (galleryButtons.length > 0) {
+        const lb = document.createElement("div");
+        lb.className = "hammock-lightbox";
+        lb.innerHTML = '<span class="hammock-lightbox-close" aria-label="Close">&times;</span><img alt="">';
+        document.body.appendChild(lb);
+        const lbImg = lb.querySelector("img");
+        const close = () => { lb.classList.remove("open"); lbImg.src = ""; };
+
+        galleryButtons.forEach(btn => {
+            btn.addEventListener("click", () => {
+                lbImg.src = btn.dataset.full;
+                lb.classList.add("open");
+            });
+        });
+        lb.querySelector(".hammock-lightbox-close").addEventListener("click", close);
+        lb.addEventListener("click", e => { if (e.target === lb) close(); });
+        document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    }
 });
