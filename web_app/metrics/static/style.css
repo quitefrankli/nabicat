@@ -3,10 +3,73 @@
 /* Chart containers with honeydew theme */
 .chart-container {
   background: rgba(255, 255, 255, 0.9);
-  border-radius: 16px;
+  border-radius: var(--hw-radius-lg);
   min-height: 400px;
   padding: 1.5rem;
-  box-shadow: 0 4px 20px rgba(45, 74, 62, 0.08);
+  box-shadow: var(--hw-shadow-md);
+}
+
+.metric-modal-body {
+  padding: 2rem;
+}
+
+.metric-modal-header-gold {
+  background: var(--hw-gradient-golden);
+  color: var(--hw-forest);
+  border-radius: var(--hw-radius-lg) var(--hw-radius-lg) 0 0;
+}
+
+.metric-modal-header-forest {
+  background: linear-gradient(135deg, var(--hw-forest) 0%, var(--hw-moss) 100%);
+  border-radius: var(--hw-radius-lg) var(--hw-radius-lg) 0 0;
+}
+
+.metric-textarea {
+  min-height: 120px;
+}
+
+.metric-shell-card,
+.metric-plot-card {
+  overflow: hidden;
+}
+
+.metric-plot-card {
+  border: none;
+  border-radius: var(--hw-radius-md);
+}
+
+.metric-accordion-item {
+  border: none;
+}
+
+.metric-accordion-button {
+  background: var(--hw-gradient-soft);
+  border: none;
+  padding: 1.25rem 1.5rem;
+}
+
+.metric-icon-lg {
+  font-size: 1.5rem;
+}
+
+.metric-accordion-body {
+  background: rgba(250, 249, 246, 0.6);
+  padding: 1.5rem;
+}
+
+.metric-description-alert {
+  background: rgba(135, 168, 120, 0.08);
+  border-color: var(--hw-sage) !important;
+}
+
+.metric-data-list {
+  max-height: 250px;
+  overflow-y: auto;
+  background: white;
+}
+
+.metric-empty-icon {
+  font-size: 4rem;
 }
 
 /* Metric cards */

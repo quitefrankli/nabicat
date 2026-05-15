@@ -15,39 +15,38 @@
 <div class="modal fade" id="newMetricModal" tabindex="-1" aria-labelledby="newMetricModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-sage, #87A878) 0%, var(--hw-sage-dark, #6B8E5A) 100%); border-radius: 16px 16px 0 0;">
+            <div class="modal-header text-white modal-header-sage">
                 <h1 class="modal-title fs-5 d-flex align-items-center" id="newMetricModalLabel">
                     <i class="bi bi-plus-circle me-2"></i>Create New Metric
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="{{ url_for('.new_metric') }}" method="post">
-                <div class="modal-body" style="padding: 2rem;">
+                <div class="modal-body metric-modal-body">
                     <div class="form-floating mb-3">
-                        <input type="text" class="form-control" name="name" id="name" placeholder="Enter metric name" required style="border-radius: 8px;">
+                        <input type="text" class="form-control" name="name" id="name" placeholder="Enter metric name" required>
                         <label for="name">
                             <i class="bi bi-graph-up me-2"></i>Metric Name
                         </label>
                     </div>
                     <div class="form-floating mb-3">
-                        <input type="text" class="form-control" name="units" id="units" placeholder="e.g., kg, hours, points" style="border-radius: 8px;">
+                        <input type="text" class="form-control" name="units" id="units" placeholder="e.g., kg, hours, points">
                         <label for="units">
                             <i class="bi bi-rulers me-2"></i>Units
                         </label>
                     </div>
                     <div class="form-floating mb-3">
-                        <textarea 
-                            class="form-control" 
-                            name="description" 
-                            id="description" 
-                            placeholder="Enter metric description"
-                            style="height: 120px; border-radius: 8px;"></textarea>
+                        <textarea
+                            class="form-control metric-textarea"
+                            name="description"
+                            id="description"
+                            placeholder="Enter metric description"></textarea>
                         <label for="description">
                             <i class="bi bi-text-paragraph me-2"></i>Description
                         </label>
                     </div>
                 </div>
-                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                <div class="modal-footer modal-footer-soft">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -65,38 +64,37 @@
     <div class="modal fade" id="modifyMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="editModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header" style="background: linear-gradient(135deg, var(--hw-gold, #E9C46A) 0%, var(--hw-peach, #F4A261) 100%); color: var(--hw-forest, #2D4A3E); border-radius: 16px 16px 0 0;">
+                <div class="modal-header metric-modal-header-gold">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="editModalLabel{{ metric.id }}">
                         <i class="bi bi-pencil-square me-2"></i>Edit Metric
                     </h1>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form action="{{ url_for('.edit_metric', metric_id=metric.id) }}" method="post">
-                    <div class="modal-body" style="padding: 2rem;">
+                    <div class="modal-body metric-modal-body">
                         <div class="form-floating mb-3">
-                            <input type="text" class="form-control" name="name" id="editName{{ metric.id }}" value="{{ metric.name }}" required style="border-radius: 8px;">
+                            <input type="text" class="form-control" name="name" id="editName{{ metric.id }}" value="{{ metric.name }}" required>
                             <label for="editName{{ metric.id }}">
                                 <i class="bi bi-graph-up me-2"></i>Metric Name
                             </label>
                         </div>
                         <div class="form-floating mb-3">
-                            <input type="text" class="form-control" name="units" id="editUnits{{ metric.id }}" value="{{ metric.unit }}" style="border-radius: 8px;">
+                            <input type="text" class="form-control" name="units" id="editUnits{{ metric.id }}" value="{{ metric.unit }}">
                             <label for="editUnits{{ metric.id }}">
                                 <i class="bi bi-rulers me-2"></i>Units
                             </label>
                         </div>
                         <div class="form-floating mb-3">
-                            <textarea 
-                                class="form-control" 
-                                name="description" 
-                                id="editDescription{{ metric.id }}" 
-                                style="height: 120px; border-radius: 8px;">{{ metric.description }}</textarea>
+                            <textarea
+                                class="form-control metric-textarea"
+                                name="description"
+                                id="editDescription{{ metric.id }}">{{ metric.description }}</textarea>
                             <label for="editDescription{{ metric.id }}">
                                 <i class="bi bi-text-paragraph me-2"></i>Description
                             </label>
                         </div>
                     </div>
-                    <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                    <div class="modal-footer modal-footer-soft">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
@@ -113,20 +111,20 @@
     <div class="modal fade" id="deleteMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-coral, #E07A5F) 0%, #C0553A 100%); border-radius: 16px 16px 0 0;">
+                <div class="modal-header text-white modal-header-danger">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="deleteModalLabel{{ metric.id }}">
                         <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
                     </h1>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" style="padding: 2rem;">
+                <div class="modal-body metric-modal-body">
                     <div class="alert alert-warning" role="alert">
                         <i class="bi bi-exclamation-triangle me-2"></i>
                         <strong>Warning:</strong> This action cannot be undone. All data points for "{{ metric.name }}" will be permanently deleted.
                     </div>
                     <p>Are you sure you want to delete the metric <strong>"{{ metric.name }}"</strong>?</p>
                 </div>
-                <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                <div class="modal-footer modal-footer-soft">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
@@ -142,16 +140,16 @@
     <div class="modal fade" id="logMetricModal{{ metric.id }}" tabindex="-1" aria-labelledby="logModalLabel{{ metric.id }}" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header text-white" style="background: linear-gradient(135deg, var(--hw-forest, #2D4A3E) 0%, var(--hw-moss, #4A5D4A) 100%); border-radius: 16px 16px 0 0;">
+                <div class="modal-header text-white metric-modal-header-forest">
                     <h1 class="modal-title fs-5 d-flex align-items-center" id="logModalLabel{{ metric.id }}">
                         <i class="bi bi-plus-square me-2"></i>Log Progress: {{ metric.name }}
                     </h1>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form action="{{ url_for('.log_metric', metric_id=metric.id) }}" method="post">
-                    <div class="modal-body" style="padding: 2rem;">
+                    <div class="modal-body metric-modal-body">
                         <div class="form-floating mb-3">
-                            <input type="number" step="any" class="form-control" name="value" id="logValue{{ metric.id }}" placeholder="Enter value" required style="border-radius: 8px;">
+                            <input type="number" step="any" class="form-control" name="value" id="logValue{{ metric.id }}" placeholder="Enter value" required>
                             <label for="logValue{{ metric.id }}">
                                 <i class="bi bi-123 me-2"></i>Value
                                 {% if metric.unit %} ({{ metric.unit }}){% endif %}
@@ -163,7 +161,7 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div class="modal-footer" style="background: rgba(135, 168, 120, 0.05);">
+                    <div class="modal-footer modal-footer-soft">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
@@ -182,20 +180,20 @@
 {% block content %}
 <div class="mt-3">
     {% for metric in metrics %}
-    <div class="card mb-4" style="overflow: hidden;">
+    <div class="card mb-4 metric-shell-card">
         <div class="accordion" id="accordion{{ metric.id }}">
-            <div class="accordion-item" style="border: none;">
+            <div class="accordion-item metric-accordion-item">
                 <h2 class="accordion-header" id="heading{{ metric.id }}">
-                    <button 
-                        class="accordion-button collapsed" 
-                        type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target="#collapse{{ metric.id }}" 
-                        aria-expanded="false" 
+                    <button
+                        class="accordion-button collapsed"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#collapse{{ metric.id }}"
+                        aria-expanded="false"
                         aria-controls="collapse{{ metric.id }}"
-                        style="background: var(--hw-gradient-soft); border: none; padding: 1.25rem 1.5rem;">
+                        class="accordion-button collapsed metric-accordion-button">
                         <div class="d-flex align-items-center w-100">
-                            <i class="bi bi-graph-up-arrow text-sage me-3" style="font-size: 1.5rem;"></i>
+                            <i class="bi bi-graph-up-arrow text-sage me-3 metric-icon-lg"></i>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ metric.name }}</h5>
                                 {% if metric.unit %}
@@ -206,7 +204,7 @@
                     </button>
                 </h2>
                 <div id="collapse{{ metric.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ metric.id }}" data-bs-parent="#accordion{{ metric.id }}">
-                    <div class="accordion-body" style="background: rgba(250, 249, 246, 0.6); padding: 1.5rem;">
+                    <div class="accordion-body metric-accordion-body">
                         <div class="card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -214,16 +212,16 @@
                                         <i class="bi bi-bar-chart me-2"></i>{{ metric.name }}
                                     </h5>
                                     <div class="btn-group" role="group">
-                                        <button 
-                                            type="button" 
-                                            class="btn btn-outline-danger btn-sm" 
-                                            data-bs-toggle="modal" 
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-danger btn-sm"
+                                            data-bs-toggle="modal"
                                             data-bs-target="#deleteMetricModal{{ metric.id }}"
                                             title="Delete metric">
                                                 <i class="bi bi-trash"></i>
                                         </button>
-                                        <button 
-                                            type="button" 
+                                        <button
+                                            type="button"
                                             class="btn btn-outline-primary btn-sm"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modifyMetricModal{{ metric.id }}"
@@ -232,19 +230,19 @@
                                         </button>
                                     </div>
                                 </div>
-                                
+
                                 {% if metric.description %}
-                                <div class="alert border-start border-4" style="background: rgba(135, 168, 120, 0.08); border-color: var(--hw-sage) !important;" role="alert">
+                                <div class="alert border-start border-4 metric-description-alert" role="alert">
                                     <i class="bi bi-info-circle text-sage me-2"></i>{{ metric.description }}
                                 </div>
                                 {% endif %}
-                                
+
                                 <div class="row mb-3">
                                     <div class="col-md-8">
                                         <h6 class="text-muted mb-2">
                                             <i class="bi bi-clock-history me-1"></i>Recent Data Points
                                         </h6>
-                                        <div class="border rounded" style="max-height: 250px; overflow-y: auto; background: white;">
+                                        <div class="border rounded metric-data-list">
                                             {% if metric.data %}
                                                 {% for data_point in metric.data %}
                                                 <div class="d-flex justify-content-between align-items-center p-2">
@@ -270,10 +268,10 @@
                                             <a class="btn btn-outline-primary" href="{{ url_for('.visualise_metric', metric_id=metric.id) }}">
                                                 <i class="bi bi-graph-up me-2"></i>View Chart
                                             </a>
-                                            <button 
-                                                type="button" 
-                                                class="btn btn-primary" 
-                                                data-bs-toggle="modal" 
+                                            <button
+                                                type="button"
+                                                class="btn btn-primary"
+                                                data-bs-toggle="modal"
                                                 data-bs-target="#logMetricModal{{ metric.id }}">
                                                     <i class="bi bi-plus-circle me-2"></i>Log Value
                                             </button>
@@ -288,11 +286,11 @@
         </div>
     </div>
     {% endfor %}
-    
+
     {% if not metrics %}
     <div class="text-center py-5">
         <div class="mb-4">
-            <i class="bi bi-graph-up text-muted" style="font-size: 4rem;"></i>
+            <i class="bi bi-graph-up text-muted metric-empty-icon"></i>
         </div>
         <h4 class="text-muted">No Metrics Yet</h4>
         <p class="text-muted">Create your first metric to start tracking progress!</p>
