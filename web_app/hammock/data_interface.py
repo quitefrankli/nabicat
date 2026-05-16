@@ -1,6 +1,7 @@
 import html
 import json
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -31,6 +32,16 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 class Project:
     name: str
     posts: list[str]
+
+
+@dataclass
+class PreparedGalleryUpload:
+    media_type: str
+    name: str
+    poster_name: str
+    data: bytes
+    display_name: str
+    upload_suffix: str
 
 
 def slugify(s: str) -> str:
@@ -317,7 +328,7 @@ class DataInterface(BaseDataInterface):
 
         # Gather and validate each file. Read bytes once so we can quota-check
         # before any disk writes.
-        prepared: list[tuple[str, str, str, bytes]] = []
+        prepared: list[PreparedGalleryUpload] = []
         total_new_bytes = 0
         gallery = self.get_gallery(project, post)
         existing_names = {item["filename"] for item in self._gallery_items(gallery)}
@@ -347,7 +358,7 @@ class DataInterface(BaseDataInterface):
             while (
                 candidate in existing_names
                 or candidate in existing_posters
-                or any(candidate == name or candidate == poster for _, name, poster, _ in prepared)
+                or any(candidate == item.name or candidate == item.poster_name for item in prepared)
             ):
                 candidate = f"{stem}-{i}{candidate_ext}"
                 i += 1
@@ -356,12 +367,12 @@ class DataInterface(BaseDataInterface):
                 continue
             if media_type == "image":
                 image_data = self._make_thumbnail_bytes(data, safe)
-                prepared.append((media_type, candidate, candidate, image_data))
+                prepared.append(PreparedGalleryUpload(media_type, candidate, candidate, image_data, safe, ext))
                 total_new_bytes += len(image_data)
             else:
                 if len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
                     raise APIError(f"Video {fs.filename} is too large")
-                prepared.append((media_type, candidate, f"{candidate}.webp", data))
+                prepared.append(PreparedGalleryUpload(media_type, candidate, f"{candidate}.webp", data, safe, ext))
                 total_new_bytes += len(data)
 
         if not prepared:
@@ -370,30 +381,31 @@ class DataInterface(BaseDataInterface):
         self.check_quota(user, total_new_bytes)
 
         added: list[dict] = []
-        for media_type, name, poster_name, data in prepared:
-            if media_type == "image":
-                self.atomic_write(thumbs_dir / poster_name, data=data, mode="wb")
-                added.append({"type": "image", "filename": name, "poster": poster_name})
+        for item in prepared:
+            if item.media_type == "image":
+                self.atomic_write(thumbs_dir / item.poster_name, data=item.data, mode="wb")
+                added.append({"type": "image", "filename": item.name, "poster": item.poster_name})
                 continue
 
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(name).suffix)
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=item.upload_suffix)
             try:
-                tmp.write(data)
+                tmp.write(item.data)
             finally:
                 tmp.close()
             upload_path = Path(tmp.name)
-            output_path = post_dir / name
+            output_path = post_dir / item.name
             try:
-                self._validate_video(upload_path)
-                self._transcode_video(upload_path, output_path)
-                self._make_video_poster(output_path, thumbs_dir / poster_name)
+                self._validate_video(upload_path, item.display_name)
+                self._transcode_video(upload_path, output_path, item.display_name)
+                self._validate_video(output_path, item.display_name)
+                self._make_video_poster(output_path, thumbs_dir / item.poster_name, item.display_name)
             except APIError:
                 self.atomic_delete(upload_path)
                 self.atomic_delete(output_path)
-                self.atomic_delete(thumbs_dir / poster_name)
+                self.atomic_delete(thumbs_dir / item.poster_name)
                 raise
             self.atomic_delete(upload_path)
-            added.append({"type": "video", "filename": name, "poster": poster_name})
+            added.append({"type": "video", "filename": item.name, "poster": item.poster_name})
 
         gallery = self.get_gallery(project, post)
         items = self._gallery_items(gallery)
@@ -466,37 +478,58 @@ class DataInterface(BaseDataInterface):
             raise APIError(error_message) from e
         except subprocess.CalledProcessError as e:
             logging.warning(f"Hammock media command failed: {e.stderr}")
+            detail = (e.stderr or "").strip().splitlines()
+            if detail:
+                raise APIError(f"{error_message}: {detail[-1][:240]}") from e
             raise APIError(error_message) from e
 
-    def _validate_video(self, src: Path) -> None:
+    def _probe_video_duration(self, src: Path, display_name: str) -> float | None:
         cfg = ConfigManager()
         result = self._run_media_command(
             [
                 "ffprobe",
                 "-v", "error",
                 "-select_streams", "v:0",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "-show_entries", "stream=duration:format=duration",
+                "-of", "json",
                 str(src),
             ],
             cfg.hammock_gallery_video_transcode_timeout_s,
-            f"Could not process {src.name} as a video",
+            f"Could not process {display_name} as a video",
         )
         try:
-            duration = float(result.stdout.strip())
-        except ValueError as e:
-            raise APIError(f"Could not process {src.name} as a video") from e
+            payload = json.loads(result.stdout or "{}")
+        except json.JSONDecodeError as e:
+            raise APIError(f"Could not process {display_name} as a video") from e
+        candidates = [payload.get("format", {}).get("duration")]
+        candidates.extend(stream.get("duration") for stream in payload.get("streams", []))
+        for candidate in candidates:
+            try:
+                duration = float(candidate)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(duration) and duration > 0:
+                return duration
+        return None
+
+    def _validate_video(self, src: Path, display_name: str) -> None:
+        cfg = ConfigManager()
+        duration = self._probe_video_duration(src, display_name)
+        if duration is None:
+            logging.warning(f"Hammock video duration unavailable for {display_name}; continuing to transcode")
+            return
         if duration > cfg.hammock_gallery_video_max_duration_s:
             raise APIError(
-                f"Video {src.name} is too long "
+                f"Video {display_name} is too long "
                 f"(max {cfg.hammock_gallery_video_max_duration_s} seconds)"
             )
 
-    def _transcode_video(self, src: Path, dst: Path) -> None:
+    def _transcode_video(self, src: Path, dst: Path, display_name: str) -> None:
         cfg = ConfigManager()
         max_height = cfg.hammock_gallery_video_max_height_px
         vf = (
-            f"scale=-2:'min({max_height},ih)':force_original_aspect_ratio=decrease,"
+            f"scale='trunc(iw*min(1,{max_height}/ih)/2)*2':"
+            f"'trunc(ih*min(1,{max_height}/ih)/2)*2',"
             "setsar=1"
         )
         self._run_media_command(
@@ -504,6 +537,10 @@ class DataInterface(BaseDataInterface):
                 "ffmpeg",
                 "-y",
                 "-i", str(src),
+                "-map", "0:v:0",
+                "-map", "0:a?",
+                "-dn",
+                "-sn",
                 "-vf", vf,
                 "-c:v", "libx264",
                 "-preset", "veryfast",
@@ -515,10 +552,10 @@ class DataInterface(BaseDataInterface):
                 str(dst),
             ],
             cfg.hammock_gallery_video_transcode_timeout_s,
-            f"Could not process {src.name} as a video",
+            f"Could not process {display_name} as a video",
         )
 
-    def _make_video_poster(self, src: Path, dst: Path) -> None:
+    def _make_video_poster(self, src: Path, dst: Path, display_name: str) -> None:
         cfg = ConfigManager()
         dst.parent.mkdir(parents=True, exist_ok=True)
         self._run_media_command(
@@ -531,7 +568,7 @@ class DataInterface(BaseDataInterface):
                 str(dst),
             ],
             cfg.hammock_gallery_video_transcode_timeout_s,
-            f"Could not create a preview for {src.name}",
+            f"Could not create a preview for {display_name}",
         )
 
     # ---------- delete post ----------

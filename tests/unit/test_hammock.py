@@ -89,6 +89,26 @@ def _mov_file_storage(tmp_path: Path, name: str = "iphone.MOV", duration: float 
     return FileStorage(stream=BytesIO(path.read_bytes()), filename=name, content_type="video/quicktime")
 
 
+def _portrait_mov_file_storage(tmp_path: Path, name: str = "portrait.MOV", duration: float = 0.5) -> FileStorage:
+    path = tmp_path / name
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "lavfi",
+            "-i", "testsrc=size=540x960:rate=15",
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            str(path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return FileStorage(stream=BytesIO(path.read_bytes()), filename=name, content_type="video/quicktime")
+
+
 class TestGetPostsByProjectSorting:
     def test_sorts_by_meta_date_descending(self, projects_dir):
         _make_post(projects_dir, "blog", "alpha", date="2024-01-01")
@@ -238,6 +258,72 @@ class TestGalleryUploadAndDelete:
         assert gallery["items"] == [
             {"type": "video", "filename": "iphone.mp4", "poster": "iphone.mp4.webp"}
         ]
+
+    def test_portrait_video_transcode_outputs_even_dimensions(self, projects_dir, tmp_path):
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+        proj, post = di.create_gallery_post(alice, "Album", "Portrait Clip", "")
+        post_dir = projects_dir / proj / post
+
+        n = di.add_gallery_media(alice, proj, post, [_portrait_mov_file_storage(tmp_path)])
+
+        assert n == 1
+        output = post_dir / "portrait.mp4"
+        assert output.exists()
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "csv=p=0",
+                str(output),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        width, height = [int(value) for value in result.stdout.strip().split(",")]
+        assert width % 2 == 0
+        assert height % 2 == 0
+        assert height == 720
+
+    def test_video_with_missing_duration_metadata_can_continue(self, projects_dir, tmp_path, monkeypatch):
+        di = DataInterface()
+
+        def fake_run(cmd, timeout_s, error_message):
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"format":{},"streams":[{}]}', stderr="")
+
+        monkeypatch.setattr(DataInterface, "_run_media_command", staticmethod(fake_run))
+        di._validate_video(tmp_path / "upload.mp4", "phone-video.mp4")
+
+    def test_video_processing_error_uses_original_filename(self, projects_dir, tmp_path, monkeypatch):
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+        proj, post = di.create_gallery_post(alice, "Album", "Broken Clip", "")
+
+        def fake_run(cmd, timeout_s, error_message):
+            if cmd[0] == "ffprobe":
+                return subprocess.CompletedProcess(
+                    cmd,
+                    0,
+                    stdout='{"format":{"duration":"0.5"},"streams":[{"duration":"0.5"}]}',
+                    stderr="",
+                )
+            raise APIError(error_message)
+
+        monkeypatch.setattr(DataInterface, "_run_media_command", staticmethod(fake_run))
+        bad_video = FileStorage(
+            stream=BytesIO(b"not a video"),
+            filename="broken.MOV",
+            content_type="video/quicktime",
+        )
+
+        with pytest.raises(APIError) as exc:
+            di.add_gallery_media(alice, proj, post, [bad_video])
+
+        assert "broken.MOV" in str(exc.value)
+        assert "tmp" not in str(exc.value)
 
     def test_video_over_duration_limit_is_rejected(self, projects_dir, tmp_path, monkeypatch):
         from web_app.config import ConfigManager
