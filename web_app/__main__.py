@@ -174,7 +174,10 @@ def before_request():
     if request.path == '/dev/terminal/output':
         return
 
-    message = f"Processing request: client={get_ip()}, path={request.path}, method={request.method}"
+    message = f"Processing request: client={get_ip()}"
+    if flask_login.current_user.is_authenticated:
+        message += f", username={flask_login.current_user.id}"
+    message += f", path={request.path}, method={request.method}"
 
     _REDACTED_KEYS = {'password', 'csrf_token', 'cookie', 'secret', 'token'}
     if request.method == 'POST':

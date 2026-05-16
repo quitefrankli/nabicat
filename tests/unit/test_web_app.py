@@ -2,6 +2,8 @@
 
 import pytest
 import json
+import logging
+import flask_login
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
@@ -176,6 +178,33 @@ class TestParseRequest:
         with app.test_request_context(method='POST'):
             with pytest.raises(APIError):
                 parse_request(require_login=False, require_admin=False)
+
+
+class TestRequestLogging:
+    def test_before_request_logs_anonymous_request_without_username(self, app_context, caplog):
+        from web_app import __main__ as main_module
+
+        config = Mock(known_bot_prefixes=[], known_bot_methods=[], debug_mode=False)
+        with app.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.__main__.ConfigManager", return_value=config), \
+             caplog.at_level(logging.INFO):
+            main_module.before_request()
+
+        assert "Processing request: client=127.0.0.1, path=/example, method=GET" in caplog.text
+        assert "username=" not in caplog.text
+
+    def test_before_request_logs_authenticated_username(self, app_context, caplog):
+        from web_app import __main__ as main_module
+
+        config = Mock(known_bot_prefixes=[], known_bot_methods=[], debug_mode=False)
+        user = User(username="alice", password="password", folder="alice", is_admin=False)
+        with app.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.__main__.ConfigManager", return_value=config), \
+             caplog.at_level(logging.INFO):
+            flask_login.login_user(user)
+            main_module.before_request()
+
+        assert "Processing request: client=127.0.0.1, username=alice, path=/example, method=GET" in caplog.text
 
 
 class TestScheduledTasks:
