@@ -99,6 +99,9 @@ class ConfigManager:
         self.hammock_gallery_video_max_duration_s = 60
         self.hammock_gallery_video_max_height_px = 720
         self.hammock_gallery_video_transcode_timeout_s = 180
+        self.hammock_gallery_image_stagger_ms = 200
+        self.hammock_gallery_image_max_retries = 3
+        self.hammock_gallery_image_retry_delay_ms = 1000
         self.hammock_title_max_chars = 120
         self.hammock_description_max_chars = 2048
         self.hammock_markdown_max_chars = 256 * 1024

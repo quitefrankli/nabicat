@@ -219,7 +219,8 @@ class TestGalleryUploadAndDelete:
 
         rendered = di.get_post_content(proj, post)
         assert 'data-full="photo.webp"' in rendered
-        assert 'src="photo.webp"' in rendered
+        assert 'data-gallery-src="photo.webp"' in rendered
+        assert 'src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="' in rendered
         assert "alice" in rendered
 
         di.delete_gallery_image(proj, post, "photo.webp")

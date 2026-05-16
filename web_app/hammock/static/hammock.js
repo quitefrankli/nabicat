@@ -93,6 +93,88 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    const setupGalleryImages = function() {
+        const gallery = document.querySelector(".hammock-gallery");
+        const galleryImages = Array.from(document.querySelectorAll("img[data-gallery-src]"));
+        if (!gallery || galleryImages.length === 0) return;
+
+        const staggerMs = Number(gallery.dataset.galleryStaggerMs);
+        const maxRetries = Number(gallery.dataset.galleryMaxRetries);
+        const retryDelayMs = Number(gallery.dataset.galleryRetryDelayMs);
+        if ([staggerMs, maxRetries, retryDelayMs].some(Number.isNaN)) return;
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        const loadImageAttempt = (img, url) => new Promise((resolve, reject) => {
+            const onLoad = () => {
+                img.removeEventListener("load", onLoad);
+                img.removeEventListener("error", onError);
+                resolve();
+            };
+            const onError = () => {
+                img.removeEventListener("load", onLoad);
+                img.removeEventListener("error", onError);
+                reject(new Error("gallery image load failed"));
+            };
+
+            img.addEventListener("load", onLoad);
+            img.addEventListener("error", onError);
+            img.src = url;
+        });
+
+        const loadWithRetries = async (img, gallerySrc) => {
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                const suffix = attempt > 0
+                    ? `${gallerySrc.includes("?") ? "&" : "?"}retry=${attempt}&_ts=${Date.now()}`
+                    : "";
+                try {
+                    await loadImageAttempt(img, `${gallerySrc}${suffix}`);
+                    return;
+                } catch (_) {
+                    if (attempt >= maxRetries) return;
+                    await sleep(retryDelayMs * (attempt + 1));
+                }
+            }
+        };
+
+        const queue = [];
+        const pending = new Set(galleryImages);
+        let isProcessing = false;
+
+        const processQueue = async () => {
+            if (isProcessing) return;
+            isProcessing = true;
+            while (queue.length > 0) {
+                const img = queue.shift();
+                if (img && img.dataset.gallerySrc) {
+                    await loadWithRetries(img, img.dataset.gallerySrc);
+                    await sleep(staggerMs);
+                }
+            }
+            isProcessing = false;
+        };
+
+        const enqueueImage = img => {
+            if (!pending.has(img)) return;
+            pending.delete(img);
+            queue.push(img);
+            processQueue();
+        };
+
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(entries => {
+                for (const entry of entries) {
+                    if (!entry.isIntersecting) continue;
+                    observer.unobserve(entry.target);
+                    enqueueImage(entry.target);
+                }
+            }, { root: null, rootMargin: "200px 0px", threshold: 0.01 });
+            galleryImages.forEach(img => observer.observe(img));
+        } else {
+            galleryImages.forEach(img => enqueueImage(img));
+        }
+    };
+    setupGalleryImages();
+
     // Gallery lightbox
     const galleryButtons = document.querySelectorAll(".hammock-gallery-photo-btn");
     if (galleryButtons.length > 0) {

@@ -655,6 +655,7 @@ class DataInterface(BaseDataInterface):
         )
 
     def _render_gallery_index(self, meta: dict, gallery: dict) -> str:
+        cfg = ConfigManager()
         title = html.escape(gallery.get("title") or meta.get("title", ""))
         description = html.escape(gallery.get("description", ""))
         media_html = []
@@ -672,7 +673,9 @@ class DataInterface(BaseDataInterface):
                 media_html.append(
                     f'<figure class="hammock-gallery-photo">'
                     f'<button type="button" class="hammock-gallery-photo-btn" data-full="{name}">'
-                    f'<img loading="lazy" decoding="async" src="{name}" alt="">'
+                    f'<img loading="lazy" decoding="async" '
+                    f'src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" '
+                    f'data-gallery-src="{name}" alt="">'
                     f'</button>'
                     f'</figure>'
                 )
@@ -681,7 +684,10 @@ class DataInterface(BaseDataInterface):
         )
         desc_block = f'<p class="hammock-gallery-desc">{description}</p>' if description else ""
         return (
-            f'<article class="hammock-post hammock-gallery">'
+            f'<article class="hammock-post hammock-gallery" '
+            f'data-gallery-stagger-ms="{cfg.hammock_gallery_image_stagger_ms}" '
+            f'data-gallery-max-retries="{cfg.hammock_gallery_image_max_retries}" '
+            f'data-gallery-retry-delay-ms="{cfg.hammock_gallery_image_retry_delay_ms}">'
             f'<header class="hammock-post-header">'
             f'<h1>{title}</h1>'
             f'{self._render_byline(meta)}'
