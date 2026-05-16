@@ -1,6 +1,5 @@
 import base64
 import gzip
-import json
 import logging
 import zipfile
 from datetime import datetime, timezone
@@ -145,7 +144,7 @@ def view_post(project: str, post: str):
 def edit_post(project: str, post: str):
     di = DataInterface()
     meta = di.get_post_meta(project, post)
-    template = meta.get("template")
+    template = meta.get("type")
     wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     if request.method == 'POST':
@@ -246,7 +245,7 @@ def delete_post(project: str, post: str):
     di.delete_post(project, post)
     logging.info(
         f"Hammock post deleted: {project}/{post} owner={meta.get('owner', '<legacy>')} "
-        f"template={meta.get('template', '?')} by={cur_user().id} from={get_ip()}"
+        f"template={meta.get('type', '?')} by={cur_user().id} from={get_ip()}"
     )
     flash("Post deleted.", "success")
     return redirect(url_for('.index'))
@@ -274,7 +273,10 @@ def upload_post():
         return jsonify({"error": f"Failed to decode data: {e}"}), 400
 
     data_interface = DataInterface()
-    post_dir = data_interface.projects_dir / project / post_name
+    try:
+        post_dir = data_interface._post_dir(project, post_name)
+    except APIError as e:
+        return jsonify({"error": str(e)}), 400
     post_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -289,17 +291,15 @@ def upload_post():
 
     forced_date = request_body.get("date")
     date = forced_date if forced_date else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    existing_meta = {}
-    meta_file = post_dir / "meta.json"
-    if meta_file.exists():
-        try:
-            existing_meta = json.loads(meta_file.read_text())
-        except Exception:
-            existing_meta = {}
-    existing_meta.update({"date": date, "template": existing_meta.get("template", "raw")})
-    meta_file.write_text(json.dumps(existing_meta))
-
     actor = request_body.get("username") or "<api>"
+    data_interface.atomic_delete(post_dir / "meta.json")
+    data_interface.register_raw_post(
+        project,
+        post_name,
+        request_body.get("title") or post_name,
+        actor,
+        date,
+    )
     logging.info(f"Hammock post uploaded (raw API): {project}/{post_name} by={actor} from={get_ip()}")
     return jsonify({"success": True, "message": f"Post {project}/{post_name} uploaded"}), 200
 

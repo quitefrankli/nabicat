@@ -38,8 +38,18 @@ def _make_post(projects_dir: Path, project: str, post: str, date: str | None = N
     post_dir = projects_dir / project / post
     post_dir.mkdir(parents=True, exist_ok=True)
     (post_dir / "index.html").write_text("<h1>test</h1>")
-    if date is not None:
-        (post_dir / "meta.json").write_text(json.dumps({"date": date}))
+    meta_path = projects_dir.parent / "meta.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {"projects": {}}
+    meta.setdefault("projects", {}).setdefault(project, {"posts": {}})["posts"][post] = {
+        "type": "raw",
+        "title": post,
+        "date": date or "",
+    }
+    meta_path.write_text(json.dumps(meta))
+
+
+def _post_meta(projects_dir: Path, project: str, post: str) -> dict:
+    return json.loads((projects_dir.parent / "meta.json").read_text())["projects"][project]["posts"][post]
 
 
 def _png_file_storage(name: str, size: tuple[int, int] = (40, 40)) -> FileStorage:
@@ -146,11 +156,13 @@ class TestMarkdownLifecycleAndAuthz:
         # Slug + persistence + meta
         assert proj == "my-blog"
         assert post == "hello-world"
-        meta_path = projects_dir / proj / post / "meta.json"
-        meta = json.loads(meta_path.read_text())
+        post_dir = projects_dir / proj / post
+        meta = _post_meta(projects_dir, proj, post)
         assert meta["owner"] == "alice"
-        assert meta["template"] == "markdown"
-        assert (projects_dir / proj / post / "source.md").read_text() == "Hi **bob**."
+        assert meta["type"] == "markdown"
+        assert (post_dir / "source.md").read_text() == "Hi **bob**."
+        assert not (post_dir / "meta.json").exists()
+        assert not (post_dir / "index.html").exists()
 
         # Rendered body contains the markdown→HTML conversion and the byline
         content = di.get_post_content(proj, post)
@@ -162,14 +174,14 @@ class TestMarkdownLifecycleAndAuthz:
         assert di.user_can_edit(admin, proj, post) is True
         assert di.user_can_edit(bob, proj, post) is False
 
-        _make_post(projects_dir, "legacy", "old-post")  # no owner field
+        _make_post(projects_dir, "legacy", "old-post")
         assert di.user_can_edit(admin, "legacy", "old-post") is True
         assert di.user_can_edit(alice, "legacy", "old-post") is False
 
-        # Edit updates source.md, regenerates index.html, and bumps the title
         di.update_markdown_post(proj, post, "New Title", "Updated.")
-        assert (projects_dir / proj / post / "source.md").read_text() == "Updated."
-        assert json.loads(meta_path.read_text())["title"] == "New Title"
+        assert (post_dir / "source.md").read_text() == "Updated."
+        assert _post_meta(projects_dir, proj, post)["title"] == "New Title"
+        assert not (post_dir / "index.html").exists()
         assert "Updated." in di.get_post_content(proj, post)
 
     def test_duplicate_post_title_raises(self, projects_dir):
@@ -196,7 +208,9 @@ class TestGalleryUploadAndDelete:
         assert not (post_dir / "photo.png").exists()
         assert (post_dir / "thumbs" / "photo.webp").exists()
 
-        gallery = json.loads((post_dir / "gallery.json").read_text())
+        assert not (post_dir / "gallery.json").exists()
+        assert not (post_dir / "index.html").exists()
+        gallery = _post_meta(projects_dir, proj, post)
         assert gallery["images"] == ["photo.webp"]
         assert gallery["items"] == [
             {"type": "image", "filename": "photo.webp", "poster": "photo.webp"}
@@ -211,7 +225,7 @@ class TestGalleryUploadAndDelete:
         di.delete_gallery_image(proj, post, "photo.webp")
         assert not (post_dir / "photo.png").exists()
         assert not (post_dir / "thumbs" / "photo.webp").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["images"] == []
+        assert _post_meta(projects_dir, proj, post)["images"] == []
 
     def test_add_then_delete_video_transcodes_poster_and_updates_state(self, projects_dir, tmp_path):
         di = DataInterface()
@@ -226,7 +240,7 @@ class TestGalleryUploadAndDelete:
         assert not (post_dir / ".upload-clip.mp4").exists()
         assert (post_dir / "thumbs" / "clip.mp4.webp").exists()
 
-        gallery = json.loads((post_dir / "gallery.json").read_text())
+        gallery = _post_meta(projects_dir, proj, post)
         assert gallery["images"] == []
         assert gallery["items"] == [
             {"type": "video", "filename": "clip.mp4", "poster": "clip.mp4.webp"}
@@ -240,7 +254,7 @@ class TestGalleryUploadAndDelete:
         di.delete_gallery_media(proj, post, "clip.mp4")
         assert not (post_dir / "clip.mp4").exists()
         assert not (post_dir / "thumbs" / "clip.mp4.webp").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["items"] == []
+        assert _post_meta(projects_dir, proj, post)["items"] == []
 
     def test_phone_video_upload_is_normalized_to_mp4(self, projects_dir, tmp_path):
         di = DataInterface()
@@ -254,7 +268,7 @@ class TestGalleryUploadAndDelete:
         assert not (post_dir / "iphone.MOV").exists()
         assert (post_dir / "thumbs" / "iphone.mp4.webp").exists()
 
-        gallery = json.loads((post_dir / "gallery.json").read_text())
+        gallery = _post_meta(projects_dir, proj, post)
         assert gallery["items"] == [
             {"type": "video", "filename": "iphone.mp4", "poster": "iphone.mp4.webp"}
         ]
@@ -339,7 +353,7 @@ class TestGalleryUploadAndDelete:
 
         assert not (post_dir / "clip.mp4").exists()
         assert not (post_dir / ".upload-clip.mp4").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["items"] == []
+        assert _post_meta(projects_dir, proj, post)["items"] == []
 
     def test_quota_blocks_uploads_over_limit(self, projects_dir, monkeypatch):
         from web_app.config import ConfigManager
@@ -371,7 +385,7 @@ class TestGalleryUploadAndDelete:
         # Critical: the original must not be left on disk and the gallery must
         # not list it.
         assert not (post_dir / "evil.png").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["images"] == []
+        assert _post_meta(projects_dir, proj, post)["images"] == []
 
     def test_oversized_title_rejected(self, projects_dir):
         di = DataInterface()
@@ -454,4 +468,4 @@ class TestGalleryEditRoute:
         post_dir = projects_dir / proj / post
         assert not (post_dir / "photo.png").exists()
         assert (post_dir / "thumbs" / "photo.webp").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["images"] == ["photo.webp"]
+        assert _post_meta(projects_dir, proj, post)["images"] == ["photo.webp"]
