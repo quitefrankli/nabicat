@@ -13,6 +13,7 @@
 
                 <form id="gallery-meta-form" method="post"
                       action="{{ url_for('.edit_post', project=project_name, post=post_name) }}"
+                      enctype="multipart/form-data"
                       class="hammock-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -50,19 +51,22 @@
                     {% endfor %}
                 </div>
 
-                <form method="post"
-                      action="{{ url_for('.add_gallery_images', project=project_name, post=post_name) }}"
-                      enctype="multipart/form-data"
-                      class="hammock-form hammock-upload-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="hammock-field">
-                        <label class="hammock-label">Add images</label>
-                        <input type="file" name="files" multiple accept="image/*" class="hammock-input" required>
+                <div class="hammock-field">
+                    <label class="hammock-label">Add images</label>
+                    <input type="file" name="files" multiple accept="image/*" class="hammock-input"
+                           form="gallery-meta-form">
+                </div>
+
+                <div class="hammock-upload-progress" data-gallery-upload-progress hidden>
+                    <div class="hammock-upload-progress-label" data-gallery-upload-status>Preparing upload...</div>
+                    <div class="hammock-upload-progress-track"
+                         role="progressbar"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-valuenow="0">
+                        <div class="hammock-upload-progress-bar" data-gallery-upload-bar></div>
                     </div>
-                    <div class="hammock-actions">
-                        <button type="submit" class="hammock-btn hammock-btn-ghost">Upload</button>
-                    </div>
-                </form>
+                </div>
 
                 <hr class="hammock-divider">
 

@@ -7,10 +7,12 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import web_app.helpers as helpers
 from PIL import Image
 from werkzeug.datastructures import FileStorage
 
 from web_app.errors import APIError
+from web_app.hammock import hammock_api
 from web_app.hammock.data_interface import DataInterface
 from web_app.users import User
 
@@ -180,3 +182,41 @@ class TestGalleryUploadAndDelete:
         alice = User("alice", "x", "fa", is_admin=False)
         with pytest.raises(APIError, match="too long"):
             di.create_markdown_post(alice, "blog", "x" * 5000, "body")
+
+
+class TestGalleryEditRoute:
+    def test_update_post_uploads_selected_images(self, client, projects_dir, monkeypatch):
+        if "hammock" not in client.application.blueprints:
+            client.application.register_blueprint(hammock_api)
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+        proj, post = di.create_gallery_post(alice, "Album", "Trip", "desc")
+        monkeypatch.setattr(
+            helpers.login_manager,
+            "_user_callback",
+            lambda username: alice if username == alice.id else None,
+        )
+
+        with client.session_transaction() as sess:
+            sess["_user_id"] = alice.id
+            sess["_fresh"] = True
+
+        edit_response = client.get(f"/hammock/{proj}/{post}/edit")
+        assert b">Upload<" not in edit_response.data
+
+        response = client.post(
+            f"/hammock/{proj}/{post}/edit",
+            data={
+                "title": "Updated Trip",
+                "description": "new desc",
+                "files": (BytesIO(_png_file_storage("photo.png").read()), "photo.png"),
+            },
+            headers={"X-Requested-With": "XMLHttpRequest"},
+            content_type="multipart/form-data",
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["redirect_url"] == f"/hammock/{proj}/{post}/"
+        post_dir = projects_dir / proj / post
+        assert (post_dir / "photo.png").exists()
+        assert json.loads((post_dir / "gallery.json").read_text())["images"] == ["photo.png"]

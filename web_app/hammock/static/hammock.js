@@ -26,6 +26,70 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    const galleryForm = document.getElementById("gallery-meta-form");
+    const progressWrap = document.querySelector("[data-gallery-upload-progress]");
+    if (galleryForm && progressWrap) {
+        const progressBar = progressWrap.querySelector("[data-gallery-upload-bar]");
+        const progressTrack = progressWrap.querySelector(".hammock-upload-progress-track");
+        const progressStatus = progressWrap.querySelector("[data-gallery-upload-status]");
+        const submitButton = document.querySelector('[type="submit"][form="gallery-meta-form"]');
+        const setProgress = value => {
+            progressBar.style.width = value + "%";
+            progressTrack.setAttribute("aria-valuenow", String(value));
+        };
+
+        galleryForm.addEventListener("submit", function(e) {
+            e.preventDefault();
+            progressWrap.hidden = false;
+            setProgress(0);
+            progressStatus.textContent = "Uploading...";
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.dataset.originalText = submitButton.textContent;
+                submitButton.textContent = "Uploading...";
+            }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", galleryForm.action);
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+            xhr.upload.addEventListener("progress", function(event) {
+                if (!event.lengthComputable) return;
+                setProgress(Math.round((event.loaded / event.total) * 100));
+                if (event.loaded === event.total) {
+                    progressStatus.textContent = "Processing images...";
+                    if (submitButton) submitButton.textContent = "Processing...";
+                }
+            });
+            xhr.addEventListener("load", function() {
+                let data = {};
+                try {
+                    data = JSON.parse(xhr.responseText);
+                } catch (err) {
+                    data = {};
+                }
+                if (xhr.status >= 200 && xhr.status < 300 && data.redirect_url) {
+                    setProgress(100);
+                    progressStatus.textContent = "Saved.";
+                    window.location.assign(data.redirect_url);
+                    return;
+                }
+                progressStatus.textContent = data.error || "Upload failed.";
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = submitButton.dataset.originalText || "Update post";
+                }
+            });
+            xhr.addEventListener("error", function() {
+                progressStatus.textContent = "Upload failed.";
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = submitButton.dataset.originalText || "Update post";
+                }
+            });
+            xhr.send(new FormData(galleryForm));
+        });
+    }
+
     // Gallery lightbox
     const galleryButtons = document.querySelectorAll(".hammock-gallery-photo-btn");
     if (galleryButtons.length > 0) {

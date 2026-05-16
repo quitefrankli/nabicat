@@ -312,6 +312,34 @@
     border-color: var(--hw-coral);
     transform: translateY(-2px);
 }
+.hammock-btn:disabled {
+    cursor: wait;
+    opacity: 0.7;
+    transform: none;
+}
+
+.hammock-upload-progress {
+    margin-top: 1rem;
+}
+.hammock-upload-progress-label {
+    color: var(--hw-text-secondary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+.hammock-upload-progress-track {
+    background: rgba(255, 255, 255, 0.8);
+    border: 2px solid var(--hw-border);
+    border-radius: var(--hw-radius-full);
+    height: 0.85rem;
+    overflow: hidden;
+}
+.hammock-upload-progress-bar {
+    background: var(--hw-gradient-sage);
+    height: 100%;
+    transition: width var(--hw-transition-fast);
+    width: 0;
+}
 
 .hammock-divider {
     border: none;

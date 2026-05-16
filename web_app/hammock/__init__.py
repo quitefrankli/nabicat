@@ -140,6 +140,7 @@ def edit_post(project: str, post: str):
     di = DataInterface()
     meta = di.get_post_meta(project, post)
     template = meta.get("template")
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     if request.method == 'POST':
         title = (request.form.get('title') or '').strip()
@@ -150,11 +151,18 @@ def edit_post(project: str, post: str):
             elif template == 'gallery':
                 description = (request.form.get('description') or '').strip()
                 di.update_gallery_meta(project, post, title, description)
+                files = [f for f in request.files.getlist('files') if f and f.filename]
+                if files:
+                    di.add_gallery_images(cur_user(), project, post, files)
             else:
                 # raw/legacy posts: meta-only updates aren't supported
+                if wants_json:
+                    return jsonify({"error": "This post type can't be edited in the browser."}), 400
                 flash("This post type can't be edited in the browser.", "error")
                 return redirect(url_for('.view_post', project=project, post=post))
         except APIError as e:
+            if wants_json:
+                return jsonify({"error": str(e)}), 400
             flash(str(e), "error")
             return redirect(url_for('.edit_post', project=project, post=post))
         logging.info(
@@ -162,6 +170,8 @@ def edit_post(project: str, post: str):
             f"by={cur_user().id} from={get_ip()}"
         )
         flash("Saved.", "success")
+        if wants_json:
+            return jsonify({"redirect_url": url_for('.view_post', project=project, post=post)})
         return redirect(url_for('.view_post', project=project, post=post))
 
     posts_by_project = di.get_posts_by_project()
