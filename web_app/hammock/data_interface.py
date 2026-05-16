@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,7 @@ from web_app.users import User
 
 
 _ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+_ALLOWED_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".3gp", ".3gpp"}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -255,7 +258,7 @@ class DataInterface(BaseDataInterface):
             "template": "gallery",
             "title": title.strip(),
         }
-        gallery = {"title": title.strip(), "description": description, "images": []}
+        gallery = {"title": title.strip(), "description": description, "images": [], "items": []}
         self.write_post_meta(post_dir, meta)
         self._write_gallery(post_dir, gallery)
         self._render_and_write_gallery(post_dir, meta, gallery)
@@ -266,11 +269,21 @@ class DataInterface(BaseDataInterface):
         gf = post_dir / "gallery.json"
         if gf.exists():
             return json.loads(gf.read_text(encoding="utf-8"))
-        return {"title": "", "description": "", "images": []}
+        return {"title": "", "description": "", "images": [], "items": []}
 
     def _write_gallery(self, post_dir: Path, gallery: dict) -> None:
         self.atomic_write(post_dir / "gallery.json", data=json.dumps(gallery, indent=2),
                           mode="w", encoding="utf-8")
+
+    @staticmethod
+    def _gallery_items(gallery: dict) -> list[dict]:
+        items = gallery.get("items")
+        if isinstance(items, list) and items:
+            return [item for item in items if isinstance(item, dict) and item.get("filename")]
+        return [
+            {"type": "image", "filename": name, "poster": f"{name}.webp"}
+            for name in gallery.get("images", [])
+        ]
 
     def update_gallery_meta(self, project: str, post: str, title: str, description: str) -> None:
         cfg = ConfigManager()
@@ -291,6 +304,9 @@ class DataInterface(BaseDataInterface):
         self._render_and_write_gallery(post_dir, meta, gallery)
 
     def add_gallery_images(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
+        return self.add_gallery_media(user, project, post, files)
+
+    def add_gallery_media(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
         post_dir = self._post_dir(project, post)
         meta = self._read_meta(post_dir)
         if meta.get("template") != "gallery":
@@ -300,9 +316,10 @@ class DataInterface(BaseDataInterface):
 
         # Gather and validate each file. Read bytes once so we can quota-check
         # before any disk writes.
-        prepared: list[tuple[str, bytes]] = []
+        prepared: list[tuple[str, str, bytes]] = []
         total_new_bytes = 0
-        existing_names = {img for img in self.get_gallery(project, post).get("images", [])}
+        gallery = self.get_gallery(project, post)
+        existing_names = {item["filename"] for item in self._gallery_items(gallery)}
         for fs in files:
             if not fs or not fs.filename:
                 continue
@@ -310,19 +327,27 @@ class DataInterface(BaseDataInterface):
             if not safe:
                 continue
             ext = Path(safe).suffix.lower()
-            if ext not in _ALLOWED_IMAGE_EXTS:
-                raise APIError(f"Unsupported image type: {fs.filename}")
+            if ext in _ALLOWED_IMAGE_EXTS:
+                media_type = "image"
+                candidate_ext = ext
+            elif ext in _ALLOWED_VIDEO_EXTS:
+                media_type = "video"
+                candidate_ext = ".mp4"
+            else:
+                raise APIError(f"Unsupported media type: {fs.filename}")
             # disambiguate against existing names in this gallery
             stem = Path(safe).stem
-            candidate = safe
+            candidate = f"{stem}{candidate_ext}" if media_type == "video" else safe
             i = 2
-            while candidate in existing_names or any(candidate == name for name, _ in prepared):
-                candidate = f"{stem}-{i}{ext}"
+            while candidate in existing_names or any(candidate == name for _, name, _ in prepared):
+                candidate = f"{stem}-{i}{candidate_ext}"
                 i += 1
             data = fs.read()
             if not data:
                 continue
-            prepared.append((candidate, data))
+            if media_type == "video" and len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
+                raise APIError(f"Video {fs.filename} is too large")
+            prepared.append((media_type, candidate, data))
             total_new_bytes += len(data)
 
         if not prepared:
@@ -330,42 +355,73 @@ class DataInterface(BaseDataInterface):
 
         self.check_quota(user, total_new_bytes)
 
-        added: list[str] = []
-        for name, data in prepared:
-            orig = post_dir / name
-            self.atomic_write(orig, data=data, mode="wb")
+        added: list[dict] = []
+        for media_type, name, data in prepared:
+            if media_type == "image":
+                orig = post_dir / name
+                self.atomic_write(orig, data=data, mode="wb")
+                try:
+                    self._make_thumbnail(orig, thumbs_dir / f"{name}.webp")
+                except APIError:
+                    # Reject the original too — if Pillow can't decode it, we won't
+                    # serve unknown bytes from the gallery.
+                    self.atomic_delete(orig)
+                    raise
+                added.append({"type": "image", "filename": name, "poster": f"{name}.webp"})
+                continue
+
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(name).suffix)
             try:
-                self._make_thumbnail(orig, thumbs_dir / f"{name}.webp")
+                tmp.write(data)
+            finally:
+                tmp.close()
+            upload_path = Path(tmp.name)
+            output_path = post_dir / name
+            poster_name = f"{name}.webp"
+            try:
+                self._validate_video(upload_path)
+                self._transcode_video(upload_path, output_path)
+                self._make_video_poster(output_path, thumbs_dir / poster_name)
             except APIError:
-                # Reject the original too — if Pillow can't decode it, we won't
-                # serve unknown bytes from the gallery.
-                self.atomic_delete(orig)
+                self.atomic_delete(upload_path)
+                self.atomic_delete(output_path)
+                self.atomic_delete(thumbs_dir / poster_name)
                 raise
-            added.append(name)
+            self.atomic_delete(upload_path)
+            added.append({"type": "video", "filename": name, "poster": poster_name})
 
         gallery = self.get_gallery(project, post)
-        gallery["images"] = gallery.get("images", []) + added
+        items = self._gallery_items(gallery)
+        items.extend(added)
+        gallery["items"] = items
+        gallery["images"] = [item["filename"] for item in items if item.get("type") == "image"]
         self._write_gallery(post_dir, gallery)
         self._render_and_write_gallery(post_dir, meta, gallery)
         return len(added)
 
     def delete_gallery_image(self, project: str, post: str, filename: str) -> None:
+        self.delete_gallery_media(project, post, filename)
+
+    def delete_gallery_media(self, project: str, post: str, filename: str) -> None:
         post_dir = self._post_dir(project, post)
         meta = self._read_meta(post_dir)
         if meta.get("template") != "gallery":
             raise APIError("Post is not a gallery post")
-        # only allow files actually listed in the gallery (prevents path traversal
-        # and accidental deletion of meta.json / index.html / etc.)
         gallery = self.get_gallery(project, post)
-        if filename not in gallery.get("images", []):
-            raise APIError("Image not found in gallery")
+        items = self._gallery_items(gallery)
+        item = next((item for item in items if item.get("filename") == filename), None)
+        if item is None:
+            raise APIError("Media not found in gallery")
         self.atomic_delete(post_dir / filename)
-        self.atomic_delete(post_dir / "thumbs" / f"{filename}.webp")
-        gallery["images"] = [n for n in gallery["images"] if n != filename]
+        poster = item.get("poster") or f"{filename}.webp"
+        self.atomic_delete(post_dir / "thumbs" / poster)
+        items = [item for item in items if item.get("filename") != filename]
+        gallery["items"] = items
+        gallery["images"] = [item["filename"] for item in items if item.get("type") == "image"]
         self._write_gallery(post_dir, gallery)
         self._render_and_write_gallery(post_dir, meta, gallery)
 
-    # ---------- thumbnails ----------
+    # ---------- thumbnails / video processing ----------
 
     def _make_thumbnail(self, src: Path, dst: Path) -> None:
         cfg = ConfigManager()
@@ -388,6 +444,84 @@ class DataInterface(BaseDataInterface):
         except Exception as e:
             logging.warning(f"Hammock thumbnail failed for {src.name}: {e}")
             raise APIError(f"Could not process {src.name} as an image") from e
+
+    @staticmethod
+    def _run_media_command(cmd: list[str], timeout_s: int, error_message: str) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, check=True)
+        except FileNotFoundError as e:
+            raise APIError("Video processing requires ffmpeg") from e
+        except subprocess.TimeoutExpired as e:
+            raise APIError(error_message) from e
+        except subprocess.CalledProcessError as e:
+            logging.warning(f"Hammock media command failed: {e.stderr}")
+            raise APIError(error_message) from e
+
+    def _validate_video(self, src: Path) -> None:
+        cfg = ConfigManager()
+        result = self._run_media_command(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(src),
+            ],
+            cfg.hammock_gallery_video_transcode_timeout_s,
+            f"Could not process {src.name} as a video",
+        )
+        try:
+            duration = float(result.stdout.strip())
+        except ValueError as e:
+            raise APIError(f"Could not process {src.name} as a video") from e
+        if duration > cfg.hammock_gallery_video_max_duration_s:
+            raise APIError(
+                f"Video {src.name} is too long "
+                f"(max {cfg.hammock_gallery_video_max_duration_s} seconds)"
+            )
+
+    def _transcode_video(self, src: Path, dst: Path) -> None:
+        cfg = ConfigManager()
+        max_height = cfg.hammock_gallery_video_max_height_px
+        vf = (
+            f"scale=-2:'min({max_height},ih)':force_original_aspect_ratio=decrease,"
+            "setsar=1"
+        )
+        self._run_media_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-i", str(src),
+                "-vf", vf,
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "28",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "96k",
+                "-movflags", "+faststart",
+                str(dst),
+            ],
+            cfg.hammock_gallery_video_transcode_timeout_s,
+            f"Could not process {src.name} as a video",
+        )
+
+    def _make_video_poster(self, src: Path, dst: Path) -> None:
+        cfg = ConfigManager()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        self._run_media_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-i", str(src),
+                "-frames:v", "1",
+                "-vf", f"scale=-2:'min({cfg.hammock_gallery_video_max_height_px},ih)'",
+                str(dst),
+            ],
+            cfg.hammock_gallery_video_transcode_timeout_s,
+            f"Could not create a preview for {src.name}",
+        )
 
     # ---------- delete post ----------
 
@@ -422,19 +556,28 @@ class DataInterface(BaseDataInterface):
     def _render_gallery_index(self, meta: dict, gallery: dict) -> str:
         title = html.escape(gallery.get("title") or meta.get("title", ""))
         description = html.escape(gallery.get("description", ""))
-        images = gallery.get("images", [])
-        items = []
-        for name in images:
-            safe = html.escape(name)
-            items.append(
-                f'<figure class="hammock-gallery-photo">'
-                f'<button type="button" class="hammock-gallery-photo-btn" data-full="{safe}">'
-                f'<img loading="lazy" decoding="async" src="thumbs/{safe}.webp" alt="">'
-                f'</button>'
-                f'</figure>'
-            )
-        feed = "\n".join(items) if items else (
-            '<p class="hammock-gallery-empty">No images yet.</p>'
+        media_html = []
+        for item in self._gallery_items(gallery):
+            name = html.escape(item.get("filename", ""))
+            poster = html.escape(item.get("poster") or f"{item.get('filename', '')}.webp")
+            if item.get("type") == "video":
+                media_html.append(
+                    f'<figure class="hammock-gallery-photo hammock-gallery-video">'
+                    f'<video controls preload="metadata" poster="thumbs/{poster}">'
+                    f'<source src="{name}" type="video/mp4">'
+                    f'</video>'
+                    f'</figure>'
+                )
+            else:
+                media_html.append(
+                    f'<figure class="hammock-gallery-photo">'
+                    f'<button type="button" class="hammock-gallery-photo-btn" data-full="{name}">'
+                    f'<img loading="lazy" decoding="async" src="thumbs/{poster}" alt="">'
+                    f'</button>'
+                    f'</figure>'
+                )
+        feed = "\n".join(media_html) if media_html else (
+            '<p class="hammock-gallery-empty">No media yet.</p>'
         )
         desc_block = f'<p class="hammock-gallery-desc">{description}</p>' if description else ""
         return (

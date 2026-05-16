@@ -378,6 +378,20 @@
     object-fit: cover;
     display: block;
 }
+.hammock-media-badge {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: var(--hw-radius-full);
+    background: rgba(45, 74, 62, 0.78);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
 .hammock-tile-delete {
     position: absolute;
     top: 6px;
@@ -449,6 +463,12 @@
     display: block;
     width: 100%;
     height: auto;
+}
+.hammock-gallery-video video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
 }
 .hammock-gallery-empty {
     color: var(--hw-text-muted);

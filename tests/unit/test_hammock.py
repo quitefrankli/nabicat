@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 import tempfile
 from io import BytesIO
 from pathlib import Path
@@ -46,6 +47,45 @@ def _png_file_storage(name: str, size: tuple[int, int] = (40, 40)) -> FileStorag
     Image.new("RGB", size, color=(180, 200, 160)).save(buf, format="PNG")
     buf.seek(0)
     return FileStorage(stream=buf, filename=name, content_type="image/png")
+
+
+def _mp4_file_storage(tmp_path: Path, name: str = "clip.mp4", duration: float = 0.5) -> FileStorage:
+    path = tmp_path / name
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "lavfi",
+            "-i", "testsrc=size=320x240:rate=15",
+            "-t", str(duration),
+            "-pix_fmt", "yuv420p",
+            str(path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return FileStorage(stream=BytesIO(path.read_bytes()), filename=name, content_type="video/mp4")
+
+
+def _mov_file_storage(tmp_path: Path, name: str = "iphone.MOV", duration: float = 0.5) -> FileStorage:
+    path = tmp_path / name
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "lavfi",
+            "-i", "testsrc=size=320x240:rate=15",
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            str(path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return FileStorage(stream=BytesIO(path.read_bytes()), filename=name, content_type="video/quicktime")
 
 
 class TestGetPostsByProjectSorting:
@@ -134,6 +174,9 @@ class TestGalleryUploadAndDelete:
 
         gallery = json.loads((post_dir / "gallery.json").read_text())
         assert gallery["images"] == ["photo.png"]
+        assert gallery["items"] == [
+            {"type": "image", "filename": "photo.png", "poster": "photo.png.webp"}
+        ]
 
         # Rendered HTML references the thumb and the owner byline
         rendered = di.get_post_content(proj, post)
@@ -144,6 +187,67 @@ class TestGalleryUploadAndDelete:
         assert not (post_dir / "photo.png").exists()
         assert not (post_dir / "thumbs" / "photo.png.webp").exists()
         assert json.loads((post_dir / "gallery.json").read_text())["images"] == []
+
+    def test_add_then_delete_video_transcodes_poster_and_updates_state(self, projects_dir, tmp_path):
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+
+        proj, post = di.create_gallery_post(alice, "Album", "Clips", "desc")
+        post_dir = projects_dir / proj / post
+
+        n = di.add_gallery_media(alice, proj, post, [_mp4_file_storage(tmp_path)])
+        assert n == 1
+        assert (post_dir / "clip.mp4").exists()
+        assert not (post_dir / ".upload-clip.mp4").exists()
+        assert (post_dir / "thumbs" / "clip.mp4.webp").exists()
+
+        gallery = json.loads((post_dir / "gallery.json").read_text())
+        assert gallery["images"] == []
+        assert gallery["items"] == [
+            {"type": "video", "filename": "clip.mp4", "poster": "clip.mp4.webp"}
+        ]
+
+        rendered = di.get_post_content(proj, post)
+        assert '<video controls preload="metadata" poster="thumbs/clip.mp4.webp">' in rendered
+        assert '<source src="clip.mp4" type="video/mp4">' in rendered
+
+        di.delete_gallery_media(proj, post, "clip.mp4")
+        assert not (post_dir / "clip.mp4").exists()
+        assert not (post_dir / "thumbs" / "clip.mp4.webp").exists()
+        assert json.loads((post_dir / "gallery.json").read_text())["items"] == []
+
+    def test_phone_video_upload_is_normalized_to_mp4(self, projects_dir, tmp_path):
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+        proj, post = di.create_gallery_post(alice, "Album", "Phone Clip", "")
+        post_dir = projects_dir / proj / post
+
+        n = di.add_gallery_media(alice, proj, post, [_mov_file_storage(tmp_path)])
+        assert n == 1
+        assert (post_dir / "iphone.mp4").exists()
+        assert not (post_dir / "iphone.MOV").exists()
+        assert (post_dir / "thumbs" / "iphone.mp4.webp").exists()
+
+        gallery = json.loads((post_dir / "gallery.json").read_text())
+        assert gallery["items"] == [
+            {"type": "video", "filename": "iphone.mp4", "poster": "iphone.mp4.webp"}
+        ]
+
+    def test_video_over_duration_limit_is_rejected(self, projects_dir, tmp_path, monkeypatch):
+        from web_app.config import ConfigManager
+        monkeypatch.setattr(ConfigManager(), "hammock_gallery_video_max_duration_s", 0)
+
+        di = DataInterface()
+        alice = User("alice", "x", "fa", is_admin=False)
+        proj, post = di.create_gallery_post(alice, "Album", "Long Clip", "")
+        post_dir = projects_dir / proj / post
+
+        with pytest.raises(APIError, match="too long"):
+            di.add_gallery_media(alice, proj, post, [_mp4_file_storage(tmp_path)])
+
+        assert not (post_dir / "clip.mp4").exists()
+        assert not (post_dir / ".upload-clip.mp4").exists()
+        assert json.loads((post_dir / "gallery.json").read_text())["items"] == []
 
     def test_quota_blocks_uploads_over_limit(self, projects_dir, monkeypatch):
         from web_app.config import ConfigManager

@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (!event.lengthComputable) return;
                 setProgress(Math.round((event.loaded / event.total) * 100));
                 if (event.loaded === event.total) {
-                    progressStatus.textContent = "Processing images...";
+                    progressStatus.textContent = "Processing media...";
                     if (submitButton) submitButton.textContent = "Processing...";
                 }
             });

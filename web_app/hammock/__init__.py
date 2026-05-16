@@ -204,15 +204,15 @@ def add_gallery_images(project: str, post: str):
     files = request.files.getlist('files')
     user = cur_user()
     try:
-        n = di.add_gallery_images(user, project, post, files)
+        n = di.add_gallery_media(user, project, post, files)
     except APIError as e:
         flash(str(e), "error")
         return redirect(url_for('.edit_post', project=project, post=post))
     logging.info(
-        f"Hammock gallery images added: {project}/{post} count={n} "
+        f"Hammock gallery media added: {project}/{post} count={n} "
         f"by={user.id} from={get_ip()}"
     )
-    flash(f"Uploaded {n} image{'s' if n != 1 else ''}.", "success")
+    flash(f"Uploaded {n} media item{'s' if n != 1 else ''}.", "success")
     return redirect(url_for('.edit_post', project=project, post=post))
 
 
@@ -221,12 +221,12 @@ def add_gallery_images(project: str, post: str):
 def delete_gallery_image(project: str, post: str, filename: str):
     di = DataInterface()
     try:
-        di.delete_gallery_image(project, post, filename)
+        di.delete_gallery_media(project, post, filename)
     except APIError as e:
         flash(str(e), "error")
         return redirect(url_for('.edit_post', project=project, post=post))
     logging.info(
-        f"Hammock gallery image deleted: {project}/{post}/{filename} "
+        f"Hammock gallery media deleted: {project}/{post}/{filename} "
         f"by={cur_user().id} from={get_ip()}"
     )
     return redirect(url_for('.edit_post', project=project, post=post))
