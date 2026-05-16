@@ -26,13 +26,16 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
-    const galleryForm = document.getElementById("gallery-meta-form");
-    const progressWrap = document.querySelector("[data-gallery-upload-progress]");
-    if (galleryForm && progressWrap) {
+    const galleryForms = document.querySelectorAll("[data-gallery-upload-form]");
+    galleryForms.forEach(function(galleryForm) {
+        const progressWrap = galleryForm.querySelector("[data-gallery-upload-progress]")
+            || document.querySelector("[data-gallery-upload-progress]");
+        if (!progressWrap) return;
         const progressBar = progressWrap.querySelector("[data-gallery-upload-bar]");
         const progressTrack = progressWrap.querySelector(".hammock-upload-progress-track");
         const progressStatus = progressWrap.querySelector("[data-gallery-upload-status]");
-        const submitButton = document.querySelector('[type="submit"][form="gallery-meta-form"]');
+        const submitButton = galleryForm.querySelector('[type="submit"]')
+            || (galleryForm.id ? document.querySelector(`[type="submit"][form="${galleryForm.id}"]`) : null);
         const setProgress = value => {
             progressBar.style.width = value + "%";
             progressTrack.setAttribute("aria-valuenow", String(value));
@@ -88,7 +91,7 @@ document.addEventListener("DOMContentLoaded", function() {
             });
             xhr.send(new FormData(galleryForm));
         });
-    }
+    });
 
     // Gallery lightbox
     const galleryButtons = document.querySelectorAll(".hammock-gallery-photo-btn");

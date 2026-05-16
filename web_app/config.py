@@ -97,7 +97,7 @@ class ConfigManager:
         self.hammock_max_image_pixels = 40_000_000  # decoded pixel cap (~40 MP) to bound RAM
         self.hammock_gallery_video_max_upload_bytes = 100 * 1024 * 1024
         self.hammock_gallery_video_max_duration_s = 60
-        self.hammock_gallery_video_max_height_px = 480
+        self.hammock_gallery_video_max_height_px = 720
         self.hammock_gallery_video_transcode_timeout_s = 180
         self.hammock_title_max_chars = 120
         self.hammock_description_max_chars = 2048

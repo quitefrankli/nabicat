@@ -57,20 +57,25 @@ def index():
 @flask_login.login_required
 def new_post():
     di = DataInterface()
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    def fail(message: str):
+        if wants_json:
+            return jsonify({"error": message}), 400
+        flash(message, "error")
+        return redirect(url_for('.new_post'))
+
     if request.method == 'POST':
         project_input = (request.form.get('project_existing') or request.form.get('project_new') or '').strip()
         template = (request.form.get('template') or '').strip()
         title = (request.form.get('title') or '').strip()
 
         if not project_input:
-            flash("Project is required", "error")
-            return redirect(url_for('.new_post'))
+            return fail("Project is required")
         if template not in ('markdown', 'gallery'):
-            flash("Pick a template", "error")
-            return redirect(url_for('.new_post'))
+            return fail("Pick a template")
         if not title:
-            flash("Title is required", "error")
-            return redirect(url_for('.new_post'))
+            return fail("Title is required")
 
         user = cur_user()
         try:
@@ -89,13 +94,14 @@ def new_post():
                         di.delete_post(project_slug, post_slug)
                         raise
         except APIError as e:
-            flash(str(e), "error")
-            return redirect(url_for('.new_post'))
+            return fail(str(e))
 
         logging.info(
             f"Hammock post created: {project_slug}/{post_slug} template={template} "
             f"by={user.id} from={get_ip()}"
         )
+        if wants_json:
+            return jsonify({"redirect_url": url_for('.view_post', project=project_slug, post=post_slug)})
         return redirect(url_for('.view_post', project=project_slug, post=post_slug))
 
     return render_template(

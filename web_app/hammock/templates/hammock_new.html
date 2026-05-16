@@ -16,7 +16,8 @@
                     your post anytime after creating it.
                 </p>
 
-                <form method="post" action="{{ url_for('.new_post') }}"
+                <form id="hammock-new-post-form" method="post" action="{{ url_for('.new_post') }}"
+                      data-gallery-upload-form
                       enctype="multipart/form-data" class="hammock-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -72,7 +73,18 @@
                     <div class="hammock-field" data-template-field="gallery" hidden>
                         <label class="hammock-label">Media</label>
                         <input type="file" name="files" multiple accept="image/*,video/*" class="hammock-input">
-                        <div class="hammock-field-hint">Images are saved as display-size WebP only. Common phone videos up to 1 minute are compressed to looping 480p MP4.</div>
+                        <div class="hammock-field-hint">Images are saved as display-size WebP only. Common phone videos up to 1 minute are compressed to looping 720p MP4.</div>
+                    </div>
+
+                    <div class="hammock-upload-progress" data-gallery-upload-progress hidden>
+                        <div class="hammock-upload-progress-label" data-gallery-upload-status>Preparing upload...</div>
+                        <div class="hammock-upload-progress-track"
+                             role="progressbar"
+                             aria-valuemin="0"
+                             aria-valuemax="100"
+                             aria-valuenow="0">
+                            <div class="hammock-upload-progress-bar" data-gallery-upload-bar></div>
+                        </div>
                     </div>
 
                     <div class="hammock-actions">

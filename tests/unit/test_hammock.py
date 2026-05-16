@@ -16,6 +16,7 @@ from web_app.errors import APIError
 from web_app.hammock import hammock_api
 from web_app.hammock.data_interface import DataInterface
 from web_app.users import User
+from web_app.config import ConfigManager
 
 
 @pytest.fixture
@@ -160,6 +161,9 @@ class TestMarkdownLifecycleAndAuthz:
 
 
 class TestGalleryUploadAndDelete:
+    def test_video_max_height_defaults_to_720p(self):
+        assert ConfigManager().hammock_gallery_video_max_height_px == 720
+
     def test_add_then_delete_image_generates_thumb_and_updates_state(self, projects_dir):
         di = DataInterface()
         alice = User("alice", "x", "fa", is_admin=False)
@@ -291,6 +295,44 @@ class TestGalleryUploadAndDelete:
 
 
 class TestGalleryEditRoute:
+    def test_new_gallery_post_upload_uses_ajax_progress_contract(self, client, projects_dir, monkeypatch):
+        if "hammock" not in client.application.blueprints:
+            client.application.register_blueprint(hammock_api)
+        alice = User("alice", "x", "fa", is_admin=False)
+        monkeypatch.setattr(
+            helpers.login_manager,
+            "_user_callback",
+            lambda username: alice if username == alice.id else None,
+        )
+
+        with client.session_transaction() as sess:
+            sess["_user_id"] = alice.id
+            sess["_fresh"] = True
+
+        new_response = client.get("/hammock/new")
+        assert b"data-gallery-upload-form" in new_response.data
+        assert b"data-gallery-upload-progress" in new_response.data
+        assert b"looping 720p MP4" in new_response.data
+
+        response = client.post(
+            "/hammock/new",
+            data={
+                "project_new": "Album",
+                "title": "Trip",
+                "template": "gallery",
+                "description": "desc",
+                "files": (BytesIO(_png_file_storage("photo.png").read()), "photo.png"),
+            },
+            headers={"X-Requested-With": "XMLHttpRequest"},
+            content_type="multipart/form-data",
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["redirect_url"] == "/hammock/album/trip/"
+        post_dir = projects_dir / "album" / "trip"
+        assert not (post_dir / "photo.png").exists()
+        assert (post_dir / "thumbs" / "photo.webp").exists()
+
     def test_update_post_uploads_selected_images(self, client, projects_dir, monkeypatch):
         if "hammock" not in client.application.blueprints:
             client.application.register_blueprint(hammock_api)

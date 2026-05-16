@@ -13,6 +13,7 @@
 
                 <form id="gallery-meta-form" method="post"
                       action="{{ url_for('.edit_post', project=project_name, post=post_name) }}"
+                      data-gallery-upload-form
                       enctype="multipart/form-data"
                       class="hammock-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -66,7 +67,7 @@
                     <label class="hammock-label">Add media</label>
                     <input type="file" name="files" multiple accept="image/*,video/*" class="hammock-input"
                            form="gallery-meta-form">
-                    <div class="hammock-field-hint">Images are saved as display-size WebP only. Common phone videos up to 1 minute are compressed to looping 480p MP4.</div>
+                    <div class="hammock-field-hint">Images are saved as display-size WebP only. Common phone videos up to 1 minute are compressed to looping 720p MP4.</div>
                 </div>
 
                 <div class="hammock-upload-progress" data-gallery-upload-progress hidden>
