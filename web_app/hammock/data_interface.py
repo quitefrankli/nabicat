@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
@@ -316,10 +317,14 @@ class DataInterface(BaseDataInterface):
 
         # Gather and validate each file. Read bytes once so we can quota-check
         # before any disk writes.
-        prepared: list[tuple[str, str, bytes]] = []
+        prepared: list[tuple[str, str, str, bytes]] = []
         total_new_bytes = 0
         gallery = self.get_gallery(project, post)
         existing_names = {item["filename"] for item in self._gallery_items(gallery)}
+        existing_posters = {
+            item.get("poster") or f"{item.get('filename', '')}.webp"
+            for item in self._gallery_items(gallery)
+        }
         for fs in files:
             if not fs or not fs.filename:
                 continue
@@ -329,7 +334,7 @@ class DataInterface(BaseDataInterface):
             ext = Path(safe).suffix.lower()
             if ext in _ALLOWED_IMAGE_EXTS:
                 media_type = "image"
-                candidate_ext = ext
+                candidate_ext = ".webp"
             elif ext in _ALLOWED_VIDEO_EXTS:
                 media_type = "video"
                 candidate_ext = ".mp4"
@@ -337,18 +342,27 @@ class DataInterface(BaseDataInterface):
                 raise APIError(f"Unsupported media type: {fs.filename}")
             # disambiguate against existing names in this gallery
             stem = Path(safe).stem
-            candidate = f"{stem}{candidate_ext}" if media_type == "video" else safe
+            candidate = f"{stem}{candidate_ext}"
             i = 2
-            while candidate in existing_names or any(candidate == name for _, name, _ in prepared):
+            while (
+                candidate in existing_names
+                or candidate in existing_posters
+                or any(candidate == name or candidate == poster for _, name, poster, _ in prepared)
+            ):
                 candidate = f"{stem}-{i}{candidate_ext}"
                 i += 1
             data = fs.read()
             if not data:
                 continue
-            if media_type == "video" and len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
-                raise APIError(f"Video {fs.filename} is too large")
-            prepared.append((media_type, candidate, data))
-            total_new_bytes += len(data)
+            if media_type == "image":
+                image_data = self._make_thumbnail_bytes(data, safe)
+                prepared.append((media_type, candidate, candidate, image_data))
+                total_new_bytes += len(image_data)
+            else:
+                if len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
+                    raise APIError(f"Video {fs.filename} is too large")
+                prepared.append((media_type, candidate, f"{candidate}.webp", data))
+                total_new_bytes += len(data)
 
         if not prepared:
             return 0
@@ -356,18 +370,10 @@ class DataInterface(BaseDataInterface):
         self.check_quota(user, total_new_bytes)
 
         added: list[dict] = []
-        for media_type, name, data in prepared:
+        for media_type, name, poster_name, data in prepared:
             if media_type == "image":
-                orig = post_dir / name
-                self.atomic_write(orig, data=data, mode="wb")
-                try:
-                    self._make_thumbnail(orig, thumbs_dir / f"{name}.webp")
-                except APIError:
-                    # Reject the original too — if Pillow can't decode it, we won't
-                    # serve unknown bytes from the gallery.
-                    self.atomic_delete(orig)
-                    raise
-                added.append({"type": "image", "filename": name, "poster": f"{name}.webp"})
+                self.atomic_write(thumbs_dir / poster_name, data=data, mode="wb")
+                added.append({"type": "image", "filename": name, "poster": poster_name})
                 continue
 
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(name).suffix)
@@ -377,7 +383,6 @@ class DataInterface(BaseDataInterface):
                 tmp.close()
             upload_path = Path(tmp.name)
             output_path = post_dir / name
-            poster_name = f"{name}.webp"
             try:
                 self._validate_video(upload_path)
                 self._transcode_video(upload_path, output_path)
@@ -424,26 +429,32 @@ class DataInterface(BaseDataInterface):
     # ---------- thumbnails / video processing ----------
 
     def _make_thumbnail(self, src: Path, dst: Path) -> None:
+        image_data = self._make_thumbnail_bytes(src.read_bytes(), src.name)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        self.atomic_write(dst, data=image_data, mode="wb")
+
+    def _make_thumbnail_bytes(self, data: bytes, filename: str) -> bytes:
         cfg = ConfigManager()
         # Enforce a per-process decoded-pixel ceiling so a small file can't
         # decompress into gigabytes of RGB data. Pillow raises
         # DecompressionBombError at 2x this value automatically.
         Image.MAX_IMAGE_PIXELS = cfg.hammock_max_image_pixels
         try:
-            with Image.open(src) as img:
+            with Image.open(BytesIO(data)) as img:
                 img = ImageOps.exif_transpose(img)
                 if img.mode not in ("RGB", "RGBA"):
                     img = img.convert("RGB")
                 max_px = cfg.hammock_gallery_thumb_max_px
                 img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                img.save(dst, "WEBP", quality=cfg.hammock_gallery_thumb_quality, method=6)
+                out = BytesIO()
+                img.save(out, "WEBP", quality=cfg.hammock_gallery_thumb_quality, method=6)
+                return out.getvalue()
         except Image.DecompressionBombError as e:
-            logging.warning(f"Hammock thumbnail rejected (pixel bomb) for {src.name}: {e}")
-            raise APIError(f"Image {src.name} is too large to process") from e
+            logging.warning(f"Hammock thumbnail rejected (pixel bomb) for {filename}: {e}")
+            raise APIError(f"Image {filename} is too large to process") from e
         except Exception as e:
-            logging.warning(f"Hammock thumbnail failed for {src.name}: {e}")
-            raise APIError(f"Could not process {src.name} as an image") from e
+            logging.warning(f"Hammock thumbnail failed for {filename}: {e}")
+            raise APIError(f"Could not process {filename} as an image") from e
 
     @staticmethod
     def _run_media_command(cmd: list[str], timeout_s: int, error_message: str) -> subprocess.CompletedProcess:
@@ -563,7 +574,7 @@ class DataInterface(BaseDataInterface):
             if item.get("type") == "video":
                 media_html.append(
                     f'<figure class="hammock-gallery-photo hammock-gallery-video">'
-                    f'<video controls preload="metadata" poster="thumbs/{poster}">'
+                    f'<video autoplay loop muted playsinline preload="metadata" poster="thumbs/{poster}">'
                     f'<source src="{name}" type="video/mp4">'
                     f'</video>'
                     f'</figure>'
@@ -571,7 +582,7 @@ class DataInterface(BaseDataInterface):
             else:
                 media_html.append(
                     f'<figure class="hammock-gallery-photo">'
-                    f'<button type="button" class="hammock-gallery-photo-btn" data-full="{name}">'
+                    f'<button type="button" class="hammock-gallery-photo-btn" data-full="thumbs/{poster}">'
                     f'<img loading="lazy" decoding="async" src="thumbs/{poster}" alt="">'
                     f'</button>'
                     f'</figure>'

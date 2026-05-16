@@ -169,23 +169,24 @@ class TestGalleryUploadAndDelete:
 
         n = di.add_gallery_images(alice, proj, post, [_png_file_storage("photo.png")])
         assert n == 1
-        assert (post_dir / "photo.png").exists()
-        assert (post_dir / "thumbs" / "photo.png.webp").exists()
+        assert not (post_dir / "photo.png").exists()
+        assert (post_dir / "thumbs" / "photo.webp").exists()
 
         gallery = json.loads((post_dir / "gallery.json").read_text())
-        assert gallery["images"] == ["photo.png"]
+        assert gallery["images"] == ["photo.webp"]
         assert gallery["items"] == [
-            {"type": "image", "filename": "photo.png", "poster": "photo.png.webp"}
+            {"type": "image", "filename": "photo.webp", "poster": "photo.webp"}
         ]
 
         # Rendered HTML references the thumb and the owner byline
         rendered = di.get_post_content(proj, post)
-        assert 'src="thumbs/photo.png.webp"' in rendered
+        assert 'data-full="thumbs/photo.webp"' in rendered
+        assert 'src="thumbs/photo.webp"' in rendered
         assert "alice" in rendered
 
-        di.delete_gallery_image(proj, post, "photo.png")
+        di.delete_gallery_image(proj, post, "photo.webp")
         assert not (post_dir / "photo.png").exists()
-        assert not (post_dir / "thumbs" / "photo.png.webp").exists()
+        assert not (post_dir / "thumbs" / "photo.webp").exists()
         assert json.loads((post_dir / "gallery.json").read_text())["images"] == []
 
     def test_add_then_delete_video_transcodes_poster_and_updates_state(self, projects_dir, tmp_path):
@@ -208,7 +209,8 @@ class TestGalleryUploadAndDelete:
         ]
 
         rendered = di.get_post_content(proj, post)
-        assert '<video controls preload="metadata" poster="thumbs/clip.mp4.webp">' in rendered
+        assert '<video autoplay loop muted playsinline preload="metadata" poster="thumbs/clip.mp4.webp">' in rendered
+        assert "controls" not in rendered
         assert '<source src="clip.mp4" type="video/mp4">' in rendered
 
         di.delete_gallery_media(proj, post, "clip.mp4")
@@ -251,13 +253,13 @@ class TestGalleryUploadAndDelete:
 
     def test_quota_blocks_uploads_over_limit(self, projects_dir, monkeypatch):
         from web_app.config import ConfigManager
-        monkeypatch.setattr(ConfigManager(), "hammock_non_admin_quota_bytes", 256)
+        monkeypatch.setattr(ConfigManager(), "hammock_non_admin_quota_bytes", 1)
 
         di = DataInterface()
         alice = User("alice", "x", "fa", is_admin=False)
         proj, post = di.create_gallery_post(alice, "tiny", "Holiday", "")
 
-        # A 200x200 PNG will exceed the 256-byte cap easily.
+        # Quota is checked against the persisted WebP derivative, not an original.
         with pytest.raises(APIError, match="quota"):
             di.add_gallery_images(alice, proj, post, [_png_file_storage("big.png", size=(200, 200))])
 
@@ -322,5 +324,6 @@ class TestGalleryEditRoute:
         assert response.status_code == 200
         assert response.get_json()["redirect_url"] == f"/hammock/{proj}/{post}/"
         post_dir = projects_dir / proj / post
-        assert (post_dir / "photo.png").exists()
-        assert json.loads((post_dir / "gallery.json").read_text())["images"] == ["photo.png"]
+        assert not (post_dir / "photo.png").exists()
+        assert (post_dir / "thumbs" / "photo.webp").exists()
+        assert json.loads((post_dir / "gallery.json").read_text())["images"] == ["photo.webp"]
