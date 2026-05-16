@@ -38,7 +38,6 @@ class Project:
 class PreparedGalleryUpload:
     media_type: str
     name: str
-    poster_name: str
     data: bytes
     display_name: str
     upload_suffix: str
@@ -88,7 +87,6 @@ class GalleryPost:
     date: str
     owner: str
     description: str = ""
-    images: list[str] = field(default_factory=list)
     items: list[dict] = field(default_factory=list)
     type: str = "gallery"
 
@@ -98,9 +96,10 @@ class GalleryPost:
             "title": self.title,
             "date": self.date,
             "owner": self.owner,
-            "description": self.description,
-            "images": self.images,
-            "items": self.items,
+            "template-data": {
+                "description": self.description,
+                "items": self.items,
+            },
         }
 
 
@@ -341,7 +340,6 @@ class DataInterface(BaseDataInterface):
         post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
         post_dir.mkdir(parents=True, exist_ok=True)
-        (post_dir / "thumbs").mkdir(exist_ok=True)
         post_meta = GalleryPost(
             project_slug,
             post_slug,
@@ -353,26 +351,32 @@ class DataInterface(BaseDataInterface):
         self.write_post_meta(project_slug, post_slug, post_meta)
         return project_slug, post_slug
 
+    @staticmethod
+    def _gallery_template_data(meta: dict) -> dict:
+        data = meta.get("template-data")
+        return data if isinstance(data, dict) else {}
+
     def get_gallery(self, project: str, post: str) -> dict:
         meta = self.get_post_meta(project, post)
         if meta.get("type") != "gallery":
-            return {"title": "", "description": "", "images": [], "items": []}
+            return {"title": "", "description": "", "items": []}
+        template_data = self._gallery_template_data(meta)
         return {
             "title": meta.get("title", ""),
-            "description": meta.get("description", ""),
-            "images": meta.get("images", []),
-            "items": meta.get("items", []),
+            "description": template_data.get("description", ""),
+            "items": template_data.get("items", []),
         }
 
     @staticmethod
     def _gallery_items(gallery: dict) -> list[dict]:
         items = gallery.get("items")
         if isinstance(items, list) and items:
-            return [item for item in items if isinstance(item, dict) and item.get("filename")]
-        return [
-            {"type": "image", "filename": name, "poster": f"{name}.webp"}
-            for name in gallery.get("images", [])
-        ]
+            return [
+                {"type": item.get("type", "image"), "filename": item.get("filename")}
+                for item in items
+                if isinstance(item, dict) and item.get("filename")
+            ]
+        return []
 
     def update_gallery_meta(self, project: str, post: str, title: str, description: str) -> None:
         cfg = ConfigManager()
@@ -384,7 +388,9 @@ class DataInterface(BaseDataInterface):
         if not title.strip():
             raise APIError("Title is required")
         meta["title"] = title.strip()
-        meta["description"] = description
+        template_data = self._gallery_template_data(meta)
+        template_data["description"] = description
+        meta["template-data"] = template_data
         self.write_post_meta(project, post, meta)
 
     def add_gallery_images(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
@@ -395,8 +401,6 @@ class DataInterface(BaseDataInterface):
         meta = self._post_entry(project, post)
         if meta.get("type") != "gallery":
             raise APIError("Post is not a gallery post")
-        thumbs_dir = post_dir / "thumbs"
-        thumbs_dir.mkdir(exist_ok=True)
 
         # Gather and validate each file. Read bytes once so we can quota-check
         # before any disk writes.
@@ -404,10 +408,6 @@ class DataInterface(BaseDataInterface):
         total_new_bytes = 0
         gallery = self.get_gallery(project, post)
         existing_names = {item["filename"] for item in self._gallery_items(gallery)}
-        existing_posters = {
-            item.get("poster") or f"{item.get('filename', '')}.webp"
-            for item in self._gallery_items(gallery)
-        }
         for fs in files:
             if not fs or not fs.filename:
                 continue
@@ -429,8 +429,7 @@ class DataInterface(BaseDataInterface):
             i = 2
             while (
                 candidate in existing_names
-                or candidate in existing_posters
-                or any(candidate == item.name or candidate == item.poster_name for item in prepared)
+                or any(candidate == item.name for item in prepared)
             ):
                 candidate = f"{stem}-{i}{candidate_ext}"
                 i += 1
@@ -439,12 +438,12 @@ class DataInterface(BaseDataInterface):
                 continue
             if media_type == "image":
                 image_data = self._make_thumbnail_bytes(data, safe)
-                prepared.append(PreparedGalleryUpload(media_type, candidate, candidate, image_data, safe, ext))
+                prepared.append(PreparedGalleryUpload(media_type, candidate, image_data, safe, ext))
                 total_new_bytes += len(image_data)
             else:
                 if len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
                     raise APIError(f"Video {fs.filename} is too large")
-                prepared.append(PreparedGalleryUpload(media_type, candidate, f"{candidate}.webp", data, safe, ext))
+                prepared.append(PreparedGalleryUpload(media_type, candidate, data, safe, ext))
                 total_new_bytes += len(data)
 
         if not prepared:
@@ -455,8 +454,8 @@ class DataInterface(BaseDataInterface):
         added: list[dict] = []
         for item in prepared:
             if item.media_type == "image":
-                self.atomic_write(thumbs_dir / item.poster_name, data=item.data, mode="wb")
-                added.append({"type": "image", "filename": item.name, "poster": item.poster_name})
+                self.atomic_write(post_dir / item.name, data=item.data, mode="wb")
+                added.append({"type": "image", "filename": item.name})
                 continue
 
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=item.upload_suffix)
@@ -470,20 +469,19 @@ class DataInterface(BaseDataInterface):
                 self._validate_video(upload_path, item.display_name)
                 self._transcode_video(upload_path, output_path, item.display_name)
                 self._validate_video(output_path, item.display_name)
-                self._make_video_poster(output_path, thumbs_dir / item.poster_name, item.display_name)
             except APIError:
                 self.atomic_delete(upload_path)
                 self.atomic_delete(output_path)
-                self.atomic_delete(thumbs_dir / item.poster_name)
                 raise
             self.atomic_delete(upload_path)
-            added.append({"type": "video", "filename": item.name, "poster": item.poster_name})
+            added.append({"type": "video", "filename": item.name})
 
         gallery = self.get_gallery(project, post)
         items = self._gallery_items(gallery)
         items.extend(added)
-        meta["items"] = items
-        meta["images"] = [item["filename"] for item in items if item.get("type") == "image"]
+        template_data = self._gallery_template_data(meta)
+        template_data["items"] = items
+        meta["template-data"] = template_data
         self.write_post_meta(project, post, meta)
         return len(added)
 
@@ -501,11 +499,10 @@ class DataInterface(BaseDataInterface):
         if item is None:
             raise APIError("Media not found in gallery")
         self.atomic_delete(post_dir / filename)
-        poster = item.get("poster") or f"{filename}.webp"
-        self.atomic_delete(post_dir / "thumbs" / poster)
         items = [item for item in items if item.get("filename") != filename]
-        meta["items"] = items
-        meta["images"] = [item["filename"] for item in items if item.get("type") == "image"]
+        template_data = self._gallery_template_data(meta)
+        template_data["items"] = items
+        meta["template-data"] = template_data
         self.write_post_meta(project, post, meta)
 
     # ---------- thumbnails / video processing ----------
@@ -625,22 +622,6 @@ class DataInterface(BaseDataInterface):
             f"Could not process {display_name} as a video",
         )
 
-    def _make_video_poster(self, src: Path, dst: Path, display_name: str) -> None:
-        cfg = ConfigManager()
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        self._run_media_command(
-            [
-                "ffmpeg",
-                "-y",
-                "-i", str(src),
-                "-frames:v", "1",
-                "-vf", f"scale=-2:'min({cfg.hammock_gallery_video_max_height_px},ih)'",
-                str(dst),
-            ],
-            cfg.hammock_gallery_video_transcode_timeout_s,
-            f"Could not create a preview for {display_name}",
-        )
-
     # ---------- delete post ----------
 
     def delete_post(self, project: str, post: str) -> None:
@@ -679,11 +660,10 @@ class DataInterface(BaseDataInterface):
         media_html = []
         for item in self._gallery_items(gallery):
             name = html.escape(item.get("filename", ""))
-            poster = html.escape(item.get("poster") or f"{item.get('filename', '')}.webp")
             if item.get("type") == "video":
                 media_html.append(
                     f'<figure class="hammock-gallery-photo hammock-gallery-video">'
-                    f'<video autoplay loop muted playsinline preload="metadata" poster="thumbs/{poster}">'
+                    f'<video autoplay loop muted playsinline preload="metadata">'
                     f'<source src="{name}" type="video/mp4">'
                     f'</video>'
                     f'</figure>'
@@ -691,8 +671,8 @@ class DataInterface(BaseDataInterface):
             else:
                 media_html.append(
                     f'<figure class="hammock-gallery-photo">'
-                    f'<button type="button" class="hammock-gallery-photo-btn" data-full="thumbs/{poster}">'
-                    f'<img loading="lazy" decoding="async" src="thumbs/{poster}" alt="">'
+                    f'<button type="button" class="hammock-gallery-photo-btn" data-full="{name}">'
+                    f'<img loading="lazy" decoding="async" src="{name}" alt="">'
                     f'</button>'
                     f'</figure>'
                 )

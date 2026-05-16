@@ -206,28 +206,28 @@ class TestGalleryUploadAndDelete:
         n = di.add_gallery_images(alice, proj, post, [_png_file_storage("photo.png")])
         assert n == 1
         assert not (post_dir / "photo.png").exists()
-        assert (post_dir / "thumbs" / "photo.webp").exists()
+        assert (post_dir / "photo.webp").exists()
+        assert not (post_dir / "thumbs").exists()
 
         assert not (post_dir / "gallery.json").exists()
         assert not (post_dir / "index.html").exists()
         gallery = _post_meta(projects_dir, proj, post)
-        assert gallery["images"] == ["photo.webp"]
-        assert gallery["items"] == [
-            {"type": "image", "filename": "photo.webp", "poster": "photo.webp"}
+        assert "images" not in gallery
+        assert gallery["template-data"]["items"] == [
+            {"type": "image", "filename": "photo.webp"}
         ]
 
-        # Rendered HTML references the thumb and the owner byline
         rendered = di.get_post_content(proj, post)
-        assert 'data-full="thumbs/photo.webp"' in rendered
-        assert 'src="thumbs/photo.webp"' in rendered
+        assert 'data-full="photo.webp"' in rendered
+        assert 'src="photo.webp"' in rendered
         assert "alice" in rendered
 
         di.delete_gallery_image(proj, post, "photo.webp")
         assert not (post_dir / "photo.png").exists()
-        assert not (post_dir / "thumbs" / "photo.webp").exists()
-        assert _post_meta(projects_dir, proj, post)["images"] == []
+        assert not (post_dir / "photo.webp").exists()
+        assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == []
 
-    def test_add_then_delete_video_transcodes_poster_and_updates_state(self, projects_dir, tmp_path):
+    def test_add_then_delete_video_transcodes_and_updates_state(self, projects_dir, tmp_path):
         di = DataInterface()
         alice = User("alice", "x", "fa", is_admin=False)
 
@@ -238,23 +238,22 @@ class TestGalleryUploadAndDelete:
         assert n == 1
         assert (post_dir / "clip.mp4").exists()
         assert not (post_dir / ".upload-clip.mp4").exists()
-        assert (post_dir / "thumbs" / "clip.mp4.webp").exists()
+        assert not (post_dir / "thumbs").exists()
 
         gallery = _post_meta(projects_dir, proj, post)
-        assert gallery["images"] == []
-        assert gallery["items"] == [
-            {"type": "video", "filename": "clip.mp4", "poster": "clip.mp4.webp"}
+        assert "images" not in gallery
+        assert gallery["template-data"]["items"] == [
+            {"type": "video", "filename": "clip.mp4"}
         ]
 
         rendered = di.get_post_content(proj, post)
-        assert '<video autoplay loop muted playsinline preload="metadata" poster="thumbs/clip.mp4.webp">' in rendered
+        assert '<video autoplay loop muted playsinline preload="metadata">' in rendered
         assert "controls" not in rendered
         assert '<source src="clip.mp4" type="video/mp4">' in rendered
 
         di.delete_gallery_media(proj, post, "clip.mp4")
         assert not (post_dir / "clip.mp4").exists()
-        assert not (post_dir / "thumbs" / "clip.mp4.webp").exists()
-        assert _post_meta(projects_dir, proj, post)["items"] == []
+        assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == []
 
     def test_phone_video_upload_is_normalized_to_mp4(self, projects_dir, tmp_path):
         di = DataInterface()
@@ -266,11 +265,11 @@ class TestGalleryUploadAndDelete:
         assert n == 1
         assert (post_dir / "iphone.mp4").exists()
         assert not (post_dir / "iphone.MOV").exists()
-        assert (post_dir / "thumbs" / "iphone.mp4.webp").exists()
+        assert not (post_dir / "thumbs").exists()
 
         gallery = _post_meta(projects_dir, proj, post)
-        assert gallery["items"] == [
-            {"type": "video", "filename": "iphone.mp4", "poster": "iphone.mp4.webp"}
+        assert gallery["template-data"]["items"] == [
+            {"type": "video", "filename": "iphone.mp4"}
         ]
 
     def test_portrait_video_transcode_outputs_even_dimensions(self, projects_dir, tmp_path):
@@ -353,7 +352,7 @@ class TestGalleryUploadAndDelete:
 
         assert not (post_dir / "clip.mp4").exists()
         assert not (post_dir / ".upload-clip.mp4").exists()
-        assert _post_meta(projects_dir, proj, post)["items"] == []
+        assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == []
 
     def test_quota_blocks_uploads_over_limit(self, projects_dir, monkeypatch):
         from web_app.config import ConfigManager
@@ -385,7 +384,7 @@ class TestGalleryUploadAndDelete:
         # Critical: the original must not be left on disk and the gallery must
         # not list it.
         assert not (post_dir / "evil.png").exists()
-        assert _post_meta(projects_dir, proj, post)["images"] == []
+        assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == []
 
     def test_oversized_title_rejected(self, projects_dir):
         di = DataInterface()
@@ -431,7 +430,8 @@ class TestGalleryEditRoute:
         assert response.get_json()["redirect_url"] == "/hammock/album/trip/"
         post_dir = projects_dir / "album" / "trip"
         assert not (post_dir / "photo.png").exists()
-        assert (post_dir / "thumbs" / "photo.webp").exists()
+        assert (post_dir / "photo.webp").exists()
+        assert not (post_dir / "thumbs").exists()
 
     def test_update_post_uploads_selected_images(self, client, projects_dir, monkeypatch):
         if "hammock" not in client.application.blueprints:
@@ -467,5 +467,7 @@ class TestGalleryEditRoute:
         assert response.get_json()["redirect_url"] == f"/hammock/{proj}/{post}/"
         post_dir = projects_dir / proj / post
         assert not (post_dir / "photo.png").exists()
-        assert (post_dir / "thumbs" / "photo.webp").exists()
-        assert _post_meta(projects_dir, proj, post)["images"] == ["photo.webp"]
+        assert (post_dir / "photo.webp").exists()
+        assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == [
+            {"type": "image", "filename": "photo.webp"}
+        ]

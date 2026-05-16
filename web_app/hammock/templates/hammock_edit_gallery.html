@@ -36,20 +36,18 @@
                 <h2 class="hammock-section-title">Media</h2>
                 <div class="hammock-edit-grid">
                     {% set media_items = gallery.get('items') or [] %}
-                    {% if not media_items %}
-                        {% for img in gallery.get('images', []) %}
-                            {% set _ = media_items.append({'type': 'image', 'filename': img, 'poster': img + '.webp'}) %}
-                        {% endfor %}
-                    {% endif %}
                     {% for item in media_items %}
                     {% set filename = item.get('filename') %}
-                    {% set poster = item.get('poster') or filename + '.webp' %}
                     <div class="hammock-edit-tile">
-                        <img loading="lazy"
-                             src="{{ url_for('.post_asset', project=project_name, post=post_name, filename='thumbs/' + poster) }}"
-                             alt="{{ filename }}">
                         {% if item.get('type') == 'video' %}
+                        <video muted playsinline preload="metadata">
+                            <source src="{{ url_for('.post_asset', project=project_name, post=post_name, filename=filename) }}" type="video/mp4">
+                        </video>
                         <span class="hammock-media-badge"><i class="bi bi-play-fill"></i> Video</span>
+                        {% else %}
+                        <img loading="lazy"
+                             src="{{ url_for('.post_asset', project=project_name, post=post_name, filename=filename) }}"
+                             alt="{{ filename }}">
                         {% endif %}
                         <form method="post"
                               action="{{ url_for('.delete_gallery_image', project=project_name, post=post_name, filename=filename) }}"
