@@ -1,0 +1,240 @@
+.sentinel-shell {
+  max-width: 1120px;
+  margin: 1.5rem auto 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.sentinel-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-md);
+  padding: 1rem;
+}
+
+.sentinel-heading,
+.sentinel-report-head,
+.sentinel-report-actions,
+.sentinel-section-title,
+.sentinel-run-row,
+.sentinel-inline-fields {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sentinel-heading h1,
+.sentinel-report-head h1,
+.sentinel-section-title h2 {
+  margin: 0;
+  color: var(--hw-forest);
+}
+
+.sentinel-heading p,
+.sentinel-report-head p,
+.sentinel-step p,
+.sentinel-finding p,
+.sentinel-final-report {
+  margin: 0;
+  color: var(--hw-text-secondary);
+}
+
+.sentinel-heading i {
+  color: var(--hw-sage);
+  font-size: 2.5rem;
+}
+
+.sentinel-report-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sentinel-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.sentinel-inline-fields {
+  align-items: end;
+}
+
+.sentinel-inline-fields > div {
+  max-width: 12rem;
+}
+
+.sentinel-submit {
+  min-height: 44px;
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.sentinel-status-text {
+  min-height: 1.4rem;
+  color: var(--hw-text-secondary);
+}
+
+.sentinel-run-list,
+.sentinel-steps,
+.sentinel-findings,
+.sentinel-screenshots {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.sentinel-final-report {
+  margin-top: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.sentinel-run-row {
+  min-height: 56px;
+  padding: 0.75rem;
+  border-radius: var(--hw-radius-md);
+  color: inherit;
+  text-decoration: none;
+  background: rgba(135, 168, 120, 0.08);
+}
+
+.sentinel-run-main {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.sentinel-run-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sentinel-run-main small {
+  color: var(--hw-text-muted);
+}
+
+.sentinel-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.7rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--hw-radius-full);
+  color: white;
+  background: var(--hw-sage);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.sentinel-badge-failed,
+.sentinel-badge-error {
+  background: var(--hw-coral);
+}
+
+.sentinel-badge-timed_out,
+.sentinel-badge-warning {
+  background: var(--hw-peach);
+}
+
+.sentinel-badge-completed {
+  background: var(--hw-sage-dark);
+}
+
+.sentinel-step,
+.sentinel-finding {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: rgba(255, 255, 255, 0.65);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sentinel-finding strong,
+.sentinel-finding p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sentinel-finding p {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sentinel-step {
+  grid-template-columns: 2rem 1fr;
+}
+
+.sentinel-step > span {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--hw-radius-md);
+  background: var(--hw-gradient-sage);
+  color: white;
+  font-weight: 700;
+}
+
+.sentinel-step code {
+  display: block;
+  margin-top: 0.35rem;
+  white-space: pre-wrap;
+  color: var(--hw-moss);
+}
+
+.sentinel-screenshots {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.sentinel-screenshots img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: var(--hw-radius-md);
+  border: 1px solid var(--hw-border);
+}
+
+.sentinel-empty {
+  min-height: 9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--hw-text-muted);
+  text-align: center;
+}
+
+.sentinel-empty i {
+  font-size: 3rem;
+  opacity: 0.3;
+}
+
+.sentinel-empty-small {
+  min-height: 4rem;
+}
+
+@media (max-width: 768px) {
+  .sentinel-heading,
+  .sentinel-report-head,
+  .sentinel-report-actions,
+  .sentinel-inline-fields {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sentinel-inline-fields > div {
+    max-width: none;
+  }
+}

@@ -206,6 +206,17 @@ class TestRequestLogging:
 
         assert "Processing request: client=127.0.0.1, username=alice, path=/example, method=GET" in caplog.text
 
+    def test_before_request_skips_sentinel_polling_logs(self, app_context, caplog):
+        from web_app import __main__ as main_module
+
+        config = Mock(known_bot_prefixes=[], known_bot_methods=[], debug_mode=False)
+        with app.test_request_context("/sentinel/api/runs/abc123", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.__main__.ConfigManager", return_value=config), \
+             caplog.at_level(logging.INFO):
+            main_module.before_request()
+
+        assert "Processing request:" not in caplog.text
+
 
 class TestScheduledTasks:
     @patch('web_app.__main__.get_all_data_interfaces')

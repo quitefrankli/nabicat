@@ -1,0 +1,75 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}{{ url_for('sentinel.index') }}{% endblock %}
+{% block navbar_brand %}Sentinel{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('sentinel.static', filename='style.css') }}">
+  <script defer src="{{ url_for('sentinel.static', filename='script.js') }}"></script>
+{% endblock %}
+
+{% block page_content %}
+<div class="sentinel-shell">
+  <section class="sentinel-panel">
+    <div class="sentinel-heading">
+      <div>
+        <h1>Sentinel</h1>
+        <p>QA-as-a-Service for bounded browser checks against public websites.</p>
+      </div>
+      <i class="bi bi-eye-fill"></i>
+    </div>
+
+    <form id="sentinel-run-form" class="sentinel-form" autocomplete="off">
+      <div>
+        <label class="form-label" for="sentinel-url">URL</label>
+        <input class="form-control form-control-lg" type="text" id="sentinel-url" name="url"
+               placeholder="google.com" inputmode="url" required>
+      </div>
+      <div>
+        <label class="form-label" for="sentinel-prompt">Prompt</label>
+        <textarea class="form-control" id="sentinel-prompt" name="prompt" rows="4"
+                  maxlength="{{ prompt_max_chars }}"
+                  placeholder="Focus on signup, navigation, search, and broken UI states."></textarea>
+      </div>
+      <div class="sentinel-inline-fields">
+        <div>
+          <label class="form-label" for="sentinel-limit">Time Limit (mins)</label>
+          <input class="form-control" type="number" id="sentinel-limit" name="limit"
+                 min="{{ min_limit }}" max="{{ max_limit }}" value="{{ default_limit }}">
+        </div>
+        <button class="btn btn-primary sentinel-submit" type="submit">
+          <i class="bi bi-play-fill"></i>
+          <span>Start Run</span>
+        </button>
+      </div>
+      <div id="sentinel-form-status" class="sentinel-status-text" role="status"></div>
+    </form>
+  </section>
+
+  <section class="sentinel-panel">
+    <div class="sentinel-section-title">
+      <h2>Recent Runs</h2>
+      <span>{{ runs|length }}</span>
+    </div>
+    {% if runs %}
+      <div class="sentinel-run-list">
+        {% for run in runs %}
+          <a class="sentinel-run-row" href="{{ url_for('sentinel.report', run_id=run.run_id) }}">
+            <span class="sentinel-run-main">
+              <strong>{{ run.target_url }}</strong>
+              <small>{{ run.created_at }}</small>
+            </span>
+            <span class="sentinel-badge sentinel-badge-{{ run.status }}">{{ run.status }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="sentinel-empty">
+        <i class="bi bi-eye"></i>
+        <p>No QA runs yet.</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

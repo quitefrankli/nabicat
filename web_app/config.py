@@ -89,6 +89,33 @@ class ConfigManager:
         self.crosswords_theme_min_len = 2
         self.crosswords_theme_max_len = 13
 
+        # Sentinel
+        self.sentinel_default_limit_mins = 1
+        self.sentinel_min_limit_mins = 1
+        self.sentinel_max_limit_mins = 10
+        self.sentinel_max_steps = 20
+        self.sentinel_max_screenshots = 10
+        self.sentinel_max_retained_runs = 25
+        self.sentinel_prompt_max_chars = 4000
+        self.sentinel_browser_width_px = 1366
+        self.sentinel_browser_height_px = 900
+        self.sentinel_browser_default_timeout_ms = 15000
+        self.sentinel_navigation_timeout_ms = 30000
+        self.sentinel_post_click_load_timeout_ms = 5000
+        self.sentinel_wait_action_ms = 1000
+        self.sentinel_observation_max_elements = 80
+        self.sentinel_observation_text_max_chars = 3000
+        self.sentinel_observation_element_text_max_chars = 140
+        self.sentinel_finding_detail_max_chars = 500
+        self.sentinel_final_report_max_chars = 4000
+        self.sentinel_final_report_max_images = 4
+        self.sentinel_final_report_timeout_s = 60.0
+        self.sentinel_codex_cli_command = "codex"
+        self.sentinel_codex_model = ""
+        self.sentinel_codex_cli_sandbox = "read-only"
+        self.sentinel_codex_cli_approval_policy = "never"
+        self.sentinel_codex_step_timeout_s = 45.0
+
         # Hammock
         self.hammock_non_admin_quota_bytes = 50 * 1024 * 1024  # 50 MB
         self.hammock_admin_quota_bytes = 10 * 1024 * 1024 * 1024  # 10 GB

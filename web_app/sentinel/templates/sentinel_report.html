@@ -1,0 +1,111 @@
+{% extends "subpage_base.html" %}
+
+{% block subapp_index_url %}{{ url_for('sentinel.index') }}{% endblock %}
+{% block navbar_brand %}Sentinel{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('sentinel.static', filename='style.css') }}">
+  <script defer src="{{ url_for('sentinel.static', filename='report.js') }}"></script>
+{% endblock %}
+
+{% block page_actions %}
+  <li>
+    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('sentinel.report_json', run_id=report.run_id) }}">
+      <i class="bi bi-filetype-json"></i>
+      <span>View JSON</span>
+    </a>
+  </li>
+{% endblock %}
+
+{% block page_content %}
+<div class="sentinel-shell" data-run-id="{{ report.run_id }}">
+  <section class="sentinel-panel sentinel-report-head">
+    <div>
+      <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
+      <h1>{{ report.target_url }}</h1>
+      {% if report.prompt %}
+        <p>{{ report.prompt }}</p>
+      {% endif %}
+    </div>
+    <div class="sentinel-report-actions">
+      <button class="btn btn-primary" type="button" id="sentinel-rerun-run">
+        <i class="bi bi-arrow-clockwise"></i>
+        <span>Rerun</span>
+      </button>
+      <a class="btn btn-outline-primary" href="{{ url_for('sentinel.index') }}">
+        <i class="bi bi-plus-circle"></i>
+        <span>New Run</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="sentinel-panel">
+    <div class="sentinel-section-title">
+      <h2>Final Report</h2>
+    </div>
+    <div id="sentinel-final-report" class="sentinel-final-report">
+      {% if report.final_report %}
+        {{ report.final_report }}
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">Final report will appear when the run completes.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="sentinel-panel">
+    <div class="sentinel-section-title">
+      <h2>Findings</h2>
+      <span id="sentinel-findings-count">{{ report.findings|length }}</span>
+    </div>
+    <div id="sentinel-findings" class="sentinel-findings">
+      {% for finding in report.findings %}
+        <div class="sentinel-finding">
+          <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
+          <strong>{{ finding.title }}</strong>
+          <p>{{ finding.detail }}</p>
+        </div>
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">No findings recorded yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="sentinel-panel">
+    <div class="sentinel-section-title">
+      <h2>Steps</h2>
+      <span id="sentinel-step-count">{{ report.steps|length }}</span>
+    </div>
+    <div id="sentinel-steps" class="sentinel-steps">
+      {% for step in report.steps %}
+        <article class="sentinel-step">
+          <span>{{ step.index }}</span>
+          <div>
+            <strong>{{ step.action }}</strong>
+            <p>{{ step.reason }}</p>
+            <code>{{ step.result }}</code>
+          </div>
+        </article>
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">Waiting for the first browser action.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="sentinel-panel">
+    <div class="sentinel-section-title">
+      <h2>Screenshots</h2>
+      <span id="sentinel-screenshot-count">{{ report.screenshots|length }}</span>
+    </div>
+    <div id="sentinel-screenshots" class="sentinel-screenshots">
+      {% for shot in report.screenshots %}
+        <a href="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}">
+          <img src="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}" alt="QA screenshot">
+        </a>
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

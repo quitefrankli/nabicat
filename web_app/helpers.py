@@ -34,6 +34,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
     from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
     from web_app.hammock.data_interface import DataInterface as HammockDataInterface
+    from web_app.sentinel.data_interface import DataInterface as SentinelDataInterface
 
     return [
         APIDataInterface,
@@ -43,6 +44,7 @@ def get_all_data_interfaces() -> list[DataInterface]:
         TubioDataInterface,
         FileStoreDataInterface,
         HammockDataInterface,
+        SentinelDataInterface,
     ]
 
 
@@ -59,6 +61,7 @@ def register_all_blueprints(app):
     from web_app.hammock import hammock_api
     from web_app.dev import dev_api
     from web_app.simulations import simulations_api
+    from web_app.sentinel import sentinel_api
 
     blueprints = [
         todoist_api,
@@ -73,6 +76,7 @@ def register_all_blueprints(app):
         hammock_api,
         dev_api,
         simulations_api,
+        sentinel_api,
     ]
 
     for blueprint in blueprints:
