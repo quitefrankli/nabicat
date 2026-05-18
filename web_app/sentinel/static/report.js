@@ -2,6 +2,9 @@ function renderBadge(status) {
   return `<span class="sentinel-badge sentinel-badge-${status}">${status}</span>`;
 }
 
+let sentinelLightbox;
+let sentinelLightboxImage;
+
 function escapeText(value) {
   return String(value ?? '').replace(/[&<>"']/g, function (char) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
@@ -61,9 +64,44 @@ function renderReport(report) {
     screenshots.innerHTML = report.screenshots.length ? report.screenshots.map(function (shot) {
       const filename = shot.split('/').pop();
       const url = `/sentinel/report/${report.run_id}/screenshots/${filename}`;
-      return `<a href="${url}"><img src="${url}" alt="QA screenshot"></a>`;
+      return `<button class="sentinel-screenshot-btn" type="button" data-full="${url}">
+        <img src="${url}" alt="QA screenshot">
+      </button>`;
     }).join('') : '<div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>';
+    bindScreenshotButtons();
   }
+}
+
+function ensureLightbox() {
+  if (sentinelLightbox) return;
+  sentinelLightbox = document.createElement('div');
+  sentinelLightbox.className = 'sentinel-lightbox';
+  sentinelLightbox.innerHTML = '<button class="sentinel-lightbox-close" type="button" aria-label="Close">&times;</button><img alt="QA screenshot">';
+  document.body.appendChild(sentinelLightbox);
+  sentinelLightboxImage = sentinelLightbox.querySelector('img');
+  const close = function () {
+    sentinelLightbox.classList.remove('open');
+    sentinelLightboxImage.src = '';
+  };
+  sentinelLightbox.querySelector('.sentinel-lightbox-close').addEventListener('click', close);
+  sentinelLightbox.addEventListener('click', function (event) {
+    if (event.target === sentinelLightbox) close();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') close();
+  });
+}
+
+function bindScreenshotButtons() {
+  ensureLightbox();
+  document.querySelectorAll('.sentinel-screenshot-btn').forEach(function (button) {
+    if (button.dataset.boundLightbox) return;
+    button.dataset.boundLightbox = 'true';
+    button.addEventListener('click', function () {
+      sentinelLightboxImage.src = button.dataset.full;
+      sentinelLightbox.classList.add('open');
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -71,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!shell) return;
   const runId = shell.dataset.runId;
   const rerunButton = document.getElementById('sentinel-rerun-run');
+  bindScreenshotButtons();
 
   if (rerunButton) {
     rerunButton.addEventListener('click', async function () {

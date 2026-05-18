@@ -198,12 +198,60 @@
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
-.sentinel-screenshots img {
+.sentinel-screenshot-btn {
+  padding: 0;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: transparent;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.sentinel-screenshot-btn img {
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
-  border-radius: var(--hw-radius-md);
-  border: 1px solid var(--hw-border);
+  display: block;
+}
+
+.sentinel-lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.sentinel-lightbox.open {
+  display: flex;
+}
+
+.sentinel-lightbox img {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--hw-radius-sm);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.sentinel-lightbox-close {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 34px;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.sentinel-lightbox-close:hover {
+  opacity: 1;
 }
 
 .sentinel-empty {
