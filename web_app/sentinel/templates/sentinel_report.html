@@ -99,9 +99,10 @@
     </div>
     <div id="sentinel-screenshots" class="sentinel-screenshots">
       {% for shot in report.screenshots %}
-        <a href="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}">
+        <button class="sentinel-screenshot-btn" type="button"
+                data-full="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}">
           <img src="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}" alt="QA screenshot">
-        </a>
+        </button>
       {% else %}
         <div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>
       {% endfor %}
