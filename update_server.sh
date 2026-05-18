@@ -27,6 +27,8 @@ done
 shift $((OPTIND-1))
 
 pip install -r requirements.txt --quiet
+sudo "$(which python)" -m playwright install-deps chromium
+python -m playwright install chromium
 sudo cp nabicat.conf /etc/nginx/conf.d/
 sudo systemctl reload nginx
 
