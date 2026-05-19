@@ -2,7 +2,7 @@ import flask
 import flask_login
 
 from typing import * # type: ignore
-from flask import request, Blueprint, render_template
+from flask import request, Blueprint
 from datetime import datetime
 
 from web_app.helpers import limiter, from_req, cur_user
@@ -19,70 +19,13 @@ def require_login():
 def get_default_redirect():
     return flask.redirect(flask.url_for('todoist_api.summary_goals'))
 
-def is_ajax_request() -> bool:
-    return (
-        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        or 'application/json' in request.headers.get('Accept', '')
-    )
-
-def _get_filtered_summary_goals(user):
-    from web_app.todoist import _get_filtered_summary_goals as get_goals
-    return get_goals(user)
-
-def _get_completed_goals(user):
-    from web_app.todoist import _get_completed_goals as get_goals
-    return get_goals(user)
-
-def _goals_to_blocks(goals):
-    from web_app.todoist import _goals_to_blocks as to_blocks
-    return to_blocks(goals)
-
-def _completed_goals_to_blocks(goals):
-    from web_app.todoist import _completed_goals_to_blocks as to_blocks
-    return to_blocks(goals)
-
-def _todoist_page_size() -> int:
-    from web_app.todoist import PAGE_SIZE
-    return PAGE_SIZE
-
-def goals_fragment_response():
-    view = request.headers.get('X-Todoist-View', 'summary')
-    page_size = _todoist_page_size()
-
-    if view == 'completed':
-        goals = _get_completed_goals(cur_user())
-        html = render_template(
-            'completed_goals.html',
-            dated_goal_blocks=_completed_goals_to_blocks(goals[:page_size]),
-        )
-    else:
-        goals, all_goals = _get_filtered_summary_goals(cur_user())
-        html = render_template(
-            'summary_goals.html',
-            dated_goal_blocks=_goals_to_blocks(goals[:page_size]),
-            all_goals=all_goals,
-        )
-
-    return flask.jsonify(
-        success=True,
-        html=html,
-        has_more=len(goals) > page_size,
-        view=view,
-    )
-
-def goal_error_response(message: str):
-    if is_ajax_request():
-        return flask.jsonify(success=False, error=message), 400
-
-    flask.flash(message, category='error')
-    return get_default_redirect()
-
 @goals_api.route('/new', methods=["POST"])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
 def new_goal():
     name = from_req('name')
     if not name:
-        return goal_error_response('Goal name cannot be empty')
+        flask.flash('Goal name cannot be empty', category='error')
+        return get_default_redirect()
 
     description = from_req('description')
     parent_id = request.form.get('parent_id')
@@ -102,9 +45,6 @@ def new_goal():
 
     DataInterface().save_goals(tld, cur_user())
 
-    if is_ajax_request():
-        return goals_fragment_response()
-
     return get_default_redirect()
 
 @goals_api.route('/fail', methods=["GET"])
@@ -116,9 +56,6 @@ def fail_goal():
     tld = DataInterface().load_goals(cur_user())
     tld.goals[goal_id].state = GoalState.FAILED
     DataInterface().save_goals(tld, cur_user())
-
-    if is_ajax_request():
-        return goals_fragment_response()
 
     return get_default_redirect()
 
@@ -134,9 +71,6 @@ def log_goal():
     goal.description += f"\n\n{'-'*10}\n{today_date}\n{from_req('log')}\n{'-'*10}"
     goal.last_modified = datetime.now()
     DataInterface().save_goals(tld, cur_user())
-
-    if is_ajax_request():
-        return goals_fragment_response()
 
     return get_default_redirect()
 
@@ -165,7 +99,8 @@ def toggle_goal_state():
 def edit_goal():
     name = from_req('name')
     if not name:
-        return goal_error_response('Goal name cannot be empty')
+        flask.flash('Goal name cannot be empty', category='error')
+        return get_default_redirect()
     description = from_req('description')
 
     goal_id = int(request.args['goal_id'])
@@ -176,9 +111,6 @@ def edit_goal():
     goal.description = description
     goal.last_modified = datetime.now()
     DataInterface().save_goals(tld, cur_user())
-
-    if is_ajax_request():
-        return goals_fragment_response()
 
     return get_default_redirect()
 
