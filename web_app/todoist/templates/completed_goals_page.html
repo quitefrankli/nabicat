@@ -19,7 +19,7 @@
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('.goals_api.new_goal') }}" method="post">
+            <form action="{{ url_for('.goals_api.new_goal') }}" method="post" data-goal-ajax-form>
                 <div class="modal-body p-4">
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" name="name" id="name" placeholder="Enter goal name" required>
@@ -42,7 +42,7 @@
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
-                    <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Creating...'; this.form.submit();">
+                    <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-circle me-1"></i>Create Goal
                     </button>
                 </div>
@@ -54,12 +54,12 @@
 
 {% block content %}
 
-<div id="goals-container">
+<div id="goals-container" data-goals-view="completed">
 {% include "completed_goals.html" %}
 </div>
 
 {% if has_more %}
-<div class="d-flex justify-content-center mt-4">
+<div class="d-flex justify-content-center mt-4" id="load-more-wrap">
 	<button class="btn btn-outline-primary" id="load-more-btn" onclick="loadMoreCompletedGoals()">
 		<i class="bi bi-arrow-down me-2"></i>Load More
 	</button>

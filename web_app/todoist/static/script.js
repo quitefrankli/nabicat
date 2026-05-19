@@ -151,6 +151,105 @@ function toggleGoalState(switchElement, goalId) {
 	});
 }
 
+function currentGoalsView() {
+	const container = document.getElementById('goals-container');
+	return container ? (container.dataset.goalsView || 'summary') : 'summary';
+}
+
+function updateLoadMoreButton(hasMore) {
+	const container = document.getElementById('goals-container');
+	if (!container) return;
+
+	let wrap = document.getElementById('load-more-wrap');
+	if (!hasMore) {
+		if (wrap) wrap.remove();
+		return;
+	}
+
+	if (!wrap) {
+		wrap = document.createElement('div');
+		wrap.id = 'load-more-wrap';
+		wrap.className = 'd-flex justify-content-center mt-4';
+		container.insertAdjacentElement('afterend', wrap);
+	}
+
+	const isCompleted = currentGoalsView() === 'completed';
+	wrap.innerHTML = '<button class="btn btn-outline-primary" id="load-more-btn"><i class="bi bi-arrow-down me-2"></i>Load More</button>';
+	document.getElementById('load-more-btn').onclick = isCompleted ? loadMoreCompletedGoals : loadMoreSummaryGoals;
+}
+
+function replaceGoalsFragment(data) {
+	const container = document.getElementById('goals-container');
+	if (!container) return;
+
+	const openCollapseIds = Array.from(container.querySelectorAll('.accordion-collapse.show')).map(el => el.id);
+	container.innerHTML = data.html;
+	summaryCurrentPage = 0;
+	completedCurrentPage = 0;
+	updateLoadMoreButton(data.has_more);
+
+	if (window.bootstrap) {
+		openCollapseIds.forEach(id => {
+			const collapseEl = document.getElementById(id);
+			if (collapseEl) bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
+		});
+	}
+}
+
+function hideModalBeforeUpdate(form, callback) {
+	const modalEl = form.closest('.modal');
+	if (!modalEl || !window.bootstrap) {
+		callback();
+		return;
+	}
+
+	const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+	modalEl.addEventListener('hidden.bs.modal', callback, { once: true });
+	modal.hide();
+}
+
+function initGoalAjaxForms() {
+	document.addEventListener('submit', (event) => {
+		const form = event.target.closest('form[data-goal-ajax-form]');
+		if (!form) return;
+
+		event.preventDefault();
+		if (!form.reportValidity()) return;
+
+		const submitButton = event.submitter || form.querySelector('button[type="submit"]');
+		const originalHtml = submitButton ? submitButton.innerHTML : '';
+		if (submitButton) {
+			submitButton.disabled = true;
+			submitButton.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving...';
+		}
+
+		fetch(form.action, {
+			method: form.method || 'POST',
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'X-Todoist-View': currentGoalsView()
+			},
+			body: new FormData(form)
+		})
+		.then(response => response.json().then(data => {
+			if (!response.ok || !data.success) throw new Error(data.error || 'Goal update failed');
+			return data;
+		}))
+		.then(data => {
+			form.reset();
+			hideModalBeforeUpdate(form, () => replaceGoalsFragment(data));
+		})
+		.catch(error => {
+			console.error('Error saving goal:', error);
+			alert(error.message || 'Failed to save goal');
+			if (submitButton) {
+				submitButton.disabled = false;
+				submitButton.innerHTML = originalHtml;
+			}
+		});
+	});
+}
+
 // Pagination for summary goals
 let summaryCurrentPage = 0;
 let summaryHasMoreGoals = false;
@@ -219,9 +318,12 @@ function loadMoreCompletedGoals() {
 
 // Initialize pagination based on which page we're on
 document.addEventListener('DOMContentLoaded', function() {
-	const summaryGoalsPage = document.querySelector('body').classList.contains('summary-goals-page');
-	const completedGoalsPage = document.querySelector('body').classList.contains('completed-goals-page');
+	const goalsView = currentGoalsView();
+	const summaryGoalsPage = goalsView === 'summary';
+	const completedGoalsPage = goalsView === 'completed';
 	
+	initGoalAjaxForms();
+
 	if (summaryGoalsPage) {
 		const btn = document.getElementById('load-more-btn');
 		if (btn) {
