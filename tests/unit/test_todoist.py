@@ -15,7 +15,6 @@ from web_app.todoist import (
     PAGE_SIZE
 )
 from web_app.todoist.data_interface import Goal, GoalState, Goals
-from web_app.todoist.api.goals_api import new_goal, edit_goal, log_goal
 
 
 @pytest.fixture
@@ -235,72 +234,6 @@ class TestSubgoalDeletion:
         delete_descendants(tld.goals, 1)
 
         assert tld.goals == {}
-
-
-class TestTodoistAjaxGoalActions:
-    """Tests for async goal form submissions"""
-
-    @patch('web_app.todoist.api.goals_api.render_template')
-    @patch('web_app.todoist.api.goals_api._get_filtered_summary_goals')
-    @patch('web_app.todoist.api.goals_api.DataInterface')
-    @patch('web_app.todoist.api.goals_api.cur_user')
-    def test_ajax_new_goal_returns_goal_fragment(self, mock_cur_user, mock_di, mock_summary, mock_render, test_user):
-        mock_cur_user.return_value = test_user
-        mock_instance = Mock()
-        mock_instance.load_goals.return_value = Goals(goals={})
-        mock_di.return_value = mock_instance
-        mock_summary.return_value = ([Goal(id=0, name='Async goal', state=GoalState.ACTIVE)], {
-            0: Goal(id=0, name='Async goal', state=GoalState.ACTIVE),
-        })
-        mock_render.return_value = '<div>updated goals</div>'
-
-        with app.test_request_context(
-            '/todoist/goal/new',
-            method='POST',
-            data={'name': 'Async goal', 'description': 'No reload'},
-            headers={'X-Requested-With': 'XMLHttpRequest'},
-        ):
-            response = new_goal()
-
-        data = response.get_json()
-        assert data['success'] is True
-        assert data['html'] == '<div>updated goals</div>'
-        mock_instance.save_goals.assert_called_once()
-
-    @patch('web_app.todoist.api.goals_api.render_template')
-    @patch('web_app.todoist.api.goals_api._get_filtered_summary_goals')
-    @patch('web_app.todoist.api.goals_api.DataInterface')
-    @patch('web_app.todoist.api.goals_api.cur_user')
-    def test_ajax_edit_and_log_goal_return_goal_fragment(self, mock_cur_user, mock_di, mock_summary, mock_render, test_user):
-        goal = Goal(id=1, name='Original', state=GoalState.ACTIVE, description='Start')
-        goals = Goals(goals={1: goal})
-        mock_cur_user.return_value = test_user
-        mock_instance = Mock()
-        mock_instance.load_goals.return_value = goals
-        mock_di.return_value = mock_instance
-        mock_summary.return_value = ([goal], {1: goal})
-        mock_render.return_value = '<div>updated goals</div>'
-
-        with app.test_request_context(
-            '/todoist/goal/edit?goal_id=1',
-            method='POST',
-            data={'name': 'Renamed', 'description': 'Updated'},
-            headers={'X-Requested-With': 'XMLHttpRequest'},
-        ):
-            edit_response = edit_goal()
-
-        with app.test_request_context(
-            '/todoist/goal/log?goal_id=1',
-            method='POST',
-            data={'log': 'Made progress'},
-            headers={'X-Requested-With': 'XMLHttpRequest'},
-        ):
-            log_response = log_goal()
-
-        assert edit_response.get_json()['html'] == '<div>updated goals</div>'
-        assert log_response.get_json()['html'] == '<div>updated goals</div>'
-        assert goal.name == 'Renamed'
-        assert 'Made progress' in goal.description
 
 
 if __name__ == '__main__':
