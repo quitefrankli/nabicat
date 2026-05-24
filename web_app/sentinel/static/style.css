@@ -88,9 +88,22 @@
 
 .sentinel-final-report {
   margin-top: 0.75rem;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.55;
+}
+
+.sentinel-final-report > * {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.sentinel-final-report > :last-child {
+  margin-bottom: 0;
+}
+
+.sentinel-final-report ul,
+.sentinel-final-report ol {
+  padding-left: 1.4rem;
 }
 
 .sentinel-run-row {

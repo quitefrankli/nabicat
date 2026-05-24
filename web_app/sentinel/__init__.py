@@ -4,6 +4,8 @@ import re
 
 from flask import Blueprint, abort, jsonify, render_template, request, send_from_directory
 from flask_login import current_user, login_required
+from markdown_it import MarkdownIt
+from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
@@ -18,6 +20,8 @@ sentinel_api = Blueprint(
     static_folder="static",
     url_prefix="/sentinel",
 )
+
+_MD = MarkdownIt("commonmark", {"html": False})
 
 
 @sentinel_api.before_request
@@ -51,6 +55,16 @@ def _limit_from_report(report: dict) -> int:
     except (TypeError, ValueError):
         limit_s = cfg.sentinel_default_limit_mins * 60
     return max(min_seconds, min(limit_s, max_seconds))
+
+
+def _render_final_report(markdown_text: str) -> Markup:
+    return Markup(_MD.render(markdown_text or ""))
+
+
+def _report_payload(report: dict) -> dict:
+    payload = dict(report)
+    payload["final_report_html"] = str(_render_final_report(str(report.get("final_report", ""))))
+    return payload
 
 
 @sentinel_api.route("/")
@@ -87,7 +101,7 @@ def run_status(run_id: str):
     report = get_run(run_id)
     if report is None:
         abort(404)
-    return jsonify(report)
+    return jsonify(_report_payload(report))
 
 
 @sentinel_api.route("/api/runs/<run_id>/rerun", methods=["POST"])
@@ -109,7 +123,7 @@ def report(run_id: str):
     report_data = get_run(run_id)
     if report_data is None:
         abort(404)
-    return render_template("sentinel_report.html", report=report_data)
+    return render_template("sentinel_report.html", report=_report_payload(report_data))
 
 
 @sentinel_api.route("/report/<run_id>/json")
@@ -117,7 +131,7 @@ def report_json(run_id: str):
     report_data = get_run(run_id)
     if report_data is None:
         abort(404)
-    return jsonify(report_data)
+    return jsonify(_report_payload(report_data))
 
 
 @sentinel_api.route("/report/<run_id>/screenshots/<filename>")

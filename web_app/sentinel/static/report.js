@@ -34,7 +34,7 @@ function renderReport(report) {
   if (screenshotCount) screenshotCount.textContent = report.screenshots.length;
 
   if (finalReport) {
-    finalReport.textContent = report.final_report || 'Final report will appear when the run completes.';
+    finalReport.innerHTML = report.final_report_html || '<div class="sentinel-empty sentinel-empty-small">Final report will appear when the run completes.</div>';
   }
 
   if (steps) {

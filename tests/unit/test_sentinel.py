@@ -5,7 +5,7 @@ import pytest
 from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.helpers import limiter
-from web_app.sentinel import _limit_from_report, _limit_from_request
+from web_app.sentinel import _limit_from_report, _limit_from_request, _report_payload
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.runner import _add_finding, _build_codex_cmd, _codex_text, _final_report_prompt, _host_allowed
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
@@ -153,6 +153,15 @@ def test_final_report_prompt_directly_includes_original_prompt():
 
     assert "Does checkout work?" in prompt
     assert "Button failed" in prompt
+
+
+def test_report_payload_renders_final_report_markdown_without_html():
+    payload = _report_payload({"final_report": "## Summary\n\n- **Works**\n<script>alert(1)</script>"})
+
+    assert "<h2>Summary</h2>" in payload["final_report_html"]
+    assert "<strong>Works</strong>" in payload["final_report_html"]
+    assert "<script>" not in payload["final_report_html"]
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in payload["final_report_html"]
 
 
 def test_sentinel_routes_require_admin_and_start_run(client):
