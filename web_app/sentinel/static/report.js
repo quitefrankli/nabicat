@@ -4,6 +4,7 @@ function renderBadge(status) {
 
 let sentinelLightbox;
 let sentinelLightboxImage;
+let sentinelScreenshotLoader;
 
 function escapeText(value) {
   return String(value ?? '').replace(/[&<>"']/g, function (char) {
@@ -68,10 +69,103 @@ function renderReport(report) {
       const filename = shot.split('/').pop();
       const url = `/sentinel/report/${report.run_id}/screenshots/${filename}`;
       return `<button class="sentinel-screenshot-btn" type="button" data-full="${url}">
-        <img src="${url}" alt="QA screenshot">
+        <img loading="lazy" decoding="async"
+             src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+             data-screenshot-src="${url}" alt="QA screenshot">
       </button>`;
     }).join('') : '<div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>';
+    setupScreenshotLoading(report);
     bindScreenshotButtons();
+  }
+}
+
+function setupScreenshotLoading(report) {
+  const shell = document.querySelector('[data-run-id]');
+  const screenshotImages = Array.from(document.querySelectorAll('img[data-screenshot-src]'));
+  if (!shell || screenshotImages.length === 0) return;
+
+  const fallback = function (value, defaultValue) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+  };
+  const staggerMs = fallback(report?.screenshot_load_stagger_ms ?? shell.dataset.screenshotStaggerMs, 200);
+  const maxRetries = fallback(report?.screenshot_load_max_retries ?? shell.dataset.screenshotMaxRetries, 3);
+  const retryDelayMs = fallback(report?.screenshot_load_retry_delay_ms ?? shell.dataset.screenshotRetryDelayMs, 1000);
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  if (sentinelScreenshotLoader) {
+    sentinelScreenshotLoader.disconnect();
+    sentinelScreenshotLoader = null;
+  }
+
+  const loadImageAttempt = (img, url) => new Promise((resolve, reject) => {
+    const onLoad = () => {
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
+      img.dataset.loaded = 'true';
+      resolve();
+    };
+    const onError = () => {
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
+      reject(new Error('screenshot load failed'));
+    };
+
+    img.addEventListener('load', onLoad);
+    img.addEventListener('error', onError);
+    img.src = url;
+  });
+
+  const loadWithRetries = async (img, screenshotSrc) => {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const suffix = attempt > 0
+        ? `${screenshotSrc.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}`
+        : '';
+      try {
+        await loadImageAttempt(img, `${screenshotSrc}${suffix}`);
+        return;
+      } catch (_) {
+        if (attempt >= maxRetries) return;
+        await sleep(retryDelayMs * (attempt + 1));
+      }
+    }
+  };
+
+  const queue = [];
+  const pending = new Set(screenshotImages);
+  let isProcessing = false;
+
+  const processQueue = async () => {
+    if (isProcessing) return;
+    isProcessing = true;
+    while (queue.length > 0) {
+      const img = queue.shift();
+      if (img && img.dataset.screenshotSrc && img.dataset.loaded !== 'true') {
+        await loadWithRetries(img, img.dataset.screenshotSrc);
+        await sleep(staggerMs);
+      }
+    }
+    isProcessing = false;
+  };
+
+  const enqueueImage = img => {
+    if (!pending.has(img)) return;
+    pending.delete(img);
+    queue.push(img);
+    processQueue();
+  };
+
+  if ('IntersectionObserver' in window) {
+    sentinelScreenshotLoader = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        sentinelScreenshotLoader.unobserve(entry.target);
+        enqueueImage(entry.target);
+      }
+    }, { root: null, rootMargin: '200px 0px', threshold: 0.01 });
+    screenshotImages.forEach(img => sentinelScreenshotLoader.observe(img));
+  } else {
+    screenshotImages.forEach(img => enqueueImage(img));
   }
 }
 
@@ -112,6 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!shell) return;
   const runId = shell.dataset.runId;
   const rerunButton = document.getElementById('sentinel-rerun-run');
+  setupScreenshotLoading();
   bindScreenshotButtons();
 
   if (rerunButton) {

@@ -32,6 +32,7 @@
     - Account for iOS Safari quirks: safe-area insets (`env(safe-area-inset-bottom)`), the dynamic bottom chrome hiding fixed elements, 100vh != viewport height, and touch vs. hover (`:hover` doesn't apply on touch — don't hide critical UI behind hover).
     - Touch targets should be large enough to tap (~40px min). Don't rely on hover-only tooltips for essential info.
     - Test behavior when the keyboard is open on mobile (fixed bottom bars can get covered).
+    - Thumbnail/image grids should not assign all real image URLs directly in HTML. Use the established file_store/Hammock pattern: render a tiny placeholder `src`, put the real URL in a data attribute, lazy-load with `IntersectionObserver`, serialize requests with a small stagger, and retry failed loads with cache-busting query params. Define stagger/retry constants in `ConfigManager`.
 
 * start every new session with "CLAUDE.md read!"
 

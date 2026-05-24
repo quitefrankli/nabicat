@@ -162,6 +162,9 @@ def test_report_payload_renders_final_report_markdown_without_html():
     assert "<strong>Works</strong>" in payload["final_report_html"]
     assert "<script>" not in payload["final_report_html"]
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in payload["final_report_html"]
+    assert payload["screenshot_load_stagger_ms"] == ConfigManager().sentinel_screenshot_load_stagger_ms
+    assert payload["screenshot_load_max_retries"] == ConfigManager().sentinel_screenshot_load_max_retries
+    assert payload["screenshot_load_retry_delay_ms"] == ConfigManager().sentinel_screenshot_load_retry_delay_ms
 
 
 def test_sentinel_routes_require_admin_and_start_run(client):

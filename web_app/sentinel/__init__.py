@@ -62,8 +62,12 @@ def _render_final_report(markdown_text: str) -> Markup:
 
 
 def _report_payload(report: dict) -> dict:
+    cfg = ConfigManager()
     payload = dict(report)
     payload["final_report_html"] = str(_render_final_report(str(report.get("final_report", ""))))
+    payload["screenshot_load_stagger_ms"] = cfg.sentinel_screenshot_load_stagger_ms
+    payload["screenshot_load_max_retries"] = cfg.sentinel_screenshot_load_max_retries
+    payload["screenshot_load_retry_delay_ms"] = cfg.sentinel_screenshot_load_retry_delay_ms
     return payload
 
 

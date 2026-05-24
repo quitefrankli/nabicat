@@ -110,6 +110,9 @@ class ConfigManager:
         self.sentinel_final_report_max_chars = 4000
         self.sentinel_final_report_max_images = 4
         self.sentinel_final_report_timeout_s = 60.0
+        self.sentinel_screenshot_load_stagger_ms = 200
+        self.sentinel_screenshot_load_max_retries = 3
+        self.sentinel_screenshot_load_retry_delay_ms = 1000
         self.sentinel_codex_cli_command = "codex"
         self.sentinel_codex_model = ""
         self.sentinel_codex_cli_approval_policy = "never"
