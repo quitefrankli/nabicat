@@ -194,7 +194,7 @@ class TestMarkdownLifecycleAndAuthz:
 
 class TestGalleryUploadAndDelete:
     def test_video_max_height_defaults_to_720p(self):
-        assert ConfigManager().hammock_gallery_video_max_height_px == 720
+        assert ConfigManager().hammock.gallery_video_max_height_px == 720
 
     def test_add_then_delete_image_generates_thumb_and_updates_state(self, projects_dir):
         di = DataInterface()
@@ -341,7 +341,7 @@ class TestGalleryUploadAndDelete:
 
     def test_video_over_duration_limit_is_rejected(self, projects_dir, tmp_path, monkeypatch):
         from web_app.config import ConfigManager
-        monkeypatch.setattr(ConfigManager(), "hammock_gallery_video_max_duration_s", 0)
+        monkeypatch.setattr(ConfigManager().hammock, "gallery_video_max_duration_s", 0)
 
         di = DataInterface()
         alice = User("alice", "x", "fa", is_admin=False)
@@ -357,7 +357,7 @@ class TestGalleryUploadAndDelete:
 
     def test_quota_blocks_uploads_over_limit(self, projects_dir, monkeypatch):
         from web_app.config import ConfigManager
-        monkeypatch.setattr(ConfigManager(), "hammock_non_admin_quota_bytes", 1)
+        monkeypatch.setattr(ConfigManager().hammock, "non_admin_quota_bytes", 1)
 
         di = DataInterface()
         alice = User("alice", "x", "fa", is_admin=False)

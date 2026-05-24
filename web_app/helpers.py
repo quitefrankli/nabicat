@@ -362,7 +362,7 @@ def call_meridian(
     config = ConfigManager()
     headers = {"Content-Type": "application/json", "x-meridian-agent": agent}
     body = {
-        "model": model or config.llm_meridian_model,
+        "model": model or config.llm.meridian_model,
         "max_tokens": max_tokens,
         "system": system,
         "messages": messages,
@@ -371,7 +371,7 @@ def call_meridian(
         body["tools"] = tools
 
     try:
-        resp = http_requests.post(config.llm_meridian_url, headers=headers, json=body, timeout=timeout_s)
+        resp = http_requests.post(config.llm.meridian_url, headers=headers, json=body, timeout=timeout_s)
     except http_requests.RequestException as e:
         raise MeridianError(f"meridian unreachable: {e}") from e
 
@@ -424,14 +424,14 @@ def codex_cli_text(
     prompt = f"{instructions}\n\nUser request:\n{user_message}"
     with tempfile.NamedTemporaryFile("r+", encoding="utf-8") as output:
         cmd = [
-            config.crosswords_codex_cli_command,
+            config.crosswords.codex_cli_command,
             "-a",
-            config.crosswords_codex_cli_approval_policy,
+            config.crosswords.codex_cli_approval_policy,
             "exec",
             "--ephemeral",
             "--skip-git-repo-check",
             "--sandbox",
-            config.crosswords_codex_cli_sandbox,
+            config.crosswords.codex_cli_sandbox,
             "--output-last-message",
             output.name,
         ]
@@ -448,7 +448,7 @@ def codex_cli_text(
                 check=False,
             )
         except FileNotFoundError as e:
-            raise CodexCLIError(f"codex cli not found: {config.crosswords_codex_cli_command}") from e
+            raise CodexCLIError(f"codex cli not found: {config.crosswords.codex_cli_command}") from e
         except subprocess.TimeoutExpired as e:
             raise CodexCLIError(f"codex cli timed out after {timeout_s}s") from e
 

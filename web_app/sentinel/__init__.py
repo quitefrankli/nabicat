@@ -39,21 +39,21 @@ def inject_app_name():
 def _limit_from_request(raw_limit) -> int:
     cfg = ConfigManager()
     try:
-        limit_mins = int(raw_limit) if raw_limit not in (None, "") else cfg.sentinel_default_limit_mins
+        limit_mins = int(raw_limit) if raw_limit not in (None, "") else cfg.sentinel.default_limit_mins
     except (TypeError, ValueError):
-        limit_mins = cfg.sentinel_default_limit_mins
-    limit_mins = max(cfg.sentinel_min_limit_mins, min(limit_mins, cfg.sentinel_max_limit_mins))
+        limit_mins = cfg.sentinel.default_limit_mins
+    limit_mins = max(cfg.sentinel.min_limit_mins, min(limit_mins, cfg.sentinel.max_limit_mins))
     return limit_mins * 60
 
 
 def _limit_from_report(report: dict) -> int:
     cfg = ConfigManager()
-    min_seconds = cfg.sentinel_min_limit_mins * 60
-    max_seconds = cfg.sentinel_max_limit_mins * 60
+    min_seconds = cfg.sentinel.min_limit_mins * 60
+    max_seconds = cfg.sentinel.max_limit_mins * 60
     try:
-        limit_s = int(report.get("limit_s", cfg.sentinel_default_limit_mins * 60))
+        limit_s = int(report.get("limit_s", cfg.sentinel.default_limit_mins * 60))
     except (TypeError, ValueError):
-        limit_s = cfg.sentinel_default_limit_mins * 60
+        limit_s = cfg.sentinel.default_limit_mins * 60
     return max(min_seconds, min(limit_s, max_seconds))
 
 
@@ -65,9 +65,9 @@ def _report_payload(report: dict) -> dict:
     cfg = ConfigManager()
     payload = dict(report)
     payload["final_report_html"] = str(_render_final_report(str(report.get("final_report", ""))))
-    payload["screenshot_load_stagger_ms"] = cfg.sentinel_screenshot_load_stagger_ms
-    payload["screenshot_load_max_retries"] = cfg.sentinel_screenshot_load_max_retries
-    payload["screenshot_load_retry_delay_ms"] = cfg.sentinel_screenshot_load_retry_delay_ms
+    payload["screenshot_load_stagger_ms"] = cfg.sentinel.screenshot_load_stagger_ms
+    payload["screenshot_load_max_retries"] = cfg.sentinel.screenshot_load_max_retries
+    payload["screenshot_load_retry_delay_ms"] = cfg.sentinel.screenshot_load_retry_delay_ms
     return payload
 
 
@@ -76,11 +76,11 @@ def index():
     cfg = ConfigManager()
     return render_template(
         "sentinel_index.html",
-        runs=DataInterface().list_reports()[: cfg.sentinel_max_retained_runs],
-        default_limit=cfg.sentinel_default_limit_mins,
-        min_limit=cfg.sentinel_min_limit_mins,
-        max_limit=cfg.sentinel_max_limit_mins,
-        prompt_max_chars=cfg.sentinel_prompt_max_chars,
+        runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
+        default_limit=cfg.sentinel.default_limit_mins,
+        min_limit=cfg.sentinel.min_limit_mins,
+        max_limit=cfg.sentinel.max_limit_mins,
+        prompt_max_chars=cfg.sentinel.prompt_max_chars,
     )
 
 
@@ -89,7 +89,7 @@ def create_run():
     cfg = ConfigManager()
     payload = request.get_json(silent=True) or request.form
     raw_url = str(payload.get("url", "")).strip()
-    prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel_prompt_max_chars]
+    prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
     limit_s = _limit_from_request(payload.get("limit"))
 
     try:

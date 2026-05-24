@@ -448,11 +448,11 @@ class TestFileStoreBlueprint:
 
     def test_non_admin_max_storage_constant(self):
         """Test the storage limit constant"""
-        assert NON_ADMIN_MAX_STORAGE == ConfigManager().file_store_non_admin_quota_bytes
+        assert NON_ADMIN_MAX_STORAGE == ConfigManager().file_store.non_admin_quota_bytes
 
     def test_admin_max_storage_constant(self):
         """Test the admin storage limit constant"""
-        assert ADMIN_MAX_STORAGE == ConfigManager().file_store_admin_quota_bytes
+        assert ADMIN_MAX_STORAGE == ConfigManager().file_store.admin_quota_bytes
 
 
 if __name__ == '__main__':

@@ -15,7 +15,7 @@ from web_app.todoist.api.goals_api import goals_api
 from web_app.todoist.api.diary_api import diary_api
 
 
-PAGE_SIZE = ConfigManager().todoist_default_page_size
+PAGE_SIZE = ConfigManager().todoist.default_page_size
 
 todoist_api = Blueprint(
     'todoist_api',

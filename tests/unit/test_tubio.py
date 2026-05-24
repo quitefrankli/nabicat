@@ -72,7 +72,7 @@ class TestGetVideoInfo:
     @patch('web_app.tubio.audio_downloader.yt_dlp.YoutubeDL')
     @patch('web_app.tubio.audio_downloader.ConfigManager')
     def test_get_video_info_success(self, mock_config, mock_ydl_class):
-        mock_config.return_value.tudio_max_video_length = timedelta(minutes=30)
+        mock_config.return_value.tubio.max_video_length = timedelta(minutes=30)
 
         mock_ydl = MagicMock()
         mock_ydl.__enter__ = Mock(return_value=mock_ydl)
@@ -99,7 +99,7 @@ class TestGetVideoInfo:
     @patch('web_app.tubio.audio_downloader.yt_dlp.YoutubeDL')
     @patch('web_app.tubio.audio_downloader.ConfigManager')
     def test_get_video_info_cached(self, mock_config, mock_ydl_class):
-        mock_config.return_value.tudio_max_video_length = timedelta(minutes=30)
+        mock_config.return_value.tubio.max_video_length = timedelta(minutes=30)
 
         mock_ydl = MagicMock()
         mock_ydl.__enter__ = Mock(return_value=mock_ydl)
@@ -121,7 +121,7 @@ class TestGetVideoInfo:
     @patch('web_app.tubio.audio_downloader.yt_dlp.YoutubeDL')
     @patch('web_app.tubio.audio_downloader.ConfigManager')
     def test_get_video_info_too_long_raises_exception(self, mock_config, mock_ydl_class):
-        mock_config.return_value.tudio_max_video_length = timedelta(minutes=10)
+        mock_config.return_value.tubio.max_video_length = timedelta(minutes=10)
 
         mock_ydl = MagicMock()
         mock_ydl.__enter__ = Mock(return_value=mock_ydl)
@@ -155,7 +155,7 @@ class TestGetVideoInfo:
     @patch('web_app.tubio.audio_downloader.ConfigManager')
     def test_get_video_info_thumbnail_from_thumbnails_array(self, mock_config, mock_ydl_class):
         """Test that thumbnail is extracted from thumbnails array if main thumbnail is missing."""
-        mock_config.return_value.tudio_max_video_length = timedelta(minutes=30)
+        mock_config.return_value.tubio.max_video_length = timedelta(minutes=30)
 
         mock_ydl = MagicMock()
         mock_ydl.__enter__ = Mock(return_value=mock_ydl)

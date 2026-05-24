@@ -77,8 +77,8 @@ class AudioDownloader:
             'skip_download': True,
         }
 
-        if ConfigManager().tubio_cookie_path.exists():
-            ydl_opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        if ConfigManager().tubio.cookie_path.exists():
+            ydl_opts['cookiefile'] = str(ConfigManager().tubio.cookie_path)
         if ConfigManager().debug_mode:
             ydl_opts['nocheckcertificate'] = True
 
@@ -90,7 +90,7 @@ class AudioDownloader:
 
                 duration = info.get('duration', 0)
                 vid_length = timedelta(seconds=duration)
-                max_length = ConfigManager().tudio_max_video_length
+                max_length = ConfigManager().tubio.max_video_length
 
                 if vid_length > max_length:
                     raise VideoTooLongError(video_id, vid_length, max_length)
@@ -191,7 +191,7 @@ class AudioDownloader:
                 if not length_txt:
                     continue
                 vid_length = AudioDownloader.get_vid_length(length_txt)
-                if vid_length > ConfigManager().tudio_max_video_length:
+                if vid_length > ConfigManager().tubio.max_video_length:
                     continue
                 vid_id = video.get('videoId')
                 cached = vid_id in cached_yt_vid_ids
@@ -219,8 +219,8 @@ class AudioDownloader:
                     "thumbnail_url": thumbnail_url,
                 })
 
-        page_size = ConfigManager().tudio_max_results
-        max_pages = ConfigManager().tubio_max_search_pages
+        page_size = ConfigManager().tubio.max_results
+        max_pages = ConfigManager().tubio.max_search_pages
         total_pages = min(max_pages, max(1, (len(all_results) + page_size - 1) // page_size))
         page = max(0, min(page, total_pages - 1))
         start = page * page_size
@@ -265,9 +265,9 @@ class AudioDownloader:
         }
         if progress_hooks:
             opts['progress_hooks'] = progress_hooks
-        if ConfigManager().tubio_cookie_path.exists() and not ConfigManager().debug_mode:
-            logging.info(f"Using cookie file: {ConfigManager().tubio_cookie_path}")
-            opts['cookiefile'] = str(ConfigManager().tubio_cookie_path)
+        if ConfigManager().tubio.cookie_path.exists() and not ConfigManager().debug_mode:
+            logging.info(f"Using cookie file: {ConfigManager().tubio.cookie_path}")
+            opts['cookiefile'] = str(ConfigManager().tubio.cookie_path)
         if ConfigManager().debug_mode:
             opts['nocheckcertificate'] = True
         return opts

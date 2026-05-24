@@ -270,7 +270,7 @@ class DataInterface(BaseDataInterface):
 
     def quota_bytes(self, user: User) -> int:
         cfg = ConfigManager()
-        return cfg.hammock_admin_quota_bytes if user.is_admin else cfg.hammock_non_admin_quota_bytes
+        return cfg.hammock.admin_quota_bytes if user.is_admin else cfg.hammock.non_admin_quota_bytes
 
     def check_quota(self, user: User, additional_bytes: int) -> None:
         used = self.user_storage_bytes(user.id)
@@ -285,9 +285,9 @@ class DataInterface(BaseDataInterface):
 
     def create_markdown_post(self, user: User, project_input: str, title: str, source_md: str) -> tuple[str, str]:
         cfg = ConfigManager()
-        self._validate_text(project_input, "Project name", cfg.hammock_project_slug_max_chars)
-        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
-        source_md = self._validate_text(source_md, "Markdown", cfg.hammock_markdown_max_chars)
+        self._validate_text(project_input, "Project name", cfg.hammock.project_slug_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
+        source_md = self._validate_text(source_md, "Markdown", cfg.hammock.markdown_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
             raise APIError("Title is required")
@@ -311,8 +311,8 @@ class DataInterface(BaseDataInterface):
 
     def update_markdown_post(self, project: str, post: str, title: str, source_md: str) -> None:
         cfg = ConfigManager()
-        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
-        source_md = self._validate_text(source_md, "Markdown", cfg.hammock_markdown_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
+        source_md = self._validate_text(source_md, "Markdown", cfg.hammock.markdown_max_chars)
         post_dir = self._post_dir(project, post)
         meta = self._post_entry(project, post)
         if meta.get("type") != "markdown":
@@ -331,9 +331,9 @@ class DataInterface(BaseDataInterface):
 
     def create_gallery_post(self, user: User, project_input: str, title: str, description: str) -> tuple[str, str]:
         cfg = ConfigManager()
-        self._validate_text(project_input, "Project name", cfg.hammock_project_slug_max_chars)
-        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
-        description = self._validate_text(description, "Description", cfg.hammock_description_max_chars)
+        self._validate_text(project_input, "Project name", cfg.hammock.project_slug_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
+        description = self._validate_text(description, "Description", cfg.hammock.description_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
             raise APIError("Title is required")
@@ -380,8 +380,8 @@ class DataInterface(BaseDataInterface):
 
     def update_gallery_meta(self, project: str, post: str, title: str, description: str) -> None:
         cfg = ConfigManager()
-        title = self._validate_text(title, "Title", cfg.hammock_title_max_chars)
-        description = self._validate_text(description, "Description", cfg.hammock_description_max_chars)
+        title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
+        description = self._validate_text(description, "Description", cfg.hammock.description_max_chars)
         meta = self._post_entry(project, post)
         if meta.get("type") != "gallery":
             raise APIError("Post is not a gallery post")
@@ -441,7 +441,7 @@ class DataInterface(BaseDataInterface):
                 prepared.append(PreparedGalleryUpload(media_type, candidate, image_data, safe, ext))
                 total_new_bytes += len(image_data)
             else:
-                if len(data) > ConfigManager().hammock_gallery_video_max_upload_bytes:
+                if len(data) > ConfigManager().hammock.gallery_video_max_upload_bytes:
                     raise APIError(f"Video {fs.filename} is too large")
                 prepared.append(PreparedGalleryUpload(media_type, candidate, data, safe, ext))
                 total_new_bytes += len(data)
@@ -517,16 +517,16 @@ class DataInterface(BaseDataInterface):
         # Enforce a per-process decoded-pixel ceiling so a small file can't
         # decompress into gigabytes of RGB data. Pillow raises
         # DecompressionBombError at 2x this value automatically.
-        Image.MAX_IMAGE_PIXELS = cfg.hammock_max_image_pixels
+        Image.MAX_IMAGE_PIXELS = cfg.hammock.max_image_pixels
         try:
             with Image.open(BytesIO(data)) as img:
                 img = ImageOps.exif_transpose(img)
                 if img.mode not in ("RGB", "RGBA"):
                     img = img.convert("RGB")
-                max_px = cfg.hammock_gallery_thumb_max_px
+                max_px = cfg.hammock.gallery_thumb_max_px
                 img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
                 out = BytesIO()
-                img.save(out, "WEBP", quality=cfg.hammock_gallery_thumb_quality, method=6)
+                img.save(out, "WEBP", quality=cfg.hammock.gallery_thumb_quality, method=6)
                 return out.getvalue()
         except Image.DecompressionBombError as e:
             logging.warning(f"Hammock thumbnail rejected (pixel bomb) for {filename}: {e}")
@@ -561,7 +561,7 @@ class DataInterface(BaseDataInterface):
                 "-of", "json",
                 str(src),
             ],
-            cfg.hammock_gallery_video_transcode_timeout_s,
+            cfg.hammock.gallery_video_transcode_timeout_s,
             f"Could not process {display_name} as a video",
         )
         try:
@@ -585,15 +585,15 @@ class DataInterface(BaseDataInterface):
         if duration is None:
             logging.warning(f"Hammock video duration unavailable for {display_name}; continuing to transcode")
             return
-        if duration > cfg.hammock_gallery_video_max_duration_s:
+        if duration > cfg.hammock.gallery_video_max_duration_s:
             raise APIError(
                 f"Video {display_name} is too long "
-                f"(max {cfg.hammock_gallery_video_max_duration_s} seconds)"
+                f"(max {cfg.hammock.gallery_video_max_duration_s} seconds)"
             )
 
     def _transcode_video(self, src: Path, dst: Path, display_name: str) -> None:
         cfg = ConfigManager()
-        max_height = cfg.hammock_gallery_video_max_height_px
+        max_height = cfg.hammock.gallery_video_max_height_px
         vf = (
             f"scale='trunc(iw*min(1,{max_height}/ih)/2)*2':"
             f"'trunc(ih*min(1,{max_height}/ih)/2)*2',"
@@ -618,7 +618,7 @@ class DataInterface(BaseDataInterface):
                 "-movflags", "+faststart",
                 str(dst),
             ],
-            cfg.hammock_gallery_video_transcode_timeout_s,
+            cfg.hammock.gallery_video_transcode_timeout_s,
             f"Could not process {display_name} as a video",
         )
 
@@ -685,9 +685,9 @@ class DataInterface(BaseDataInterface):
         desc_block = f'<p class="hammock-gallery-desc">{description}</p>' if description else ""
         return (
             f'<article class="hammock-post hammock-gallery" '
-            f'data-gallery-stagger-ms="{cfg.hammock_gallery_image_stagger_ms}" '
-            f'data-gallery-max-retries="{cfg.hammock_gallery_image_max_retries}" '
-            f'data-gallery-retry-delay-ms="{cfg.hammock_gallery_image_retry_delay_ms}">'
+            f'data-gallery-stagger-ms="{cfg.hammock.gallery_image_stagger_ms}" '
+            f'data-gallery-max-retries="{cfg.hammock.gallery_image_max_retries}" '
+            f'data-gallery-retry-delay-ms="{cfg.hammock.gallery_image_retry_delay_ms}">'
             f'<header class="hammock-post-header">'
             f'<h1>{title}</h1>'
             f'{self._render_byline(meta)}'

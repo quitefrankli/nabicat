@@ -170,38 +170,38 @@ def test_codex_source_parses_cli_text():
 
 def test_theme_check_allows_codex_yes_after_meridian_no():
     prev = ConfigManager().debug_mode
-    prev_source = ConfigManager().llm_api_source
+    prev_source = ConfigManager().llm.api_source
     ConfigManager().debug_mode = False
-    ConfigManager().llm_api_source = 'codex'
+    ConfigManager().llm.api_source = 'codex'
     try:
         with patch('web_app.crosswords.theme_check.is_real_word_codex', return_value=True):
             require_real_word('cats')
     finally:
         ConfigManager().debug_mode = prev
-        ConfigManager().llm_api_source = prev_source
+        ConfigManager().llm.api_source = prev_source
 
 
 def test_default_source_uses_configured_provider():
     cfg = ConfigManager()
     prev_debug = cfg.debug_mode
-    prev_source = cfg.llm_api_source
+    prev_source = cfg.llm.api_source
     cfg.debug_mode = False
     try:
-        cfg.llm_api_source = 'meridian'
+        cfg.llm.api_source = 'meridian'
         source = default_source()
         assert isinstance(source, ChainedSource)
         assert isinstance(source._sources[0], MeridianSource)
 
-        cfg.llm_api_source = 'codex'
+        cfg.llm.api_source = 'codex'
         source = default_source()
         assert isinstance(source, ChainedSource)
         assert isinstance(source._sources[0], CodexSource)
 
-        cfg.llm_api_source = 'hardcoded'
+        cfg.llm.api_source = 'hardcoded'
         assert isinstance(default_source(), FallbackSource)
     finally:
         cfg.debug_mode = prev_debug
-        cfg.llm_api_source = prev_source
+        cfg.llm.api_source = prev_source
 
 
 def test_chained_source_falls_back_when_primary_empty():

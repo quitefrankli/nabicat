@@ -24,7 +24,7 @@ def theme_criteria() -> str:
     cfg = ConfigManager()
     return (
         f"Theme must be a single word "
-        f"({cfg.crosswords_theme_min_len}-{cfg.crosswords_theme_max_len} letters, "
+        f"({cfg.crosswords.theme_min_len}-{cfg.crosswords.theme_max_len} letters, "
         "no spaces, hyphens, numbers, or punctuation)."
     )
 
@@ -47,10 +47,10 @@ def validate_theme(theme: str | None) -> str:
         raise InvalidThemeError("Theme is required.")
     if not candidate.isalpha():
         raise InvalidThemeError("Theme must contain letters only — no spaces, hyphens, digits, or punctuation.")
-    if len(candidate) < cfg.crosswords_theme_min_len or len(candidate) > cfg.crosswords_theme_max_len:
+    if len(candidate) < cfg.crosswords.theme_min_len or len(candidate) > cfg.crosswords.theme_max_len:
         raise InvalidThemeError(
-            f"Theme must be between {cfg.crosswords_theme_min_len} and "
-            f"{cfg.crosswords_theme_max_len} letters long."
+            f"Theme must be between {cfg.crosswords.theme_min_len} and "
+            f"{cfg.crosswords.theme_max_len} letters long."
         )
     return candidate.lower()
 
@@ -269,5 +269,5 @@ def clamp_difficulty(difficulty: int) -> int:
     try:
         d = int(difficulty)
     except (TypeError, ValueError):
-        return cfg.crosswords_default_difficulty
-    return max(cfg.crosswords_difficulty_min, min(cfg.crosswords_difficulty_max, d))
+        return cfg.crosswords.default_difficulty
+    return max(cfg.crosswords.difficulty_min, min(cfg.crosswords.difficulty_max, d))

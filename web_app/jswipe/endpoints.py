@@ -50,7 +50,7 @@ class RapidAPIActiveJobsDB(BaseEndPoint):
     def _get_headers(self) -> dict:
         """Get the required headers for API requests."""
         return {
-            "X-RapidAPI-Key": ConfigManager().jswipe_api_key,
+            "X-RapidAPI-Key": ConfigManager().jswipe.api_key,
             "X-RapidAPI-Host": self.HOST,
         }
     

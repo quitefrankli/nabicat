@@ -66,10 +66,10 @@ def _recent_tags(entries: Iterable[Entry]) -> list[str]:
                 last_used[tag] = entry.last_modified
 
     ordered = sorted(last_used.keys(), key=lambda t: last_used[t], reverse=True)
-    for default_tag in config.diary_default_tags:
+    for default_tag in config.diary.default_tags:
         if default_tag not in last_used:
             ordered.append(default_tag)
-    return ordered[:config.diary_tag_dropdown_limit]
+    return ordered[:config.diary.tag_dropdown_limit]
 
 
 @diary_api.route('/', methods=['GET'])

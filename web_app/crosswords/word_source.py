@@ -105,9 +105,9 @@ class MeridianSource(WordSource):
             text = meridian_text(
                 user_message=prompt,
                 system=self._SYSTEM,
-                model=config.crosswords_model,
-                max_tokens=config.crosswords_generation_max_tokens,
-                timeout_s=self._timeout or config.crosswords_generation_timeout_s,
+                model=config.crosswords.model,
+                max_tokens=config.crosswords.generation_max_tokens,
+                timeout_s=self._timeout or config.crosswords.generation_timeout_s,
                 agent="crosswords",
             )
         except MeridianError as e:
@@ -138,8 +138,8 @@ class CodexSource(WordSource):
             text = codex_cli_text(
                 user_message=prompt,
                 instructions=self._SYSTEM,
-                model=config.crosswords_codex_model,
-                timeout_s=self._timeout or config.crosswords_generation_timeout_s,
+                model=config.crosswords.codex_model,
+                timeout_s=self._timeout or config.crosswords.generation_timeout_s,
             )
         except CodexCLIError as e:
             logging.warning("CodexSource: %s", e)
@@ -158,7 +158,7 @@ class ChainedSource(WordSource):
         self._min_pairs = min_pairs
 
     def get_pairs(self, theme: str, difficulty: int, count: int) -> List[WordClue]:
-        min_pairs = self._min_pairs if self._min_pairs is not None else ConfigManager().crosswords_min_placed_words
+        min_pairs = self._min_pairs if self._min_pairs is not None else ConfigManager().crosswords.min_placed_words
         for source in self._sources:
             source_name = source.__class__.__name__
             logging.info("Crosswords trying %s for theme=%s difficulty=%s count=%s", source_name, theme, difficulty, count)
@@ -217,7 +217,7 @@ def default_source() -> WordSource:
     if config.debug_mode:
         return ChainedSource([DebugSource(), FallbackSource()])
 
-    provider = config.llm_api_source.lower()
+    provider = config.llm.api_source.lower()
     if provider == "meridian":
         return ChainedSource([MeridianSource(), FallbackSource()])
     if provider == "codex":
@@ -226,5 +226,5 @@ def default_source() -> WordSource:
         logging.info("Crosswords using hardcoded provider")
         return FallbackSource()
 
-    logging.warning("Unknown llm_api_source=%r; using hardcoded fallback", config.llm_api_source)
+    logging.warning("Unknown llm_api_source=%r; using hardcoded fallback", config.llm.api_source)
     return FallbackSource()
