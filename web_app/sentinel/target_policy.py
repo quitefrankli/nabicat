@@ -45,9 +45,6 @@ def validate_public_web_url(raw_url: str) -> ValidatedTarget:
         raise TargetValidationError("URL must start with http:// or https://")
     if not parsed.hostname:
         raise TargetValidationError("URL must include a valid host")
-    if parsed.username or parsed.password:
-        raise TargetValidationError("URL credentials are not supported")
-
     hostname = parsed.hostname.rstrip(".").lower()
     if hostname in {"localhost", "localhost.localdomain"}:
         raise TargetValidationError("Local targets are not allowed")
@@ -60,7 +57,9 @@ def validate_public_web_url(raw_url: str) -> ValidatedTarget:
             if _is_blocked_ip(ip):
                 raise TargetValidationError("Target resolves to a private or local address")
 
-    normalized_netloc = hostname
+    host_for_netloc = f"[{hostname}]" if ":" in hostname else hostname
+    userinfo = f"{parsed.netloc.rsplit('@', 1)[0]}@" if "@" in parsed.netloc else ""
+    normalized_netloc = f"{userinfo}{host_for_netloc}"
     if parsed.port:
         normalized_netloc = f"{normalized_netloc}:{parsed.port}"
     normalized = urlunparse(

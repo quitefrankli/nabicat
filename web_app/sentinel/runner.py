@@ -29,7 +29,9 @@ _SYSTEM = (
     "{\"action\":\"wait\",\"reason\":\"...\"}, "
     "{\"action\":\"finish\",\"reason\":\"...\"}. "
     "Prefer exploring core navigation, forms, buttons, and obvious broken states. "
-    "Do not attempt login, payment, destructive account actions, or credential entry."
+    "Do not attempt payment or destructive account actions. "
+    "Only attempt login, account registration, or credential entry when the user's prompt explicitly asks for it, "
+    "and use synthetic test values."
 )
 
 _REPORT_SYSTEM = (
@@ -106,6 +108,7 @@ def _run_background(report: dict) -> None:
 
 def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) -> list[str]:
     cfg = ConfigManager()
+    permissions_profile = cfg.sentinel_codex_permissions_profile
     cmd = [
         cfg.sentinel_codex_cli_command,
         "-a",
@@ -113,8 +116,15 @@ def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) ->
         "exec",
         "--ephemeral",
         "--skip-git-repo-check",
-        "--sandbox",
-        cfg.sentinel_codex_cli_sandbox,
+        "--ignore-rules",
+        "-c",
+        "project_doc_max_bytes=0",
+        "-c",
+        "project_doc_fallback_filenames=[]",
+        "-c",
+        f"default_permissions={json.dumps(permissions_profile)}",
+        "-c",
+        f'permissions.{permissions_profile}.filesystem.:minimal="read"',
     ]
     for image_path in image_paths or []:
         if image_path.exists():

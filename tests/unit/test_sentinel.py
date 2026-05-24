@@ -2,12 +2,12 @@ from unittest.mock import patch
 
 import pytest
 
-import web_app.__main__ as main_module
 from web_app.app import app
+from web_app.config import ConfigManager
 from web_app.helpers import limiter
 from web_app.sentinel import _limit_from_report, _limit_from_request
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
-from web_app.sentinel.runner import _add_finding, _build_codex_cmd, _final_report_prompt, _host_allowed
+from web_app.sentinel.runner import _add_finding, _build_codex_cmd, _codex_text, _final_report_prompt, _host_allowed
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 from web_app.users import User
 
@@ -43,6 +43,10 @@ def test_validate_public_web_url_rejects_local_and_private_targets():
     with patch("web_app.sentinel.target_policy.socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
         assert validate_public_web_url("https://example.com/path").url == "https://example.com/path"
         assert validate_public_web_url("example.com/path").url == "https://example.com/path"
+        assert (
+            validate_public_web_url("https://user:pass@example.com/path").url
+            == "https://user:pass@example.com/path"
+        )
 
 
 def test_parse_agent_action_allows_only_known_actions_and_elements():
@@ -75,6 +79,47 @@ def test_codex_command_includes_screenshot_images(tmp_path):
     assert "--image" in cmd
     assert str(image) in cmd
     assert cmd.index("--image") < cmd.index("--output-last-message")
+
+
+def test_codex_command_disables_project_docs_and_uses_minimal_permissions(tmp_path):
+    cmd = _build_codex_cmd(str(tmp_path / "out.txt"))
+
+    assert "-c" in cmd
+    assert "project_doc_max_bytes=0" in cmd
+    assert "project_doc_fallback_filenames=[]" in cmd
+    assert 'default_permissions="sentinel_qa"' in cmd
+    assert 'permissions.sentinel_qa.filesystem.:minimal="read"' in cmd
+    assert "--sandbox" not in cmd
+    assert "--ignore-rules" in cmd
+
+
+def test_codex_runs_from_project_dir_with_project_docs_disabled():
+    class DummyOutput:
+        name = "/tmp/sentinel-output.txt"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def seek(self, _pos):
+            return None
+
+        def read(self):
+            return "done"
+
+    with patch("web_app.sentinel.runner.tempfile.NamedTemporaryFile", return_value=DummyOutput()), patch(
+        "web_app.sentinel.runner.subprocess.run"
+    ) as mock_run:
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stderr = ""
+        mock_run.return_value.stdout = ""
+
+        _codex_text("system", "prompt", image_paths=None, timeout_s=1)
+
+    assert mock_run.call_args.kwargs["cwd"] == str(ConfigManager().project_dir)
+    assert "project_doc_max_bytes=0" in mock_run.call_args.args[0]
 
 
 def test_time_limit_input_is_minutes_capped_at_ten():

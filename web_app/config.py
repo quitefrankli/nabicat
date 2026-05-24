@@ -112,8 +112,8 @@ class ConfigManager:
         self.sentinel_final_report_timeout_s = 60.0
         self.sentinel_codex_cli_command = "codex"
         self.sentinel_codex_model = ""
-        self.sentinel_codex_cli_sandbox = "read-only"
         self.sentinel_codex_cli_approval_policy = "never"
+        self.sentinel_codex_permissions_profile = "sentinel_qa"
         self.sentinel_codex_step_timeout_s = 45.0
 
         # Hammock
