@@ -53,23 +53,23 @@
     </div>
   </section>
 
-  <section class="sentinel-panel">
-    <div class="sentinel-section-title">
-      <h2>Findings</h2>
+  <details class="sentinel-panel sentinel-diagnostics">
+    <summary class="sentinel-section-title">
+      <h2>Diagnostics</h2>
       <span id="sentinel-findings-count">{{ report.findings|length }}</span>
-    </div>
+    </summary>
     <div id="sentinel-findings" class="sentinel-findings">
       {% for finding in report.findings %}
-        <div class="sentinel-finding">
+        <p class="sentinel-finding-line">
           <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
           <strong>{{ finding.title }}</strong>
-          <p>{{ finding.detail }}</p>
-        </div>
+          <span>{{ finding.detail }}</span>
+        </p>
       {% else %}
-        <div class="sentinel-empty sentinel-empty-small">No findings recorded yet.</div>
+        <div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>
       {% endfor %}
     </div>
-  </section>
+  </details>
 
   <section class="sentinel-panel">
     <div class="sentinel-section-title">
@@ -83,7 +83,10 @@
           <div>
             <strong>{{ step.action }}</strong>
             <p>{{ step.reason }}</p>
-            <code>{{ step.result }}</code>
+            <details class="sentinel-step-result">
+              <summary>Details</summary>
+              <code>{{ step.result }}</code>
+            </details>
           </div>
         </article>
       {% else %}

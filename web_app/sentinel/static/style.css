@@ -158,6 +158,25 @@
   background: var(--hw-sage-dark);
 }
 
+.sentinel-diagnostics summary {
+  cursor: pointer;
+}
+
+.sentinel-diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+.sentinel-diagnostics summary::after {
+  content: "Show";
+  color: var(--hw-text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.sentinel-diagnostics[open] summary::after {
+  content: "Hide";
+}
+
 .sentinel-step,
 .sentinel-finding {
   display: grid;
@@ -184,6 +203,35 @@
   overflow: hidden;
 }
 
+.sentinel-finding-line {
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--hw-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sentinel-finding-line .sentinel-badge {
+  flex: 0 0 auto;
+  min-height: 1.35rem;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.sentinel-finding-line strong {
+  flex: 0 0 auto;
+  color: var(--hw-text-primary);
+}
+
+.sentinel-finding-line span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sentinel-step {
   grid-template-columns: 2rem 1fr;
 }
@@ -205,6 +253,17 @@
   margin-top: 0.35rem;
   white-space: pre-wrap;
   color: var(--hw-moss);
+}
+
+.sentinel-step-result {
+  margin-top: 0.35rem;
+}
+
+.sentinel-step-result summary {
+  cursor: pointer;
+  color: var(--hw-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .sentinel-screenshots {

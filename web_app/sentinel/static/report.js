@@ -44,7 +44,10 @@ function renderReport(report) {
         <div>
           <strong>${escapeText(step.action)}</strong>
           <p>${escapeText(step.reason)}</p>
-          <code>${escapeText(JSON.stringify(step.result))}</code>
+          <details class="sentinel-step-result">
+            <summary>Details</summary>
+            <code>${escapeText(JSON.stringify(step.result))}</code>
+          </details>
         </div>
       </article>`;
     }).join('') : '<div class="sentinel-empty sentinel-empty-small">Waiting for the first browser action.</div>';
@@ -52,12 +55,12 @@ function renderReport(report) {
 
   if (findings) {
     findings.innerHTML = report.findings.length ? report.findings.map(function (finding) {
-      return `<div class="sentinel-finding">
+      return `<p class="sentinel-finding-line">
         ${renderBadge(escapeText(finding.severity))}
         <strong>${escapeText(finding.title)}</strong>
-        <p>${escapeText(finding.detail)}</p>
-      </div>`;
-    }).join('') : '<div class="sentinel-empty sentinel-empty-small">No findings recorded yet.</div>';
+        <span>${escapeText(finding.detail)}</span>
+      </p>`;
+    }).join('') : '<div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>';
   }
 
   if (screenshots) {
