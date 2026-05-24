@@ -562,7 +562,7 @@ audio::-webkit-media-controls-panel {
    isn't hidden behind iOS Safari's bottom browser chrome. */
 @media (max-width: 768px) {
   :root {
-    --tubio-trackbar-offset: 56px;
+    --tubio-trackbar-offset: 20px;
   }
 }
 
@@ -763,4 +763,3 @@ audio::-webkit-media-controls-panel {
     right: 0.75rem;
   }
 }
-
