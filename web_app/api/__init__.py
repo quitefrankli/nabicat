@@ -222,7 +222,7 @@ def api_upload_cookie():
     if not cookie:
         return jsonify({"error": "Missing cookie data"}), 400
 
-    APIDataInterface().atomic_write(ConfigManager().tubio_cookie_path, 
+    APIDataInterface().atomic_write(ConfigManager().tubio.cookie_path, 
                                     data=cookie.encode('utf-8'), 
                                     mode="wb")
 

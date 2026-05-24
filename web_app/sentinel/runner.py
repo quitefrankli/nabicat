@@ -108,11 +108,11 @@ def _run_background(report: dict) -> None:
 
 def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) -> list[str]:
     cfg = ConfigManager()
-    permissions_profile = cfg.sentinel_codex_permissions_profile
+    permissions_profile = cfg.sentinel.codex_permissions_profile
     cmd = [
-        cfg.sentinel_codex_cli_command,
+        cfg.sentinel.codex_cli_command,
         "-a",
-        cfg.sentinel_codex_cli_approval_policy,
+        cfg.sentinel.codex_cli_approval_policy,
         "exec",
         "--ephemeral",
         "--skip-git-repo-check",
@@ -130,8 +130,8 @@ def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) ->
         if image_path.exists():
             cmd.extend(["--image", str(image_path)])
     cmd.extend(["--output-last-message", output_path])
-    if cfg.sentinel_codex_model:
-        cmd.extend(["--model", cfg.sentinel_codex_model])
+    if cfg.sentinel.codex_model:
+        cmd.extend(["--model", cfg.sentinel.codex_model])
     return cmd
 
 
@@ -164,7 +164,7 @@ def _codex_agent_text(user_message: str, image_paths: list[Path] | None = None) 
         system=_SYSTEM,
         user_message=user_message,
         image_paths=image_paths,
-        timeout_s=ConfigManager().sentinel_codex_step_timeout_s,
+        timeout_s=ConfigManager().sentinel.codex_step_timeout_s,
     )
 
 
@@ -173,7 +173,7 @@ def _codex_final_report_text(user_message: str, image_paths: list[Path] | None =
         system=_REPORT_SYSTEM,
         user_message=user_message,
         image_paths=image_paths,
-        timeout_s=ConfigManager().sentinel_final_report_timeout_s,
+        timeout_s=ConfigManager().sentinel.final_report_timeout_s,
     )
 
 
@@ -199,9 +199,9 @@ def _execute_browser_run(report: dict) -> None:
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page(
-                viewport={"width": cfg.sentinel_browser_width_px, "height": cfg.sentinel_browser_height_px}
+                viewport={"width": cfg.sentinel.browser_width_px, "height": cfg.sentinel.browser_height_px}
             )
-            page.set_default_timeout(cfg.sentinel_browser_default_timeout_ms)
+            page.set_default_timeout(cfg.sentinel.browser_default_timeout_ms)
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
             page.on("pageerror", lambda err: _add_finding(report, "error", "Page error", str(err)))
 
@@ -228,7 +228,7 @@ def _execute_browser_run(report: dict) -> None:
                 raise RuntimeError("Initial navigation redirected outside target host")
             page.route("**/*", guard_route)
 
-            while time.monotonic() < deadline and len(report["steps"]) < cfg.sentinel_max_steps:
+            while time.monotonic() < deadline and len(report["steps"]) < cfg.sentinel.max_steps:
                 observation = _observe_page(page)
                 known_ids = {item["id"] for item in observation["elements"]}
                 screenshot = _capture_screenshot(page, report)
@@ -265,16 +265,16 @@ def _goto_page(page, url: str, target: ValidatedTarget) -> dict:
     checked = validate_public_web_url(url)
     if not _host_allowed(checked.hostname, target.hostname):
         return {"ok": False, "error": "Navigation outside target host blocked", "url": checked.url}
-    page.goto(checked.url, wait_until="commit", timeout=cfg.sentinel_navigation_timeout_ms)
+    page.goto(checked.url, wait_until="commit", timeout=cfg.sentinel.navigation_timeout_ms)
     try:
-        page.wait_for_load_state("domcontentloaded", timeout=cfg.sentinel_navigation_timeout_ms)
+        page.wait_for_load_state("domcontentloaded", timeout=cfg.sentinel.navigation_timeout_ms)
     except PlaywrightTimeoutError:
         return {"ok": True, "warning": "Timed out waiting for DOMContentLoaded", "url": page.url}
     return {"ok": True, "url": page.url}
 
 
 def _add_finding(report: dict, severity: str, title: str, detail: str) -> None:
-    max_chars = ConfigManager().sentinel_finding_detail_max_chars
+    max_chars = ConfigManager().sentinel.finding_detail_max_chars
     detail = " ".join(str(detail).split())
     if len(detail) > max_chars:
         detail = f"{detail[:max_chars].rstrip()}..."
@@ -290,7 +290,7 @@ def _add_final_report(report: dict) -> None:
     except Exception as e:
         logging.warning("Sentinel final report generation failed: %s", e)
         text = _fallback_final_report(report)
-    report["final_report"] = _truncate_text(text, ConfigManager().sentinel_final_report_max_chars)
+    report["final_report"] = _truncate_text(text, ConfigManager().sentinel.final_report_max_chars)
     _save(report)
 
 
@@ -310,7 +310,7 @@ def _final_report_prompt(report: dict) -> str:
 
 
 def _final_report_image_paths(report: dict) -> list[Path]:
-    max_images = ConfigManager().sentinel_final_report_max_images
+    max_images = ConfigManager().sentinel.final_report_max_images
     paths = []
     for screenshot in report.get("screenshots", [])[-max_images:]:
         filename = Path(str(screenshot)).name
@@ -338,7 +338,7 @@ def _truncate_text(text: str, max_chars: int) -> str:
 
 def _capture_screenshot(page, report: dict) -> str | None:
     cfg = ConfigManager()
-    if len(report["screenshots"]) >= cfg.sentinel_max_screenshots:
+    if len(report["screenshots"]) >= cfg.sentinel.max_screenshots:
         return None
     path = DataInterface().screenshot_path(report["run_id"], len(report["screenshots"]) + 1)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -385,9 +385,9 @@ def _observe_page(page) -> dict:
         }
         """,
         {
-            "maxElements": cfg.sentinel_observation_max_elements,
-            "maxTextChars": cfg.sentinel_observation_text_max_chars,
-            "maxElementTextChars": cfg.sentinel_observation_element_text_max_chars,
+            "maxElements": cfg.sentinel.observation_max_elements,
+            "maxTextChars": cfg.sentinel.observation_text_max_chars,
+            "maxElementTextChars": cfg.sentinel.observation_element_text_max_chars,
         },
     )
 
@@ -411,7 +411,7 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget) -> dict:
         if action.action == "finish":
             return {"ok": True, "url": page.url}
         if action.action == "wait":
-            page.wait_for_timeout(ConfigManager().sentinel_wait_action_ms)
+            page.wait_for_timeout(ConfigManager().sentinel.wait_action_ms)
             return {"ok": True, "url": page.url}
         if action.action == "goto":
             next_url = urljoin(page.url, action.url or target.url)
@@ -423,7 +423,7 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget) -> dict:
             try:
                 page.wait_for_load_state(
                     "domcontentloaded",
-                    timeout=ConfigManager().sentinel_post_click_load_timeout_ms,
+                    timeout=ConfigManager().sentinel.post_click_load_timeout_ms,
                 )
             except Exception:
                 pass

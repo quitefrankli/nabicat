@@ -83,7 +83,7 @@ class TestRunDownloadHealthCheck:
     @patch('web_app.__main__.AudioDownloader')
     @patch('web_app.__main__.ConfigManager')
     def test_download_failure_sends_error_email(self, mock_config, mock_downloader, mock_send_email):
-        mock_config.return_value.tubio_test_video_id = 'dQw4w9WgXcQ'
+        mock_config.return_value.tubio.test_video_id = 'dQw4w9WgXcQ'
         mock_downloader._build_ydl_opts.return_value = {}
         mock_downloader.download_audio_file.side_effect = Exception('Download failed')
 

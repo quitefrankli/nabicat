@@ -16,8 +16,8 @@ from web_app.config import ConfigManager
 from web_app.users import User
 
 
-NON_ADMIN_MAX_STORAGE = ConfigManager().file_store_non_admin_quota_bytes
-ADMIN_MAX_STORAGE = ConfigManager().file_store_admin_quota_bytes
+NON_ADMIN_MAX_STORAGE = ConfigManager().file_store.non_admin_quota_bytes
+ADMIN_MAX_STORAGE = ConfigManager().file_store.admin_quota_bytes
 
 
 def format_file_size(size_bytes: int) -> str:

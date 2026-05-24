@@ -32,7 +32,7 @@ def mock_config(temp_dir):
     with patch('web_app.data_interface.ConfigManager') as mock_cfg:
         config_instance = Mock()
         config_instance.save_data_path = temp_dir / "data"
-        config_instance.tubio_cookie_path = temp_dir / "data" / "cookies.txt"
+        config_instance.tubio.cookie_path = temp_dir / "data" / "cookies.txt"
         config_instance.temp_dir = temp_dir / "temp"
         config_instance.use_offline_syncer = True
         mock_cfg.return_value = config_instance
@@ -216,7 +216,7 @@ class TestDataInterface:
     def test_backup_data(self, mock_repo, mock_copy, mock_config, mock_data_syncer, temp_dir):
         """Test backup_data creates backup"""
         mock_config.save_data_path = temp_dir / "data"
-        mock_config.tubio_cookie_path = temp_dir / "data" / "cookies.txt"
+        mock_config.tubio.cookie_path = temp_dir / "data" / "cookies.txt"
         mock_repo.return_value.head.commit.hexsha = "abc123"
 
         interface = DataInterface()

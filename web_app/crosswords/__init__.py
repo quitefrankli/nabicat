@@ -32,12 +32,12 @@ def index():
     cfg = ConfigManager()
     return render_template(
         'crosswords_index.html',
-        default_theme=cfg.crosswords_default_theme,
-        default_difficulty=cfg.crosswords_default_difficulty,
-        difficulty_min=cfg.crosswords_difficulty_min,
-        difficulty_max=cfg.crosswords_difficulty_max,
-        theme_min_len=cfg.crosswords_theme_min_len,
-        theme_max_len=cfg.crosswords_theme_max_len,
+        default_theme=cfg.crosswords.default_theme,
+        default_difficulty=cfg.crosswords.default_difficulty,
+        difficulty_min=cfg.crosswords.difficulty_min,
+        difficulty_max=cfg.crosswords.difficulty_max,
+        theme_min_len=cfg.crosswords.theme_min_len,
+        theme_max_len=cfg.crosswords.theme_max_len,
         theme_criteria=theme_criteria(),
     )
 
@@ -54,17 +54,17 @@ def new_crossword():
         return jsonify({'error': str(e), 'criteria': theme_criteria()}), 400
 
     difficulty = clamp_difficulty(payload.get('difficulty'))
-    count = cfg.crosswords_word_count
+    count = cfg.crosswords.word_count
     logging.info(
         "Crosswords generation requested: theme=%s difficulty=%s source=%s count=%s",
         theme,
         difficulty,
-        cfg.llm_api_source,
+        cfg.llm.api_source,
         count,
     )
     pairs = default_source().get_pairs(theme=theme, difficulty=difficulty, count=count)
     if not pairs:
-        logging.warning("Crosswords generation failed: no word pairs theme=%s difficulty=%s source=%s", theme, difficulty, cfg.llm_api_source)
+        logging.warning("Crosswords generation failed: no word pairs theme=%s difficulty=%s source=%s", theme, difficulty, cfg.llm.api_source)
         return jsonify({'error': 'Could not generate words for that theme. Try another.'}), 503
 
     puzzle = build_crossword(pairs)
@@ -75,7 +75,7 @@ def new_crossword():
         "Crosswords generated: theme=%s difficulty=%s source=%s pairs=%s placed=%s grid=%sx%s",
         theme,
         difficulty,
-        cfg.llm_api_source,
+        cfg.llm.api_source,
         len(pairs),
         placed,
         puzzle['rows'],

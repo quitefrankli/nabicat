@@ -204,7 +204,7 @@ def _geolocate_ips(ips: list[str]) -> dict[str, dict]:
     results: dict[str, dict] = {}
     missing = []
     for ip in ips:
-        cached = _cached_geo(ip, config.dev_map_geo_cache_ttl_s)
+        cached = _cached_geo(ip, config.dev.map_geo_cache_ttl_s)
         if cached is not None:
             results[ip] = cached
         elif ip in _geo_cache:
@@ -212,14 +212,14 @@ def _geolocate_ips(ips: list[str]) -> dict[str, dict]:
         else:
             missing.append(ip)
 
-    for idx in range(0, len(missing), config.dev_map_geo_batch_size):
-        batch = missing[idx:idx + config.dev_map_geo_batch_size]
+    for idx in range(0, len(missing), config.dev.map_geo_batch_size):
+        batch = missing[idx:idx + config.dev.map_geo_batch_size]
         try:
             response = requests.post(
-                config.dev_map_geo_url,
+                config.dev.map_geo_url,
                 params={"fields": "status,message,query,country,countryCode,regionName,city,lat,lon,isp,org,as,proxy,hosting"},
                 json=batch,
-                timeout=config.dev_map_geo_timeout_s,
+                timeout=config.dev.map_geo_timeout_s,
             )
             response.raise_for_status()
             payload = response.json()
@@ -264,7 +264,7 @@ def map_data():
     excluded_ips = _parse_ip_filters(request.args.get('exclude_ips'))
     events = _matching_log_events(_LOGS_DIR, path_filter, start, end, excluded_ips)
     counts = Counter(ip for _, ip in events)
-    ranked_ips = [ip for ip, _ in counts.most_common(config.dev_map_max_ips)]
+    ranked_ips = [ip for ip, _ in counts.most_common(config.dev.map_max_ips)]
     public_ips = [ip for ip in ranked_ips if _is_public_ip(ip)]
     locations = _geolocate_ips(public_ips)
 

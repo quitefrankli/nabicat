@@ -28,9 +28,9 @@ def is_real_word(theme: str, timeout_s: float | None = None) -> bool:
         text = meridian_text(
             user_message=theme,
             system=_SYSTEM,
-            model=config.crosswords_model,
-            max_tokens=config.crosswords_theme_check_max_tokens,
-            timeout_s=timeout_s or config.crosswords_theme_check_timeout_s,
+            model=config.crosswords.model,
+            max_tokens=config.crosswords.theme_check_max_tokens,
+            timeout_s=timeout_s or config.crosswords.theme_check_timeout_s,
             agent="crosswords-theme",
         )
     except MeridianError as e:
@@ -53,8 +53,8 @@ def is_real_word_codex(theme: str, timeout_s: float | None = None) -> bool | Non
         text = codex_cli_text(
             user_message=theme,
             instructions=_SYSTEM,
-            model=config.crosswords_codex_model,
-            timeout_s=timeout_s or config.crosswords_theme_check_timeout_s,
+            model=config.crosswords.codex_model,
+            timeout_s=timeout_s or config.crosswords.theme_check_timeout_s,
         )
     except CodexCLIError as e:
         logging.warning("theme_check_codex: %s", e)
@@ -68,7 +68,7 @@ def is_real_word_codex(theme: str, timeout_s: float | None = None) -> bool | Non
 def require_real_word(theme: str) -> None:
     """Raise InvalidThemeError when the configured provider rejects the theme."""
     config = ConfigManager()
-    provider = config.llm_api_source.lower()
+    provider = config.llm.api_source.lower()
     if config.debug_mode or provider == "hardcoded":
         logging.info("Crosswords theme check skipped: theme=%s source=%s debug=%s", theme, provider, config.debug_mode)
         return

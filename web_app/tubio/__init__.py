@@ -77,7 +77,7 @@ def search():
             page = 0
 
         try:
-            decorated_query = f"{ConfigManager().tudio_search_prefix}{query}"
+            decorated_query = f"{ConfigManager().tubio.search_prefix}{query}"
             user_favourites = get_cached_yt_vid_ids(cur_user())
             search_data = AudioDownloader.search_youtube(decorated_query, user_favourites, page=page)
             # assume AJAX POST request

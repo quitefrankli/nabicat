@@ -55,7 +55,7 @@ class TerminalSession:
         self.reader.start()
 
     def _read_loop(self):
-        chunk_size = ConfigManager().dev_terminal_read_chunk
+        chunk_size = ConfigManager().dev.terminal_read_chunk
         while self.alive:
             try:
                 ready, _, _ = select.select([self.master_fd], [], [], 0.5)
@@ -118,7 +118,7 @@ class TerminalSession:
 
 def _reap_idle_sessions():
     now = time.time()
-    timeout = ConfigManager().dev_terminal_idle_timeout_s
+    timeout = ConfigManager().dev.terminal_idle_timeout_s
     stale = [sid for sid, session in _sessions.items()
              if not session.alive or (now - session.last_active) > timeout]
     for sid in stale:
@@ -141,10 +141,10 @@ def register_terminal_routes(dev_api):
         config = ConfigManager()
         with _sessions_lock:
             _reap_idle_sessions()
-            if len(_sessions) >= config.dev_terminal_max_sessions:
+            if len(_sessions) >= config.dev.terminal_max_sessions:
                 return jsonify({'error': 'session limit reached'}), 429
             sid = uuid.uuid4().hex
-            sess = TerminalSession(sid, config.dev_terminal_shell, config.dev_terminal_buffer_bytes)
+            sess = TerminalSession(sid, config.dev.terminal_shell, config.dev.terminal_buffer_bytes)
             _sessions[sid] = sess
         return jsonify({'sid': sid})
 

@@ -49,7 +49,7 @@ def scheduled_backup():
 @scheduler.task('cron', id='scheduled_cookie_keepalive', day='*', hour=4, minute=0, misfire_grace_time=3600)
 def run_cookie_keepalive() -> None:
     logging.info("Running scheduled cookie keepalive")
-    cookie_path = ConfigManager().tubio_cookie_path
+    cookie_path = ConfigManager().tubio.cookie_path
 
     jar = http.cookiejar.MozillaCookieJar(cookie_path)
     jar.load(ignore_discard=True, ignore_expires=True)
@@ -117,7 +117,7 @@ def run_download_health_check() -> None:
         logging.exception("yt-dlp update check failed")
 
     config = ConfigManager()
-    video_id = config.tubio_test_video_id
+    video_id = config.tubio.test_video_id
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         out_path = str(Path(tmp_dir) / "health_check.%(ext)s")

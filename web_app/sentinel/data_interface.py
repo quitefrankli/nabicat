@@ -69,7 +69,7 @@ class DataInterface(BaseDataInterface):
         return reports
 
     def prune_reports(self) -> None:
-        max_runs = ConfigManager().sentinel_max_retained_runs
+        max_runs = ConfigManager().sentinel.max_retained_runs
         if not self.runs_dir.exists():
             return
         run_dirs = sorted(
