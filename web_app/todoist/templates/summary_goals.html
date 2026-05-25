@@ -66,10 +66,10 @@
                             </button>
                             {% if goal.parent is not none %}
                             <button type="button"
-                                    class="btn btn-outline-secondary btn-sm"
+                                    class="btn btn-outline-primary btn-sm"
                                     onclick="unparentGoal({{ goal.id }})"
-                                    title="Move to top level">
-                                <i class="bi bi-arrow-up-circle me-1"></i>Move to Top Level
+                                    title="Unparent goal">
+                                <i class="bi bi-arrow-up-circle me-1"></i>Unparent
                             </button>
                             {% endif %}
                             <button type="button"
