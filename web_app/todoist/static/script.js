@@ -154,7 +154,6 @@ function toggleGoalState(switchElement, goalId) {
 
 const goalDragState = {
 	item: null,
-	pointerId: null,
 	startX: 0,
 	startY: 0,
 	timer: null,
@@ -192,7 +191,8 @@ function initGoalDragAndDrop(root = document) {
 		item.dataset.goalDndReady = 'true';
 		const button = item.querySelector('.goal-accordion-button');
 		if (!button) return;
-		button.addEventListener('pointerdown', (event) => startGoalPress(event, item));
+		button.addEventListener('mousedown', (event) => startGoalMousePress(event, item));
+		button.addEventListener('touchstart', (event) => startGoalTouchPress(event, item), { passive: true });
 		button.addEventListener('click', (event) => {
 			if (goalDragState.suppressClick) {
 				event.preventDefault();
@@ -203,27 +203,39 @@ function initGoalDragAndDrop(root = document) {
 	});
 }
 
-function startGoalPress(event, item) {
-	if (event.button !== undefined && event.button !== 0) return;
-	if (event.target.closest('.form-check, input, textarea, select, a')) return;
-
+function startGoalPress(item, clientX, clientY) {
 	goalDragState.item = item;
-	goalDragState.pointerId = event.pointerId;
-	goalDragState.startX = event.clientX;
-	goalDragState.startY = event.clientY;
+	goalDragState.startX = clientX;
+	goalDragState.startY = clientY;
 	goalDragState.active = false;
 	goalDragState.target = null;
 	goalDragState.targetParentId = undefined;
 
 	clearTimeout(goalDragState.timer);
-	goalDragState.timer = setTimeout(() => beginGoalDrag(event), goalDragState.holdMs);
-
-	document.addEventListener('pointermove', handleGoalPointerMove, { passive: false });
-	document.addEventListener('pointerup', endGoalPress, { once: true });
-	document.addEventListener('pointercancel', cancelGoalDrag, { once: true });
+	goalDragState.timer = setTimeout(() => beginGoalDrag(clientX, clientY), goalDragState.holdMs);
 }
 
-function beginGoalDrag(event) {
+function startGoalMousePress(event, item) {
+	if (event.button !== 0) return;
+	if (event.target.closest('.form-check, input, textarea, select, a')) return;
+
+	startGoalPress(item, event.clientX, event.clientY);
+	document.addEventListener('mousemove', handleGoalMouseMove);
+	document.addEventListener('mouseup', endGoalMousePress, { once: true });
+}
+
+function startGoalTouchPress(event, item) {
+	if (event.touches.length !== 1) return;
+	if (event.target.closest('.form-check, input, textarea, select, a')) return;
+
+	const touch = event.touches[0];
+	startGoalPress(item, touch.clientX, touch.clientY);
+	document.addEventListener('touchmove', handleGoalTouchMove, { passive: false });
+	document.addEventListener('touchend', endGoalTouchPress, { once: true });
+	document.addEventListener('touchcancel', cancelGoalDrag, { once: true });
+}
+
+function beginGoalDrag(clientX, clientY) {
 	if (!goalDragState.item) return;
 
 	goalDragState.active = true;
@@ -238,15 +250,15 @@ function beginGoalDrag(event) {
 	goalDragState.ghost.removeAttribute('data-bs-target');
 	goalDragState.ghost.style.width = `${Math.min(button.getBoundingClientRect().width, window.innerWidth - 32)}px`;
 	document.body.appendChild(goalDragState.ghost);
-	updateGoalGhost(event.clientX, event.clientY);
-	updateGoalDropTarget(event.clientX, event.clientY);
+	updateGoalGhost(clientX, clientY);
+	updateGoalDropTarget(clientX, clientY);
 }
 
-function handleGoalPointerMove(event) {
-	if (!goalDragState.item || event.pointerId !== goalDragState.pointerId) return;
+function handleGoalMove(clientX, clientY, event) {
+	if (!goalDragState.item) return;
 
-	const movedX = event.clientX - goalDragState.startX;
-	const movedY = event.clientY - goalDragState.startY;
+	const movedX = clientX - goalDragState.startX;
+	const movedY = clientY - goalDragState.startY;
 	const moved = Math.hypot(movedX, movedY);
 
 	if (!goalDragState.active) {
@@ -255,8 +267,18 @@ function handleGoalPointerMove(event) {
 	}
 
 	event.preventDefault();
-	updateGoalGhost(event.clientX, event.clientY);
-	updateGoalDropTarget(event.clientX, event.clientY);
+	updateGoalGhost(clientX, clientY);
+	updateGoalDropTarget(clientX, clientY);
+}
+
+function handleGoalMouseMove(event) {
+	handleGoalMove(event.clientX, event.clientY, event);
+}
+
+function handleGoalTouchMove(event) {
+	if (event.touches.length !== 1) return;
+	const touch = event.touches[0];
+	handleGoalMove(touch.clientX, touch.clientY, event);
 }
 
 function updateGoalGhost(clientX, clientY) {
@@ -268,14 +290,6 @@ function updateGoalDropTarget(clientX, clientY) {
 	clearGoalDropTarget();
 
 	const element = document.elementFromPoint(clientX, clientY);
-	const rootDropzone = element ? element.closest('[data-root-dropzone]') : null;
-	if (rootDropzone) {
-		rootDropzone.classList.add('is-drop-target');
-		goalDragState.target = rootDropzone;
-		goalDragState.targetParentId = null;
-		return;
-	}
-
 	const targetItem = element ? element.closest('.goal-draggable') : null;
 	if (!targetItem || targetItem === goalDragState.item || goalDragState.item.contains(targetItem)) {
 		goalDragState.target = null;
@@ -309,17 +323,19 @@ function clearGoalDropTarget() {
 	});
 }
 
-function endGoalPress(event) {
+function endGoalPress(clientX, clientY, event) {
 	clearTimeout(goalDragState.timer);
-	document.removeEventListener('pointermove', handleGoalPointerMove);
-	document.removeEventListener('pointercancel', cancelGoalDrag);
+	document.removeEventListener('mousemove', handleGoalMouseMove);
+	document.removeEventListener('touchmove', handleGoalTouchMove);
+	document.removeEventListener('touchcancel', cancelGoalDrag);
 
-	if (!goalDragState.active || !goalDragState.item || event.pointerId !== goalDragState.pointerId) {
+	if (!goalDragState.active || !goalDragState.item) {
 		resetGoalDragState();
 		return;
 	}
 
 	event.preventDefault();
+	if (clientX !== null && clientY !== null) updateGoalDropTarget(clientX, clientY);
 	const goalId = Number(goalDragState.item.dataset.goalId);
 	const currentParentId = normalizeGoalParentId(goalDragState.item.dataset.parentId);
 	const nextParentId = goalDragState.targetParentId;
@@ -329,11 +345,22 @@ function endGoalPress(event) {
 	reparentGoal(goalId, nextParentId);
 }
 
+function endGoalMousePress(event) {
+	endGoalPress(event.clientX, event.clientY, event);
+}
+
+function endGoalTouchPress(event) {
+	const touch = event.changedTouches[0];
+	endGoalPress(touch ? touch.clientX : null, touch ? touch.clientY : null, event);
+}
+
 function cancelGoalDrag() {
 	clearTimeout(goalDragState.timer);
-	document.removeEventListener('pointermove', handleGoalPointerMove);
-	document.removeEventListener('pointerup', endGoalPress);
-	document.removeEventListener('pointercancel', cancelGoalDrag);
+	document.removeEventListener('mousemove', handleGoalMouseMove);
+	document.removeEventListener('mouseup', endGoalMousePress);
+	document.removeEventListener('touchmove', handleGoalTouchMove);
+	document.removeEventListener('touchend', endGoalTouchPress);
+	document.removeEventListener('touchcancel', cancelGoalDrag);
 	resetGoalDragState();
 	goalDragState.suppressClick = false;
 }
@@ -345,7 +372,6 @@ function resetGoalDragState() {
 	document.body.classList.remove('goal-drag-active');
 
 	goalDragState.item = null;
-	goalDragState.pointerId = null;
 	goalDragState.active = false;
 	goalDragState.ghost = null;
 	goalDragState.target = null;
@@ -373,6 +399,10 @@ function reparentGoal(goalId, parentId) {
 		console.error('Failed to move goal:', error);
 		alert(error.message || 'Failed to move goal');
 	});
+}
+
+function unparentGoal(goalId) {
+	reparentGoal(goalId, null);
 }
 
 // Pagination for summary goals

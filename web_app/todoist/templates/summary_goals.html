@@ -64,6 +64,14 @@
                                     title="Add subgoal">
                                 <i class="bi bi-diagram-3 me-1"></i>Add Subgoal
                             </button>
+                            {% if goal.parent is not none %}
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    onclick="unparentGoal({{ goal.id }})"
+                                    title="Move to top level">
+                                <i class="bi bi-arrow-up-circle me-1"></i>Move to Top Level
+                            </button>
+                            {% endif %}
                             <button type="button"
                                     class="btn btn-outline-danger btn-sm"
                                     data-bs-toggle="modal"
