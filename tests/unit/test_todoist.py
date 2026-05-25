@@ -236,5 +236,51 @@ class TestSubgoalDeletion:
         assert tld.goals == {}
 
 
+class TestGoalReparenting:
+    """Tests for changing goal hierarchy"""
+
+    def test_reparent_goal_between_parent_and_root(self):
+        from web_app.todoist.api.goals_api import reparent_goal_in_tree
+
+        parent = Goal(id=1, name='Parent', state=GoalState.ACTIVE,
+                      last_modified=datetime(2026, 1, 1), children=[2])
+        child = Goal(id=2, name='Child', state=GoalState.ACTIVE,
+                     last_modified=datetime(2026, 1, 1), parent=1)
+        new_parent = Goal(id=3, name='New parent', state=GoalState.ACTIVE,
+                          last_modified=datetime(2026, 1, 1))
+        tld = Goals(goals={1: parent, 2: child, 3: new_parent})
+
+        reparent_goal_in_tree(tld, 2, 3)
+
+        assert parent.children == []
+        assert child.parent == 3
+        assert new_parent.children == [2]
+
+        reparent_goal_in_tree(tld, 2, None)
+
+        assert child.parent is None
+        assert new_parent.children == []
+
+    def test_reparent_goal_rejects_self_and_descendant_parent(self):
+        from web_app.todoist.api.goals_api import reparent_goal_in_tree
+
+        parent = Goal(id=1, name='Parent', state=GoalState.ACTIVE,
+                      last_modified=datetime(2026, 1, 1), children=[2])
+        child = Goal(id=2, name='Child', state=GoalState.ACTIVE,
+                     last_modified=datetime(2026, 1, 1), parent=1, children=[3])
+        grandchild = Goal(id=3, name='Grandchild', state=GoalState.ACTIVE,
+                          last_modified=datetime(2026, 1, 1), parent=2)
+        tld = Goals(goals={1: parent, 2: child, 3: grandchild})
+
+        with pytest.raises(ValueError):
+            reparent_goal_in_tree(tld, 1, 1)
+
+        with pytest.raises(ValueError):
+            reparent_goal_in_tree(tld, 1, 3)
+
+        assert parent.parent is None
+        assert parent.children == [2]
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

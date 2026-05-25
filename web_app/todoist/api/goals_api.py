@@ -6,7 +6,7 @@ from flask import request, Blueprint
 from datetime import datetime
 
 from web_app.helpers import limiter, from_req, cur_user
-from web_app.todoist.data_interface import DataInterface, GoalState, Goal
+from web_app.todoist.data_interface import DataInterface, GoalState, Goal, Goals
 
 
 goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')
@@ -18,6 +18,51 @@ def require_login():
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('todoist_api.summary_goals'))
+
+def reparent_goal_in_tree(tld: Goals, goal_id: int, parent_id: Optional[int]) -> bool:
+    if goal_id not in tld.goals:
+        raise KeyError("Goal not found")
+    if parent_id is not None and parent_id not in tld.goals:
+        raise KeyError("Parent goal not found")
+    if parent_id == goal_id:
+        raise ValueError("A goal cannot be its own parent")
+
+    def has_descendant(root_id: int, search_id: int) -> bool:
+        seen = set()
+        stack = list(tld.goals[root_id].children)
+        while stack:
+            child_id = stack.pop()
+            if child_id in seen:
+                continue
+            seen.add(child_id)
+            if child_id == search_id:
+                return True
+            if child_id in tld.goals:
+                stack.extend(tld.goals[child_id].children)
+        return False
+
+    if parent_id is not None and has_descendant(goal_id, parent_id):
+        raise ValueError("A goal cannot be moved under one of its descendants")
+
+    goal = tld.goals[goal_id]
+    changed = goal.parent != parent_id
+
+    for candidate in tld.goals.values():
+        if candidate.id == parent_id:
+            continue
+        original_len = len(candidate.children)
+        candidate.children = [child_id for child_id in candidate.children if child_id != goal_id]
+        changed = changed or len(candidate.children) != original_len
+
+    if parent_id is not None and goal_id not in tld.goals[parent_id].children:
+        tld.goals[parent_id].children.append(goal_id)
+        changed = True
+
+    if changed:
+        goal.parent = parent_id
+        goal.last_modified = datetime.now()
+
+    return changed
 
 @goals_api.route('/new', methods=["POST"])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)
@@ -93,6 +138,29 @@ def toggle_goal_state():
     DataInterface().save_goals(tld, cur_user())
 
     return flask.jsonify(success=True)
+
+@goals_api.route('/reparent', methods=['POST'])
+@limiter.limit("2/second", key_func=lambda: flask_login.current_user.id)
+def reparent_goal():
+    req_data = request.get_json(silent=True) or {}
+
+    try:
+        goal_id = int(req_data['goal_id'])
+        parent_raw = req_data.get('parent_id')
+        parent_id = None if parent_raw is None else int(parent_raw)
+    except (KeyError, TypeError, ValueError):
+        return flask.jsonify(success=False, error="Invalid goal move request"), 400
+
+    tld = DataInterface().load_goals(cur_user())
+    try:
+        changed = reparent_goal_in_tree(tld, goal_id, parent_id)
+    except (KeyError, ValueError) as exc:
+        return flask.jsonify(success=False, error=str(exc)), 400
+
+    if changed:
+        DataInterface().save_goals(tld, cur_user())
+
+    return flask.jsonify(success=True, changed=changed)
 
 @goals_api.route('/edit', methods=["POST"])
 @limiter.limit("1/second", key_func=lambda: flask_login.current_user.id)

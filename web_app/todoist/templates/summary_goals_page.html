@@ -54,7 +54,14 @@
 	</button>
 </div>
 
-<div id="goals-container">
+<div class="goal-root-dropzone" data-root-dropzone>
+    <i class="bi bi-arrow-up-circle me-2"></i>Make top-level goal
+</div>
+
+<div id="goals-container"
+     data-drag-hold-ms="{{ todoist_drag_config.holdMs }}"
+     data-drag-move-threshold-px="{{ todoist_drag_config.moveThresholdPx }}"
+     data-drag-hover-expand-ms="{{ todoist_drag_config.hoverExpandMs }}">
 {% include "summary_goals.html" %}
 </div>
 

@@ -133,7 +133,8 @@ function toggleGoalState(switchElement, goalId) {
 	fetch("/todoist/goal/toggle_state", {
 		method: "POST",
 		headers: {
-			"Content-Type": "application/json"
+			"Content-Type": "application/json",
+			"X-CSRFToken": getTodoistCsrfToken()
 		},
 		body: JSON.stringify(data)
 	})
@@ -148,6 +149,229 @@ function toggleGoalState(switchElement, goalId) {
 	.catch((error) => {
 		console.error("Failed to toggle goal state", error);
         switchElement.checked = !state; // Revert the switch state on error
+	});
+}
+
+const goalDragState = {
+	item: null,
+	pointerId: null,
+	startX: 0,
+	startY: 0,
+	timer: null,
+	active: false,
+	ghost: null,
+	target: null,
+	targetParentId: undefined,
+	hoverTimer: null,
+	suppressClick: false,
+	holdMs: 0,
+	moveThresholdPx: 0,
+	hoverExpandMs: 0
+};
+
+function getTodoistCsrfToken() {
+	const meta = document.querySelector('meta[name="csrf-token"]');
+	return meta ? meta.getAttribute('content') : '';
+}
+
+function normalizeGoalParentId(rawValue) {
+	if (rawValue === null || rawValue === undefined || rawValue === '') return null;
+	const parsed = Number(rawValue);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function initGoalDragAndDrop(root = document) {
+	const goalsContainer = document.getElementById('goals-container');
+	if (!goalsContainer) return;
+
+	goalDragState.holdMs = Number(goalsContainer.dataset.dragHoldMs) || 0;
+	goalDragState.moveThresholdPx = Number(goalsContainer.dataset.dragMoveThresholdPx) || 0;
+	goalDragState.hoverExpandMs = Number(goalsContainer.dataset.dragHoverExpandMs) || 0;
+
+	root.querySelectorAll('.goal-draggable:not([data-goal-dnd-ready])').forEach((item) => {
+		item.dataset.goalDndReady = 'true';
+		const button = item.querySelector('.goal-accordion-button');
+		if (!button) return;
+		button.addEventListener('pointerdown', (event) => startGoalPress(event, item));
+		button.addEventListener('click', (event) => {
+			if (goalDragState.suppressClick) {
+				event.preventDefault();
+				event.stopPropagation();
+				goalDragState.suppressClick = false;
+			}
+		}, true);
+	});
+}
+
+function startGoalPress(event, item) {
+	if (event.button !== undefined && event.button !== 0) return;
+	if (event.target.closest('.form-check, input, textarea, select, a')) return;
+
+	goalDragState.item = item;
+	goalDragState.pointerId = event.pointerId;
+	goalDragState.startX = event.clientX;
+	goalDragState.startY = event.clientY;
+	goalDragState.active = false;
+	goalDragState.target = null;
+	goalDragState.targetParentId = undefined;
+
+	clearTimeout(goalDragState.timer);
+	goalDragState.timer = setTimeout(() => beginGoalDrag(event), goalDragState.holdMs);
+
+	document.addEventListener('pointermove', handleGoalPointerMove, { passive: false });
+	document.addEventListener('pointerup', endGoalPress, { once: true });
+	document.addEventListener('pointercancel', cancelGoalDrag, { once: true });
+}
+
+function beginGoalDrag(event) {
+	if (!goalDragState.item) return;
+
+	goalDragState.active = true;
+	goalDragState.suppressClick = true;
+	goalDragState.item.classList.add('is-dragging');
+	document.body.classList.add('goal-drag-active');
+
+	const button = goalDragState.item.querySelector('.goal-accordion-button');
+	goalDragState.ghost = button.cloneNode(true);
+	goalDragState.ghost.className = `${button.className} goal-drag-ghost`;
+	goalDragState.ghost.removeAttribute('data-bs-toggle');
+	goalDragState.ghost.removeAttribute('data-bs-target');
+	goalDragState.ghost.style.width = `${Math.min(button.getBoundingClientRect().width, window.innerWidth - 32)}px`;
+	document.body.appendChild(goalDragState.ghost);
+	updateGoalGhost(event.clientX, event.clientY);
+	updateGoalDropTarget(event.clientX, event.clientY);
+}
+
+function handleGoalPointerMove(event) {
+	if (!goalDragState.item || event.pointerId !== goalDragState.pointerId) return;
+
+	const movedX = event.clientX - goalDragState.startX;
+	const movedY = event.clientY - goalDragState.startY;
+	const moved = Math.hypot(movedX, movedY);
+
+	if (!goalDragState.active) {
+		if (moved > goalDragState.moveThresholdPx) cancelGoalDrag();
+		return;
+	}
+
+	event.preventDefault();
+	updateGoalGhost(event.clientX, event.clientY);
+	updateGoalDropTarget(event.clientX, event.clientY);
+}
+
+function updateGoalGhost(clientX, clientY) {
+	if (!goalDragState.ghost) return;
+	goalDragState.ghost.style.transform = `translate(${clientX + 12}px, ${clientY + 12}px)`;
+}
+
+function updateGoalDropTarget(clientX, clientY) {
+	clearGoalDropTarget();
+
+	const element = document.elementFromPoint(clientX, clientY);
+	const rootDropzone = element ? element.closest('[data-root-dropzone]') : null;
+	if (rootDropzone) {
+		rootDropzone.classList.add('is-drop-target');
+		goalDragState.target = rootDropzone;
+		goalDragState.targetParentId = null;
+		return;
+	}
+
+	const targetItem = element ? element.closest('.goal-draggable') : null;
+	if (!targetItem || targetItem === goalDragState.item || goalDragState.item.contains(targetItem)) {
+		goalDragState.target = null;
+		goalDragState.targetParentId = undefined;
+		return;
+	}
+
+	const targetButton = targetItem.querySelector('.goal-accordion-button');
+	if (targetButton) targetButton.classList.add('is-drop-target');
+	goalDragState.target = targetItem;
+	goalDragState.targetParentId = Number(targetItem.dataset.goalId);
+	scheduleGoalHoverExpand(targetItem);
+}
+
+function scheduleGoalHoverExpand(targetItem) {
+	clearTimeout(goalDragState.hoverTimer);
+	const collapseEl = targetItem.querySelector(':scope > .goal-accordion-item > .accordion-collapse');
+	if (!collapseEl || collapseEl.classList.contains('show')) return;
+
+	goalDragState.hoverTimer = setTimeout(() => {
+		if (goalDragState.active && goalDragState.target === targetItem && window.bootstrap) {
+			bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
+		}
+	}, goalDragState.hoverExpandMs);
+}
+
+function clearGoalDropTarget() {
+	clearTimeout(goalDragState.hoverTimer);
+	document.querySelectorAll('.is-drop-target').forEach((target) => {
+		target.classList.remove('is-drop-target');
+	});
+}
+
+function endGoalPress(event) {
+	clearTimeout(goalDragState.timer);
+	document.removeEventListener('pointermove', handleGoalPointerMove);
+	document.removeEventListener('pointercancel', cancelGoalDrag);
+
+	if (!goalDragState.active || !goalDragState.item || event.pointerId !== goalDragState.pointerId) {
+		resetGoalDragState();
+		return;
+	}
+
+	event.preventDefault();
+	const goalId = Number(goalDragState.item.dataset.goalId);
+	const currentParentId = normalizeGoalParentId(goalDragState.item.dataset.parentId);
+	const nextParentId = goalDragState.targetParentId;
+
+	resetGoalDragState();
+	if (nextParentId === undefined || currentParentId === nextParentId) return;
+	reparentGoal(goalId, nextParentId);
+}
+
+function cancelGoalDrag() {
+	clearTimeout(goalDragState.timer);
+	document.removeEventListener('pointermove', handleGoalPointerMove);
+	document.removeEventListener('pointerup', endGoalPress);
+	document.removeEventListener('pointercancel', cancelGoalDrag);
+	resetGoalDragState();
+	goalDragState.suppressClick = false;
+}
+
+function resetGoalDragState() {
+	clearGoalDropTarget();
+	if (goalDragState.item) goalDragState.item.classList.remove('is-dragging');
+	if (goalDragState.ghost) goalDragState.ghost.remove();
+	document.body.classList.remove('goal-drag-active');
+
+	goalDragState.item = null;
+	goalDragState.pointerId = null;
+	goalDragState.active = false;
+	goalDragState.ghost = null;
+	goalDragState.target = null;
+	goalDragState.targetParentId = undefined;
+}
+
+function reparentGoal(goalId, parentId) {
+	fetch('/todoist/goal/reparent', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'X-CSRFToken': getTodoistCsrfToken()
+		},
+		body: JSON.stringify({ goal_id: goalId, parent_id: parentId })
+	})
+	.then(response => response.json().then(data => ({ ok: response.ok, data })))
+	.then(({ ok, data }) => {
+		if (ok && data.success) {
+			window.location.reload();
+			return;
+		}
+		throw new Error(data.error || 'Failed to move goal');
+	})
+	.catch(error => {
+		console.error('Failed to move goal:', error);
+		alert(error.message || 'Failed to move goal');
 	});
 }
 
@@ -168,6 +392,7 @@ function loadMoreSummaryGoals() {
 		.then(data => {
 			const container = document.getElementById('goals-container');
 			container.innerHTML += data.html;
+			initGoalDragAndDrop(container);
 			summaryHasMoreGoals = data.has_more;
 			
 			if (!summaryHasMoreGoals) {
@@ -244,6 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	document.querySelectorAll('.diary-mood-stars').forEach(initMoodStars);
 	document.querySelectorAll('.diary-tags-widget').forEach(initTagWidget);
+	initGoalDragAndDrop();
 
 	const hash = window.location.hash;
 	if (hash.startsWith('#entry-')) {

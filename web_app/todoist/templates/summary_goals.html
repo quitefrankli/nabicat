@@ -1,10 +1,11 @@
 {% macro render_goal(goal, all_goals, depth=0) %}
-<div class="accordion mb-2 goal-tree" id="accordion{{ goal.id }}">
+<div class="accordion mb-2 goal-tree goal-draggable" id="accordion{{ goal.id }}" data-goal-id="{{ goal.id }}" data-parent-id="{{ goal.parent if goal.parent is not none else '' }}">
     <div class="accordion-item goal-accordion-item">
         <h2 class="accordion-header" id="heading{{ goal.id }}">
             <button
-                class="accordion-button collapsed goal-accordion-button"
+                class="accordion-button collapsed goal-accordion-button goal-drop-target"
                 type="button"
+                data-goal-id="{{ goal.id }}"
                 data-bs-toggle="collapse"
                 data-bs-target="#collapse{{ goal.id }}"
                 aria-expanded="false"

@@ -38,6 +38,9 @@ class TubioConfig:
 @dataclass
 class TodoistConfig:
     default_page_size: int = 8
+    goal_drag_hold_ms: int = 350
+    goal_drag_move_threshold_px: int = 8
+    goal_drag_hover_expand_ms: int = 650
 
 
 @dataclass
