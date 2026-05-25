@@ -28,7 +28,15 @@ todoist_api.register_blueprint(diary_api)
 
 @todoist_api.context_processor
 def inject_app_name():
-    return dict(app_name='Todoist')
+    todoist_config = ConfigManager().todoist
+    return dict(
+        app_name='Todoist',
+        todoist_drag_config={
+            'holdMs': todoist_config.goal_drag_hold_ms,
+            'moveThresholdPx': todoist_config.goal_drag_move_threshold_px,
+            'hoverExpandMs': todoist_config.goal_drag_hover_expand_ms,
+        },
+    )
 
 @todoist_api.before_request
 @flask_login.login_required

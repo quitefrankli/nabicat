@@ -42,6 +42,10 @@
   margin-left: 20px;
 }
 
+.goal-draggable {
+  position: relative;
+}
+
 .goal-accordion-item {
   border: none;
   border-radius: var(--hw-radius-md);
@@ -54,6 +58,60 @@
   border: none;
   padding: 0.75rem 1rem;
   border-radius: var(--hw-radius-md);
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goal-accordion-button:active {
+  cursor: grabbing;
+}
+
+.goal-root-dropzone {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0.75rem 0;
+  border: 2px dashed var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--hw-text-secondary);
+  font-weight: 700;
+  transition: all var(--hw-transition-fast);
+}
+
+.goal-drag-active .goal-root-dropzone {
+  display: flex;
+}
+
+.goal-root-dropzone.is-drop-target,
+.goal-accordion-button.is-drop-target {
+  border-color: var(--hw-sage);
+  background: rgba(135, 168, 120, 0.18) !important;
+  box-shadow: 0 0 0 0.25rem rgba(135, 168, 120, 0.18);
+}
+
+.goal-draggable.is-dragging {
+  opacity: 0.45;
+}
+
+.goal-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3000;
+  pointer-events: none;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  box-shadow: var(--hw-shadow-lg);
+  opacity: 0.96;
+  cursor: grabbing;
+}
+
+.goal-drag-active {
+  cursor: grabbing;
 }
 
 .goal-title-wrap {
@@ -91,6 +149,17 @@
   white-space: pre-line;
   line-height: 1.6;
   color: var(--hw-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .goal-tree .goal-tree {
+    margin-left: 10px;
+  }
+
+  .goal-accordion-button {
+    min-height: 44px;
+    padding: 0.75rem;
+  }
 }
 
 .goal-modal-label {
