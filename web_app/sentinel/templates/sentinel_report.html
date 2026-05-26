@@ -33,11 +33,13 @@
 {% endblock %}
 
 {% block page_content %}
-<div class="sentinel-shell"
+<div class="sentinel-shell sentinel-shell-with-sidebar"
      data-run-id="{{ report.run_id }}"
      data-screenshot-stagger-ms="{{ report.screenshot_load_stagger_ms }}"
      data-screenshot-max-retries="{{ report.screenshot_load_max_retries }}"
      data-screenshot-retry-delay-ms="{{ report.screenshot_load_retry_delay_ms }}">
+  {% include "_sentinel_sidebar.html" %}
+  <div class="sentinel-shell-main">
   <section class="sentinel-panel sentinel-report-head">
     <div>
       <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
@@ -166,5 +168,6 @@
       {% endfor %}
     </div>
   </details>
+  </div>
 </div>
 {% endblock %}

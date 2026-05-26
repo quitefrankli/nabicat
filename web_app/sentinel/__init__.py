@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import re
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, send_from_directory
@@ -33,7 +34,11 @@ def before_request():
 
 @sentinel_api.context_processor
 def inject_app_name():
-    return dict(app_name="Sentinel")
+    cfg = ConfigManager()
+    return dict(
+        app_name="Sentinel",
+        sidebar_runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
+    )
 
 
 def _truthy(value) -> bool:
@@ -86,8 +91,9 @@ def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]
 
 
 def _render_final_report_for_pdf(markdown_text: str, run_id: str, screenshots: list[str]) -> Markup:
-    """Like _render_final_report, but inline screenshot src points to a file:// URL so headless
-    Chromium can load the image directly off disk without a server round-trip."""
+    """Like _render_final_report, but inline screenshot src is a base64 data: URI so headless
+    Chromium can decode the image without a network or file:// fetch (the page origin from
+    set_content is about:blank, which blocks file:// subresource loads)."""
     md = MarkdownIt("commonmark", {"html": False})
     allowed = {str(s).rsplit("/", 1)[-1] for s in screenshots or []}
     default_image = md.renderer.rules.get("image")
@@ -99,7 +105,13 @@ def _render_final_report_for_pdf(markdown_text: str, run_id: str, screenshots: l
         filename = src.rsplit("/", 1)[-1]
         if filename not in allowed or not _SCREENSHOT_FILENAME_RE.match(filename):
             return ""
-        token.attrSet("src", (screenshots_dir / filename).resolve().as_uri())
+        path = screenshots_dir / filename
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return ""
+        encoded = base64.b64encode(data).decode("ascii")
+        token.attrSet("src", f"data:image/png;base64,{encoded}")
         existing_class = token.attrGet("class") or ""
         token.attrSet("class", (existing_class + " sentinel-final-report-img").strip())
         if default_image:
