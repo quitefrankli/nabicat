@@ -58,7 +58,14 @@ _SYSTEM_BASE = (
     "{\"action\":\"goto\",\"url\":\"/path\",\"reason\":\"...\"}, "
     "{\"action\":\"wait\",\"reason\":\"...\"}, "
     "{\"action\":\"finish\",\"reason\":\"...\"}. "
-    "Prefer exploring core navigation, forms, buttons, and obvious broken states. "
+    "Prefer exploring core navigation, links, and obvious broken states. "
+    "Avoid using search bars, search boxes, or generic query inputs unless the user's prompt "
+    "explicitly asks you to test search. Most real users navigate by clicking visible links and "
+    "menu items, not by typing into a search field. "
+    "Do not navigate by typing URLs or guessing paths. The 'goto' action is reserved for "
+    "following links you can actually see in the screenshot or element list. Do not invent or "
+    "guess URLs, slugs, or path fragments. If a destination is not reachable through visible "
+    "links or menu items, treat it as out of scope rather than guessing the URL. "
     "Do not attempt payment or destructive account actions."
 )
 
@@ -73,10 +80,26 @@ _SYSTEM_ACCOUNTS_ALLOWED = (
     "personal data."
 )
 
+# TODO: consider removing _SYSTEM_EXTERNAL_FORBIDDEN from the system prompt in the future. The
+# network-layer guard already enforces this, and a real user does sometimes click off-site links
+# (footer "powered by", partner logos, etc.). Letting the agent attempt those gives us a useful
+# signal about how often a human would have left the target site.
+_SYSTEM_EXTERNAL_FORBIDDEN = (
+    " Stay on the target site. Do not click links, banners, or buttons that lead to a different "
+    "hostname. External navigation is blocked at the network layer and will fail; do not waste "
+    "steps trying."
+)
 
-def _system_prompt(allow_accounts: bool, demographic: str = "") -> str:
+_SYSTEM_EXTERNAL_ALLOWED = (
+    " You may follow links to external sites if doing so is part of testing the requested user "
+    "flow (for example, OAuth providers or partner checkout)."
+)
+
+
+def _system_prompt(allow_accounts: bool, demographic: str = "", allow_external: bool = False) -> str:
     persona = ConfigManager().sentinel.demographic_personas.get(demographic, "")
     base = _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
+    base += _SYSTEM_EXTERNAL_ALLOWED if allow_external else _SYSTEM_EXTERNAL_FORBIDDEN
     if persona:
         return f"{persona} {base}"
     return base
@@ -122,6 +145,7 @@ def start_run(
     limit_s: int,
     title: str = "",
     allow_accounts: bool = False,
+    allow_external: bool = False,
     device: str = "",
     demographic: str = "",
 ) -> dict:
@@ -141,6 +165,7 @@ def start_run(
         "prompt": prompt,
         "title": title,
         "allow_accounts": bool(allow_accounts),
+        "allow_external": bool(allow_external),
         "device": device,
         "demographic": demographic,
         "limit_s": limit_s,
@@ -152,6 +177,7 @@ def start_run(
         "steps": [],
         "findings": [],
         "screenshots": [],
+        "annotated_screenshots": [],
         "final_report": "",
         "error": None,
     }
@@ -256,6 +282,7 @@ class _LLMProvider:
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
         demographic: str = "",
+        allow_external: bool = False,
     ) -> str:
         raise NotImplementedError
 
@@ -273,9 +300,10 @@ class _CodexProvider(_LLMProvider):
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
         demographic: str = "",
+        allow_external: bool = False,
     ) -> str:
         return _codex_text(
-            system=_system_prompt(allow_accounts, demographic),
+            system=_system_prompt(allow_accounts, demographic, allow_external),
             user_message=user_message,
             image_paths=image_paths,
             timeout_s=ConfigManager().sentinel.llm_step_timeout_s,
@@ -309,11 +337,12 @@ class _MeridianProvider(_LLMProvider):
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
         demographic: str = "",
+        allow_external: bool = False,
     ) -> str:
         cfg = ConfigManager()
         return meridian_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts, demographic),
+            system=_system_prompt(allow_accounts, demographic, allow_external),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -357,11 +386,12 @@ class _BedrockProvider(_LLMProvider):
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
         demographic: str = "",
+        allow_external: bool = False,
     ) -> str:
         cfg = ConfigManager()
         return bedrock_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts, demographic),
+            system=_system_prompt(allow_accounts, demographic, allow_external),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -442,12 +472,18 @@ def _execute_browser_run(report: dict) -> None:
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
             page.on("pageerror", lambda err: _add_finding(report, "error", "Page error", str(err)))
 
+            allow_external = bool(report.get("allow_external"))
+
             def guard_route(route):
                 req_url = route.request.url
                 try:
                     checked = validate_public_web_url(req_url)
                     is_navigation = route.request.is_navigation_request()
-                    if is_navigation and not _host_allowed(checked.hostname, target.hostname):
+                    if (
+                        is_navigation
+                        and not allow_external
+                        and not _host_allowed(checked.hostname, target.hostname)
+                    ):
                         route.abort()
                         return
                 except Exception:
@@ -471,15 +507,17 @@ def _execute_browser_run(report: dict) -> None:
                 observation = _observe_page(page)
                 known_ids = {item["id"] for item in observation["elements"]}
                 screenshot = _capture_screenshot(page, report)
+                annotated = _capture_annotated_screenshot(report, screenshot, observation)
                 if screenshot:
                     observation["screenshot"] = screenshot
 
-                image_paths = _screenshot_image_paths(report, screenshot)
+                image_paths = _annotated_image_paths(report, annotated, screenshot)
                 agent_text = _get_provider().agent_text(
                     _agent_prompt(report, observation),
                     image_paths=image_paths,
                     allow_accounts=bool(report.get("allow_accounts")),
                     demographic=str(report.get("demographic") or ""),
+                    allow_external=allow_external,
                 )
                 try:
                     action = parse_agent_action(agent_text, known_ids)
@@ -487,7 +525,7 @@ def _execute_browser_run(report: dict) -> None:
                     _record_step(report, "invalid", str(e), {"agent_text": agent_text})
                     break
 
-                result = _apply_action(page, action, target)
+                result = _apply_action(page, action, target, allow_external=allow_external)
                 _record_step(report, action.action, action.reason, result)
                 _save(report)
                 if action.action == "finish":
@@ -504,12 +542,12 @@ def _execute_browser_run(report: dict) -> None:
             browser.close()
 
 
-def _goto_page(page, url: str, target: ValidatedTarget) -> dict:
+def _goto_page(page, url: str, target: ValidatedTarget, allow_external: bool = False) -> dict:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
     cfg = ConfigManager()
     checked = validate_public_web_url(url)
-    if not _host_allowed(checked.hostname, target.hostname):
+    if not allow_external and not _host_allowed(checked.hostname, target.hostname):
         return {"ok": False, "error": "Navigation outside target host blocked", "url": checked.url}
     page.goto(checked.url, wait_until="commit", timeout=cfg.sentinel.navigation_timeout_ms)
     try:
@@ -642,15 +680,131 @@ def _screenshot_image_paths(report: dict, screenshot: str | None) -> list[Path]:
     return [path] if path.exists() else []
 
 
+def _capture_annotated_screenshot(report: dict, screenshot: str | None, observation: dict) -> str | None:
+    if not screenshot:
+        return None
+    raw_filename = Path(screenshot).name
+    raw_path = DataInterface().screenshots_dir(report["run_id"]) / raw_filename
+    index = len(report["screenshots"])
+    out_path = DataInterface().annotated_screenshot_path(report["run_id"], index)
+    written = _annotate_screenshot(
+        raw_path,
+        out_path,
+        observation.get("elements") or [],
+        observation.get("viewport"),
+    )
+    if written is None:
+        return None
+    rel = f"screenshots/{out_path.name}"
+    report.setdefault("annotated_screenshots", []).append(rel)
+    return rel
+
+
+def _annotated_image_paths(report: dict, annotated: str | None, raw: str | None) -> list[Path]:
+    if annotated:
+        path = DataInterface().screenshots_dir(report["run_id"]) / Path(annotated).name
+        if path.exists():
+            return [path]
+    return _screenshot_image_paths(report, raw)
+
+
+_ANNOTATION_PALETTE = [
+    (224, 122, 95),    # coral
+    (135, 168, 120),   # sage
+    (244, 162, 97),    # peach
+    (233, 196, 106),   # gold
+    (74, 93, 74),      # moss
+    (107, 142, 90),    # sage-dark
+]
+
+
+def _annotate_screenshot(
+    raw_path: Path,
+    out_path: Path,
+    elements: list[dict],
+    viewport: dict | None,
+) -> Path | None:
+    if not raw_path.exists():
+        return None
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except Exception:
+        logging.warning("Pillow unavailable; skipping screenshot annotation")
+        return None
+    cfg = ConfigManager()
+    try:
+        img = Image.open(raw_path).convert("RGB")
+    except Exception as e:
+        logging.warning("Failed to open screenshot %s: %s", raw_path, e)
+        return None
+
+    img_w, img_h = img.size
+    vp_w = float((viewport or {}).get("w") or img_w)
+    vp_h = float((viewport or {}).get("h") or img_h)
+    sx = img_w / vp_w if vp_w else 1.0
+    sy = img_h / vp_h if vp_h else 1.0
+
+    draw = ImageDraw.Draw(img, "RGBA")
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", cfg.sentinel.annotation_label_font_px)
+    except Exception:
+        font = ImageFont.load_default()
+
+    box_w = max(1, int(cfg.sentinel.annotation_box_width_px))
+    pad = max(1, int(cfg.sentinel.annotation_label_pad_px))
+
+    for idx, el in enumerate(elements):
+        rect = el.get("rect") or {}
+        try:
+            x = float(rect["x"]) * sx
+            y = float(rect["y"]) * sy
+            w = float(rect["w"]) * sx
+            h = float(rect["h"]) * sy
+        except (KeyError, TypeError, ValueError):
+            continue
+        if w <= 1 or h <= 1:
+            continue
+        x1, y1 = max(0, x), max(0, y)
+        x2, y2 = min(img_w, x + w), min(img_h, y + h)
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        color = _ANNOTATION_PALETTE[idx % len(_ANNOTATION_PALETTE)]
+        draw.rectangle([x1, y1, x2, y2], outline=color + (255,), width=box_w)
+
+        label = str(el.get("id") or "")
+        if not label:
+            continue
+        tb = draw.textbbox((0, 0), label, font=font)
+        text_w, text_h = tb[2] - tb[0], tb[3] - tb[1]
+
+        lx2 = x1 + text_w + pad * 2
+        ly2 = y1 + text_h + pad * 2
+        draw.rectangle([x1, y1, lx2, ly2], fill=color + (230,))
+        draw.text((x1 + pad, y1 + pad), label, fill=(255, 255, 255, 255), font=font)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        img.save(out_path, format="PNG")
+    except Exception as e:
+        logging.warning("Failed to save annotated screenshot %s: %s", out_path, e)
+        return None
+    return out_path
+
+
 def _observe_page(page) -> dict:
     cfg = ConfigManager()
     return page.evaluate(
         """
         ({ maxElements, maxTextChars, maxElementTextChars }) => {
+          const rectOf = (el) => {
+            const r = el.getBoundingClientRect();
+            return {x: r.x, y: r.y, w: r.width, h: r.height};
+          };
           const visible = (el) => {
-            const rect = el.getBoundingClientRect();
+            const r = el.getBoundingClientRect();
             const style = window.getComputedStyle(el);
-            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
           };
           const candidates = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role="button"]'));
           const elements = [];
@@ -663,11 +817,18 @@ def _observe_page(page) -> dict:
               tag: el.tagName.toLowerCase(),
               type: el.getAttribute('type') || '',
               text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.href || '').trim().slice(0, maxElementTextChars),
-              href: el.href || ''
+              href: el.href || '',
+              rect: rectOf(el)
             });
           }
           const bodyText = (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, maxTextChars);
-          return {url: location.href, title: document.title, text: bodyText, elements};
+          return {
+            url: location.href,
+            title: document.title,
+            text: bodyText,
+            elements,
+            viewport: {w: window.innerWidth, h: window.innerHeight}
+          };
         }
         """,
         {
@@ -683,16 +844,35 @@ def _agent_prompt(report: dict, observation: dict) -> str:
         {"action": step["action"], "reason": step["reason"], "result": step["result"]}
         for step in report["steps"][-6:]
     ]
+    elements = [
+        {
+            "id": el.get("id", ""),
+            "tag": el.get("tag", ""),
+            "type": el.get("type", ""),
+            "label": el.get("text", ""),
+        }
+        for el in (observation.get("elements") or [])
+    ]
     payload = {
         "target_url": report["target_url"],
         "user_prompt": report["prompt"] or "Explore and test the site's main unauthenticated flows.",
         "history": history,
-        "observation": observation,
+        "page": {
+            "url": observation.get("url", ""),
+            "title": observation.get("title", ""),
+            "elements": elements,
+        },
+        "instructions": (
+            "The attached screenshot shows the page with each interactive element outlined and "
+            "labelled with a synthetic id (e.g. e1, e2). Use the screenshot as your primary input "
+            "and choose elements visually. The 'elements' list is only a key for resolving labels "
+            "to ids; do not rely on it for spatial layout."
+        ),
     }
     return json.dumps(payload, indent=2)
 
 
-def _apply_action(page, action: AgentAction, target: ValidatedTarget) -> dict:
+def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_external: bool = False) -> dict:
     try:
         if action.action == "finish":
             return {"ok": True, "url": page.url}
@@ -701,7 +881,7 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget) -> dict:
             return {"ok": True, "url": page.url}
         if action.action == "goto":
             next_url = urljoin(page.url, action.url or target.url)
-            return _goto_page(page, next_url, target)
+            return _goto_page(page, next_url, target, allow_external=allow_external)
 
         locator = page.locator(f'[data-sentinel-id="{action.element_id}"]').first
         if action.action == "click":

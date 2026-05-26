@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function () {
       limit: form.limit.value,
       title: form.title.value,
       allow_accounts: form.allow_accounts.checked,
+      allow_external: form.allow_external.checked,
       device: form.device.value,
       demographic: form.demographic.value
     };

@@ -151,6 +151,9 @@ class SentinelConfig:
     title_max_chars: int = 80
     llm_title_max_tokens: int = 80
     llm_title_timeout_s: float = 15.0
+    annotation_box_width_px: int = 3
+    annotation_label_font_px: int = 14
+    annotation_label_pad_px: int = 4
     screenshot_load_stagger_ms: int = 200
     screenshot_load_max_retries: int = 3
     screenshot_load_retry_delay_ms: int = 1000

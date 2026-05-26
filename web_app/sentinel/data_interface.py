@@ -40,6 +40,9 @@ class DataInterface(BaseDataInterface):
     def screenshot_path(self, run_id: str, index: int) -> Path:
         return self.screenshots_dir(run_id) / f"step-{index:02d}.png"
 
+    def annotated_screenshot_path(self, run_id: str, index: int) -> Path:
+        return self.screenshots_dir(run_id) / f"step-{index:02d}-annot.png"
+
     def save_report(self, report: dict) -> None:
         run_id = self._safe_run_id(str(report["run_id"]))
         report["updated_at"] = utc_now_iso()

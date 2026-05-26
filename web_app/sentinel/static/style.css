@@ -343,10 +343,27 @@
 }
 
 .sentinel-screenshots {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+}
+
+@media (max-width: 768px) {
+  .sentinel-screenshots {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sentinel-screenshot-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.sentinel-screenshot-pair:has(.sentinel-screenshot-btn:only-child) {
+  grid-template-columns: 1fr;
 }
 
 .sentinel-screenshot-btn {
+  position: relative;
   padding: 0;
   border: 1px solid var(--hw-border);
   border-radius: var(--hw-radius-md);
@@ -360,6 +377,26 @@
   aspect-ratio: 16 / 10;
   object-fit: cover;
   display: block;
+}
+
+.sentinel-screenshot-tag {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--hw-radius-sm);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--hw-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.sentinel-screenshot-tag-annot {
+  background: var(--hw-sage-dark);
+  color: white;
 }
 
 .sentinel-lightbox {

@@ -13,7 +13,7 @@ from web_app.sentinel.runner import get_run, request_cancel, start_run
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
-_SCREENSHOT_FILENAME_RE = re.compile(r"^step-\d{2}\.png$")
+_SCREENSHOT_FILENAME_RE = re.compile(r"^step-\d{2}(?:-annot)?\.png$")
 
 
 sentinel_api = Blueprint(
@@ -112,6 +112,7 @@ def index():
     prefill_prompt = str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars]
     prefill_title = str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
     prefill_allow_accounts = _truthy(request.args.get("allow_accounts"))
+    prefill_allow_external = _truthy(request.args.get("allow_external"))
     try:
         prefill_limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
     except (TypeError, ValueError):
@@ -143,6 +144,7 @@ def index():
         prefill_limit=prefill_limit,
         prefill_title=prefill_title,
         prefill_allow_accounts=prefill_allow_accounts,
+        prefill_allow_external=prefill_allow_external,
         prefill_device=prefill_device,
         prefill_demographic=prefill_demographic,
         device_options=device_options,
@@ -158,6 +160,7 @@ def create_run():
     prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
     title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
     allow_accounts = _truthy(payload.get("allow_accounts"))
+    allow_external = _truthy(payload.get("allow_external"))
     device = str(payload.get("device", "")).strip()
     demographic = str(payload.get("demographic", "")).strip()
     limit_s = _limit_from_request(payload.get("limit"))
@@ -174,6 +177,7 @@ def create_run():
             limit_s,
             title=title,
             allow_accounts=allow_accounts,
+            allow_external=allow_external,
             device=device,
             demographic=demographic,
         )),
@@ -218,7 +222,7 @@ def report_json(run_id: str):
 
 @sentinel_api.route("/report/<run_id>/screenshots/<filename>")
 def screenshot(run_id: str, filename: str):
-    if not re.match(r"^step-\d{2}\.png$", filename):
+    if not _SCREENSHOT_FILENAME_RE.match(filename):
         abort(404)
     try:
         directory = DataInterface().screenshots_dir(run_id)

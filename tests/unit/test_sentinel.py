@@ -9,6 +9,8 @@ from web_app.sentinel import _limit_from_request, _report_payload
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.runner import (
     _add_finding,
+    _agent_prompt,
+    _annotate_screenshot,
     _BedrockProvider,
     _build_codex_cmd,
     _clean_title,
@@ -324,6 +326,52 @@ def test_sentinel_index_prefills_form_from_clone_query_params(client):
     assert 'value="5"' in body
     assert 'value="small_phone" selected' in body
     assert 'value="senior" selected' in body
+
+
+def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
+    from PIL import Image
+
+    raw = tmp_path / "step-01.png"
+    Image.new("RGB", (200, 100), (255, 255, 255)).save(raw)
+    out = tmp_path / "step-01-annot.png"
+
+    elements = [
+        {"id": "e1", "rect": {"x": 10, "y": 20, "w": 50, "h": 30}},
+        {"id": "e2", "rect": {"x": 80, "y": 40, "w": 60, "h": 25}},
+    ]
+    written = _annotate_screenshot(raw, out, elements, viewport={"w": 200, "h": 100})
+
+    assert written == out and out.exists()
+    img = Image.open(out)
+    assert img.size == (200, 100)
+    # Annotated image must differ from the blank original somewhere.
+    assert list(img.convert("RGB").getdata()) != list(Image.open(raw).getdata())
+
+
+def test_agent_prompt_omits_body_text_and_rects():
+    report = {
+        "run_id": "a" * 32,
+        "target_url": "https://example.com",
+        "prompt": "test it",
+        "steps": [],
+    }
+    observation = {
+        "url": "https://example.com",
+        "title": "Example",
+        "text": "Lots of body text the model should never see",
+        "elements": [
+            {"id": "e1", "tag": "button", "type": "", "text": "Sign up",
+             "href": "", "rect": {"x": 1, "y": 2, "w": 3, "h": 4}},
+        ],
+        "viewport": {"w": 800, "h": 600},
+    }
+    out = _agent_prompt(report, observation)
+
+    assert "Lots of body text" not in out
+    assert "rect" not in out
+    assert "viewport" not in out
+    assert '"id": "e1"' in out
+    assert '"label": "Sign up"' in out
 
 
 def test_system_prompt_prepends_demographic_persona():

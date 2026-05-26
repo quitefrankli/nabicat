@@ -103,18 +103,32 @@ function syncScreenshots(container, report) {
   const empty = container.querySelector('.sentinel-empty');
   if (empty) empty.remove();
 
-  const existing = container.querySelectorAll('.sentinel-screenshot-btn').length;
-  for (let i = existing; i < report.screenshots.length; i++) {
-    const filename = report.screenshots[i].split('/').pop();
-    const url = `/sentinel/report/${report.run_id}/screenshots/${filename}`;
+  const placeholder = 'data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=';
+  const buildBtn = (url, tag, tagClass) => {
     const button = document.createElement('button');
     button.className = 'sentinel-screenshot-btn';
     button.type = 'button';
     button.dataset.full = url;
-    button.innerHTML = `<img loading="lazy" decoding="async"
-        src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-        data-screenshot-src="${url}" alt="QA screenshot">`;
-    container.appendChild(button);
+    button.innerHTML = `<span class="sentinel-screenshot-tag ${tagClass || ''}">${tag}</span>
+      <img loading="lazy" decoding="async" src="${placeholder}"
+        data-screenshot-src="${url}" alt="QA screenshot ${tag}">`;
+    return button;
+  };
+
+  const annotated = report.annotated_screenshots || [];
+  const existing = container.querySelectorAll('.sentinel-screenshot-pair').length;
+  for (let i = existing; i < report.screenshots.length; i++) {
+    const rawFile = report.screenshots[i].split('/').pop();
+    const rawUrl = `/sentinel/report/${report.run_id}/screenshots/${rawFile}`;
+    const pair = document.createElement('div');
+    pair.className = 'sentinel-screenshot-pair';
+    pair.appendChild(buildBtn(rawUrl, 'raw', ''));
+    if (annotated[i]) {
+      const aFile = annotated[i].split('/').pop();
+      const aUrl = `/sentinel/report/${report.run_id}/screenshots/${aFile}`;
+      pair.appendChild(buildBtn(aUrl, 'annotated', 'sentinel-screenshot-tag-annot'));
+    }
+    container.appendChild(pair);
   }
 }
 

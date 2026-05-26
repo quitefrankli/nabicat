@@ -55,7 +55,7 @@
         <span>Cancel</span>
       </button>
       <a class="btn btn-primary"
-         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), device=report.device or '', demographic=report.demographic or '') }}">
+         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), allow_external=('1' if report.allow_external else ''), device=report.device or '', demographic=report.demographic or '') }}">
         <i class="bi bi-arrow-clockwise"></i>
         <span>Rerun</span>
       </a>
@@ -124,13 +124,25 @@
     </div>
     <div id="sentinel-screenshots" class="sentinel-screenshots">
       {% for shot in report.screenshots %}
-        <button class="sentinel-screenshot-btn" type="button"
-                data-full="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}">
-          <img loading="lazy" decoding="async"
-               src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-               data-screenshot-src="{{ url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) }}"
-               alt="QA screenshot">
-        </button>
+        {% set raw_url = url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) %}
+        {% set annot = report.annotated_screenshots[loop.index0] if report.annotated_screenshots and report.annotated_screenshots|length > loop.index0 else None %}
+        <div class="sentinel-screenshot-pair">
+          <button class="sentinel-screenshot-btn" type="button" data-full="{{ raw_url }}">
+            <span class="sentinel-screenshot-tag">raw</span>
+            <img loading="lazy" decoding="async"
+                 src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+                 data-screenshot-src="{{ raw_url }}" alt="QA screenshot">
+          </button>
+          {% if annot %}
+            {% set annot_url = url_for('sentinel.screenshot', run_id=report.run_id, filename=annot.split('/')[-1]) %}
+            <button class="sentinel-screenshot-btn" type="button" data-full="{{ annot_url }}">
+              <span class="sentinel-screenshot-tag sentinel-screenshot-tag-annot">annotated</span>
+              <img loading="lazy" decoding="async"
+                   src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+                   data-screenshot-src="{{ annot_url }}" alt="QA screenshot annotated">
+            </button>
+          {% endif %}
+        </div>
       {% else %}
         <div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>
       {% endfor %}
