@@ -213,11 +213,12 @@ def service_worker():
     return send_from_directory('static', 'service-worker.js', mimetype='application/javascript')
 
 def configure_logging(debug: bool) -> None:
+    config = ConfigManager()
     log_path = Path("logs/web_app.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     rotating_log_handler = RotatingFileHandler(str(log_path),
                                                    maxBytes=int(1e6),
-                                                   backupCount=10)
+                                                   backupCount=config.dev.log_rotation_backup_count)
     logging.basicConfig(level=logging.DEBUG if debug else logging.INFO,
                         handlers=[] if debug else [rotating_log_handler],
                         format='%(asctime)s %(levelname)s %(message)s')

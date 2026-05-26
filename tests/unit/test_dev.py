@@ -2,6 +2,7 @@ from collections import Counter
 from unittest.mock import patch
 
 from web_app.app import app
+from web_app.dev.logs import _read_log_lines
 from web_app.dev.map import (
     _build_hit_series,
     _collect_client_ip_counts,
@@ -56,6 +57,19 @@ def test_collect_client_ip_counts_reads_all_rotated_logs(tmp_path):
     (tmp_path / "other.log").write_text("INFO Processing request: client=9.9.9.9, path=/\n")
 
     assert _collect_client_ip_counts(tmp_path) == Counter({"1.1.1.1": 2, "8.8.8.8": 1})
+
+
+def test_read_log_lines_reads_five_most_recent_rotated_logs_oldest_first(tmp_path):
+    (tmp_path / "web_app.log").write_text("current\n")
+    (tmp_path / "web_app.log.1").write_text("previous\n")
+    (tmp_path / "web_app.log.2").write_text("two\n")
+    (tmp_path / "web_app.log.3").write_text("three\n")
+    (tmp_path / "web_app.log.4").write_text("four\n")
+    (tmp_path / "web_app.log.5").write_text("too old\n")
+    (tmp_path / "web_app.log.10").write_text("oldest\n")
+    (tmp_path / "web_app.log.bak").write_text("ignored\n")
+
+    assert _read_log_lines(tmp_path) == ["four", "three", "two", "previous", "current"]
 
 
 def test_collect_client_ip_counts_can_filter_by_path_glob(tmp_path):

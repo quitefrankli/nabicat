@@ -100,6 +100,9 @@ class DevConfig:
     terminal_idle_timeout_s: int = 1800
     terminal_buffer_bytes: int = 1_048_576
     terminal_read_chunk: int = 4096
+    log_rotation_backup_count: int = 20
+    log_viewer_file_count: int = 5
+    log_viewer_max_lines: int = 5000
     map_geo_timeout_s: int = 8
     map_geo_cache_ttl_s: int = 3600
     map_geo_batch_size: int = 100
