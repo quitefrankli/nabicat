@@ -29,13 +29,22 @@ def _iter_recent_log_files(logs_dir: Path, file_count: int) -> list[Path]:
     return [path for _, path in sorted(files)[:file_count]][::-1]
 
 
+def _line_has_suppressed_path(line: str, suppressed_paths: set[str]) -> bool:
+    return any(f"path={path}," in line or f"path={path} " in line for path in suppressed_paths)
+
+
 def _read_log_lines(logs_dir: Path, file_count: int | None = None) -> list[str]:
     config = ConfigManager()
     files = _iter_recent_log_files(logs_dir, file_count or config.dev.log_viewer_file_count)
+    suppressed_paths = config.request_log_suppressed_paths
     lines = []
     for path in files:
         try:
-            lines.extend(path.read_text(errors='replace').splitlines())
+            lines.extend(
+                line
+                for line in path.read_text(errors='replace').splitlines()
+                if not _line_has_suppressed_path(line, suppressed_paths)
+            )
         except OSError:
             continue
     return lines

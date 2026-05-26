@@ -72,6 +72,17 @@ def test_read_log_lines_reads_five_most_recent_rotated_logs_oldest_first(tmp_pat
     assert _read_log_lines(tmp_path) == ["four", "three", "two", "previous", "current"]
 
 
+def test_read_log_lines_hides_suppressed_request_paths(tmp_path):
+    (tmp_path / "web_app.log").write_text(
+        "2026-05-25 17:41:09,281 INFO Processing request: client=1.1.1.1, path=/dev/terminal/input, method=POST\n"
+        "2026-05-25 17:41:10,281 INFO Processing request: client=1.1.1.1, path=/example, method=GET\n"
+    )
+
+    assert _read_log_lines(tmp_path) == [
+        "2026-05-25 17:41:10,281 INFO Processing request: client=1.1.1.1, path=/example, method=GET"
+    ]
+
+
 def test_collect_client_ip_counts_can_filter_by_path_glob(tmp_path):
     (tmp_path / "web_app.log").write_text(
         "INFO Processing request: client=1.1.1.1, path=/hammock/cats, method=GET\n"

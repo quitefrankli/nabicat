@@ -274,6 +274,10 @@ class ConfigManager:
             '/dns-query',   # DNS-over-HTTPS probes
         }
         self.known_bot_methods = {'PROPFIND', 'TRACK', 'TRACE'}
+        self.request_log_suppressed_paths = {
+            '/dev/terminal/input',
+            '/dev/terminal/output',
+        }
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
         self.smtp_port = 587
         self.project_dir = Path.cwd()

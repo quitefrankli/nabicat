@@ -154,8 +154,8 @@ def start_scheduler() -> None:
     scheduler.start()
 
 
-def _skip_request_log(path: str, method: str) -> bool:
-    if path == '/dev/terminal/output':
+def _skip_request_log(path: str, method: str, config: ConfigManager) -> bool:
+    if path in config.request_log_suppressed_paths:
         return True
     if method == 'GET' and path.startswith('/sentinel/api/runs/') and not path.endswith('/rerun'):
         return True
@@ -180,7 +180,7 @@ def before_request():
             logging.info("Debug mode: created admin user")
         flask_login.login_user(user, remember=True)
 
-    if _skip_request_log(request.path, request.method):
+    if _skip_request_log(request.path, request.method, config):
         return
 
     message = f"Processing request: client={get_ip()}"
