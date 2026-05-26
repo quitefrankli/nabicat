@@ -48,7 +48,7 @@ StartLimitIntervalSec=60
 Type=simple
 User=${USER_NAME}
 WorkingDirectory=${PROJ_DIR}
-ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 --timeout 300 --factory web_app.__main__:prod_entry
+ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 --timeout 300 'web_app.__main__:prod_entry()'
 Restart=always
 RestartSec=3
 
