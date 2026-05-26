@@ -6,16 +6,11 @@
 {% block scripts %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('sentinel.static', filename='style.css') }}">
+  <script defer src="{{ url_for('sentinel.static', filename='sidebar.js') }}"></script>
   <script defer src="{{ url_for('sentinel.static', filename='report.js') }}"></script>
 {% endblock %}
 
 {% block page_actions %}
-  <li>
-    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('sentinel.index') }}">
-      <i class="bi bi-plus-circle"></i>
-      <span>New Run</span>
-    </a>
-  </li>
   <li>
     <a class="dropdown-item d-flex align-items-center gap-2 {% if report.status not in ['completed', 'timed_out', 'cancelled', 'failed'] %}disabled{% endif %}"
        id="sentinel-export-pdf"

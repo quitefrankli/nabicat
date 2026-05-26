@@ -1,5 +1,10 @@
 {% set active_run_id = report.run_id if report is defined else "" %}
-<aside class="sentinel-sidebar sentinel-panel">
+<aside class="sentinel-sidebar sentinel-panel" id="sentinel-sidebar">
+  <a class="btn btn-primary sentinel-sidebar-new-run"
+     href="{{ url_for('sentinel.index') }}">
+    <i class="bi bi-plus-circle"></i>
+    <span>New Run</span>
+  </a>
   <div class="sentinel-sidebar-header">
     <h2>Recent Runs</h2>
     <span>{{ sidebar_runs|length }}</span>
@@ -24,3 +29,6 @@
     </div>
   {% endif %}
 </aside>
+<div class="sentinel-sidebar-resizer" id="sentinel-sidebar-resizer"
+     role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
+     tabindex="0"></div>

@@ -6,9 +6,43 @@
 }
 
 .sentinel-shell-with-sidebar {
-  max-width: 1320px;
-  grid-template-columns: 260px minmax(0, 1fr);
+  --sentinel-sidebar-w: 280px;
+  max-width: none;
+  margin: 1.5rem 1.75rem 0;
+  grid-template-columns: var(--sentinel-sidebar-w) 6px minmax(0, 1fr);
   align-items: start;
+}
+
+@media (min-width: 992px) {
+  .sentinel-shell-with-sidebar {
+    margin: 1.5rem 2.25rem 0;
+  }
+}
+
+.sentinel-sidebar-resizer {
+  align-self: stretch;
+  width: 6px;
+  cursor: col-resize;
+  border-radius: var(--hw-radius-sm);
+  background: transparent;
+  transition: background var(--hw-transition-fast);
+  position: sticky;
+  top: 1rem;
+  height: calc(100vh - 2rem);
+  touch-action: none;
+}
+
+.sentinel-sidebar-resizer:hover,
+.sentinel-sidebar-resizer:focus,
+.sentinel-sidebar-resizer.is-dragging {
+  background: var(--hw-sage-light);
+  outline: none;
+}
+
+body.sentinel-resizing,
+body.sentinel-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .sentinel-shell-main {
@@ -20,6 +54,9 @@
 @media (max-width: 768px) {
   .sentinel-shell-with-sidebar {
     grid-template-columns: 1fr;
+  }
+  .sentinel-sidebar-resizer {
+    display: none;
   }
 }
 
@@ -33,6 +70,14 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
+}
+
+.sentinel-sidebar-new-run {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
 }
 
 .sentinel-sidebar-header {
@@ -163,6 +208,7 @@
   display: grid;
   gap: 1rem;
   margin-top: 1rem;
+  max-width: 880px;
 }
 
 .sentinel-inline-fields {
