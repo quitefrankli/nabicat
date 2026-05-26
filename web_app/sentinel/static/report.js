@@ -40,6 +40,11 @@ function renderReport(report) {
   if (title && report.title) {
     title.textContent = report.title;
   }
+  const exportLink = document.getElementById('sentinel-export-pdf');
+  if (exportLink) {
+    const finished = ['completed', 'timed_out', 'cancelled', 'failed'].includes(report.status);
+    exportLink.classList.toggle('disabled', !finished);
+  }
   const cancelButton = document.getElementById('sentinel-cancel-run');
   if (cancelButton) {
     cancelButton.hidden = !active;
@@ -59,6 +64,7 @@ function renderReport(report) {
 
   if (finalReport) {
     finalReport.innerHTML = report.final_report_html || '<div class="sentinel-empty sentinel-empty-small">Final report will appear when the run completes.</div>';
+    bindFinalReportImages();
   }
 
   if (steps) {
@@ -88,47 +94,43 @@ function renderReport(report) {
   }
 
   if (screenshots) {
-    syncScreenshots(screenshots, report);
+    syncScreenshots(screenshots, report.screenshots || [], report.run_id);
+    const debug = document.getElementById('sentinel-debug-screenshots');
+    if (debug) {
+      syncScreenshots(debug, report.annotated_screenshots || [], report.run_id, 'annotated');
+    }
+    const debugCount = document.getElementById('sentinel-debug-screenshot-count');
+    if (debugCount) debugCount.textContent = (report.annotated_screenshots || []).length;
     setupScreenshotLoading(report);
     bindScreenshotButtons();
   }
 }
 
-function syncScreenshots(container, report) {
-  if (!report.screenshots.length) {
-    container.innerHTML = '<div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>';
+function syncScreenshots(container, items, runId, tag) {
+  const placeholder = 'data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=';
+  if (!items.length) {
+    if (!container.querySelector('.sentinel-empty')) {
+      container.innerHTML = `<div class="sentinel-empty sentinel-empty-small">No ${tag === 'annotated' ? 'annotated screenshots' : 'screenshots'} yet.</div>`;
+    }
     return;
   }
-
   const empty = container.querySelector('.sentinel-empty');
   if (empty) empty.remove();
 
-  const placeholder = 'data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=';
-  const buildBtn = (url, tag, tagClass) => {
+  const existing = container.querySelectorAll('.sentinel-screenshot-btn').length;
+  for (let i = existing; i < items.length; i++) {
+    const file = items[i].split('/').pop();
+    const url = `/sentinel/report/${runId}/screenshots/${file}`;
     const button = document.createElement('button');
     button.className = 'sentinel-screenshot-btn';
     button.type = 'button';
     button.dataset.full = url;
-    button.innerHTML = `<span class="sentinel-screenshot-tag ${tagClass || ''}">${tag}</span>
-      <img loading="lazy" decoding="async" src="${placeholder}"
-        data-screenshot-src="${url}" alt="QA screenshot ${tag}">`;
-    return button;
-  };
-
-  const annotated = report.annotated_screenshots || [];
-  const existing = container.querySelectorAll('.sentinel-screenshot-pair').length;
-  for (let i = existing; i < report.screenshots.length; i++) {
-    const rawFile = report.screenshots[i].split('/').pop();
-    const rawUrl = `/sentinel/report/${report.run_id}/screenshots/${rawFile}`;
-    const pair = document.createElement('div');
-    pair.className = 'sentinel-screenshot-pair';
-    pair.appendChild(buildBtn(rawUrl, 'raw', ''));
-    if (annotated[i]) {
-      const aFile = annotated[i].split('/').pop();
-      const aUrl = `/sentinel/report/${report.run_id}/screenshots/${aFile}`;
-      pair.appendChild(buildBtn(aUrl, 'annotated', 'sentinel-screenshot-tag-annot'));
-    }
-    container.appendChild(pair);
+    const tagSpan = tag === 'annotated'
+      ? `<span class="sentinel-screenshot-tag sentinel-screenshot-tag-annot">annotated</span>`
+      : '';
+    button.innerHTML = `${tagSpan}<img loading="lazy" decoding="async" src="${placeholder}"
+        data-screenshot-src="${url}" alt="QA screenshot${tag ? ' ' + tag : ''}">`;
+    container.appendChild(button);
   }
 }
 
@@ -255,12 +257,34 @@ function bindScreenshotButtons() {
   });
 }
 
+function bindFinalReportImages() {
+  ensureLightbox();
+  document.querySelectorAll('#sentinel-final-report img.sentinel-final-report-img').forEach(function (img) {
+    if (img.dataset.boundLightbox) return;
+    img.dataset.boundLightbox = 'true';
+    img.addEventListener('click', function () {
+      sentinelLightboxImage.src = img.src;
+      sentinelLightbox.classList.add('open');
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   const shell = document.querySelector('[data-run-id]');
   if (!shell) return;
   const runId = shell.dataset.runId;
   setupScreenshotLoading();
   bindScreenshotButtons();
+  bindFinalReportImages();
+
+  const exportLink = document.getElementById('sentinel-export-pdf');
+  if (exportLink) {
+    exportLink.addEventListener('click', function (event) {
+      if (exportLink.classList.contains('disabled')) {
+        event.preventDefault();
+      }
+    });
+  }
 
   const cancelButton = document.getElementById('sentinel-cancel-run');
   if (cancelButton) {

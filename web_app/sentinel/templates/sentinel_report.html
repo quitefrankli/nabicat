@@ -17,6 +17,14 @@
     </a>
   </li>
   <li>
+    <a class="dropdown-item d-flex align-items-center gap-2 {% if report.status not in ['completed', 'timed_out', 'cancelled', 'failed'] %}disabled{% endif %}"
+       id="sentinel-export-pdf"
+       href="{{ url_for('sentinel.report_pdf', run_id=report.run_id) }}">
+      <i class="bi bi-filetype-pdf"></i>
+      <span>Export PDF</span>
+    </a>
+  </li>
+  <li>
     <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('sentinel.report_json', run_id=report.run_id) }}">
       <i class="bi bi-filetype-json"></i>
       <span>View JSON</span>
@@ -35,6 +43,9 @@
       <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
       <h1 id="sentinel-report-title">{{ report.title or report.target_url }}</h1>
       <p class="sentinel-report-subtitle"><a href="{{ report.target_url }}" target="_blank" rel="noopener noreferrer">{{ report.target_url }}</a></p>
+      {% if report.owner %}
+        <p class="sentinel-report-subtitle"><small class="text-muted">Started by <strong>{{ report.owner }}</strong>{% if report.created_at %} on {{ report.created_at }}{% endif %}</small></p>
+      {% endif %}
       {% if report.device_label or report.demographic_label %}
         <p class="sentinel-report-meta">
           {% if report.device_label %}
@@ -75,30 +86,12 @@
     </div>
   </section>
 
-  <details class="sentinel-panel sentinel-diagnostics">
-    <summary class="sentinel-section-title">
-      <h2>Diagnostics</h2>
-      <span id="sentinel-findings-count">{{ report.findings|length }}</span>
-    </summary>
-    <div id="sentinel-findings" class="sentinel-findings">
-      {% for finding in report.findings %}
-        <p class="sentinel-finding-line">
-          <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
-          <strong>{{ finding.title }}</strong>
-          <span>{{ finding.detail }}</span>
-        </p>
-      {% else %}
-        <div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>
-      {% endfor %}
-    </div>
-  </details>
-
-  <section class="sentinel-panel">
+  <section id="sentinel-steps-panel" class="sentinel-panel">
     <div class="sentinel-section-title">
       <h2>Steps</h2>
       <span id="sentinel-step-count">{{ report.steps|length }}</span>
     </div>
-    <div id="sentinel-steps" class="sentinel-steps">
+    <div id="sentinel-steps" class="sentinel-steps sentinel-steps-scroll">
       {% for step in report.steps %}
         <article class="sentinel-step">
           <span>{{ step.index }}</span>
@@ -117,7 +110,7 @@
     </div>
   </section>
 
-  <section class="sentinel-panel">
+  <section id="sentinel-screenshots-panel" class="sentinel-panel">
     <div class="sentinel-section-title">
       <h2>Screenshots</h2>
       <span id="sentinel-screenshot-count">{{ report.screenshots|length }}</span>
@@ -125,28 +118,53 @@
     <div id="sentinel-screenshots" class="sentinel-screenshots">
       {% for shot in report.screenshots %}
         {% set raw_url = url_for('sentinel.screenshot', run_id=report.run_id, filename=shot.split('/')[-1]) %}
-        {% set annot = report.annotated_screenshots[loop.index0] if report.annotated_screenshots and report.annotated_screenshots|length > loop.index0 else None %}
-        <div class="sentinel-screenshot-pair">
-          <button class="sentinel-screenshot-btn" type="button" data-full="{{ raw_url }}">
-            <span class="sentinel-screenshot-tag">raw</span>
-            <img loading="lazy" decoding="async"
-                 src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-                 data-screenshot-src="{{ raw_url }}" alt="QA screenshot">
-          </button>
-          {% if annot %}
-            {% set annot_url = url_for('sentinel.screenshot', run_id=report.run_id, filename=annot.split('/')[-1]) %}
-            <button class="sentinel-screenshot-btn" type="button" data-full="{{ annot_url }}">
-              <span class="sentinel-screenshot-tag sentinel-screenshot-tag-annot">annotated</span>
-              <img loading="lazy" decoding="async"
-                   src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-                   data-screenshot-src="{{ annot_url }}" alt="QA screenshot annotated">
-            </button>
-          {% endif %}
-        </div>
+        <button class="sentinel-screenshot-btn" type="button" data-full="{{ raw_url }}">
+          <img loading="lazy" decoding="async"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+               data-screenshot-src="{{ raw_url }}" alt="QA screenshot">
+        </button>
       {% else %}
         <div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>
       {% endfor %}
     </div>
   </section>
+
+  <details id="sentinel-debug-screenshots-panel" class="sentinel-panel sentinel-diagnostics">
+    <summary class="sentinel-section-title">
+      <h2>Debug Screenshots</h2>
+      <span id="sentinel-debug-screenshot-count">{{ report.annotated_screenshots|length if report.annotated_screenshots else 0 }}</span>
+    </summary>
+    <div id="sentinel-debug-screenshots" class="sentinel-screenshots">
+      {% for annot in report.annotated_screenshots or [] %}
+        {% set annot_url = url_for('sentinel.screenshot', run_id=report.run_id, filename=annot.split('/')[-1]) %}
+        <button class="sentinel-screenshot-btn" type="button" data-full="{{ annot_url }}">
+          <span class="sentinel-screenshot-tag sentinel-screenshot-tag-annot">annotated</span>
+          <img loading="lazy" decoding="async"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+               data-screenshot-src="{{ annot_url }}" alt="QA screenshot annotated">
+        </button>
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">No annotated screenshots yet.</div>
+      {% endfor %}
+    </div>
+  </details>
+
+  <details class="sentinel-panel sentinel-diagnostics">
+    <summary class="sentinel-section-title">
+      <h2>Diagnostics</h2>
+      <span id="sentinel-findings-count">{{ report.findings|length }}</span>
+    </summary>
+    <div id="sentinel-findings" class="sentinel-findings">
+      {% for finding in report.findings %}
+        <p class="sentinel-finding-line">
+          <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
+          <strong>{{ finding.title }}</strong>
+          <span>{{ finding.detail }}</span>
+        </p>
+      {% else %}
+        <div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>
+      {% endfor %}
+    </div>
+  </details>
 </div>
 {% endblock %}

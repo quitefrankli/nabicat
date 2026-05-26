@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sentinel - {{ report.title or report.target_url }}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #2D4A3E;
+      margin: 0;
+      padding: 24px 32px;
+      font-size: 11pt;
+      line-height: 1.5;
+    }
+    h1 { font-size: 22pt; margin: 0 0 4px; color: #2D4A3E; }
+    h2 { font-size: 14pt; margin: 18px 0 8px; color: #2D4A3E; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    h3 { font-size: 12pt; margin: 12px 0 6px; }
+    p, ul, ol { margin: 6px 0; }
+    code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 9.5pt; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+    pre { background: #f4f4f4; padding: 8px; border-radius: 4px; overflow-x: auto; }
+    img { max-width: 100%; height: auto; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; page-break-inside: avoid; }
+    .meta { color: #5A6B5A; font-size: 9.5pt; margin-bottom: 12px; }
+    .meta a { color: #6B8E5A; text-decoration: none; }
+    .badges { margin: 6px 0 14px; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 9pt;
+      font-weight: 600;
+      margin-right: 4px;
+      background: #F5F5DC;
+      color: #5A6B5A;
+      border: 1px solid #ccc;
+    }
+    .badge-status { background: #87A878; color: white; border: none; text-transform: capitalize; }
+    .prompt { font-style: italic; color: #5A6B5A; padding: 6px 10px; border-left: 3px solid #87A878; margin: 8px 0 16px; background: #fafaf6; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 18px 0; }
+    .empty { color: #888; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>{{ report.title or report.target_url }}</h1>
+  <div class="meta">
+    <a href="{{ report.target_url }}">{{ report.target_url }}</a>
+    {% if report.owner %} &middot; Started by <strong>{{ report.owner }}</strong>{% endif %}
+    {% if report.created_at %} &middot; {{ report.created_at }}{% endif %}
+  </div>
+
+  <div class="badges">
+    <span class="badge badge-status">{{ report.status }}</span>
+    {% if report.device_label %}<span class="badge">{{ report.device_label }}</span>{% endif %}
+    {% if report.demographic_label and report.demographic %}<span class="badge">{{ report.demographic_label }}</span>{% endif %}
+  </div>
+
+  {% if report.prompt %}
+    <div class="prompt">{{ report.prompt }}</div>
+  {% endif %}
+
+  {% if report.final_report %}
+    {{ report.final_report_html|safe }}
+  {% else %}
+    <p class="empty">No final report was generated.</p>
+  {% endif %}
+</body>
+</html>

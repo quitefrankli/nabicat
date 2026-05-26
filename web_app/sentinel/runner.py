@@ -23,6 +23,25 @@ _cancel_events: dict[str, threading.Event] = {}
 _active_lock = threading.RLock()
 
 
+def render_report_pdf(html: str) -> bytes:
+    """Render an HTML string to PDF bytes using headless Chromium (Playwright)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context()
+            page = context.new_page()
+            page.set_content(html, wait_until="load")
+            return page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "16mm", "bottom": "16mm", "left": "14mm", "right": "14mm"},
+            )
+        finally:
+            browser.close()
+
+
 def request_cancel(run_id: str) -> bool:
     with _active_lock:
         event = _cancel_events.get(run_id)
@@ -148,6 +167,7 @@ def start_run(
     allow_external: bool = False,
     device: str = "",
     demographic: str = "",
+    owner: str = "",
 ) -> dict:
     run_id = uuid.uuid4().hex
     now = utc_now_iso()
@@ -160,6 +180,7 @@ def start_run(
     report = {
         "run_id": run_id,
         "status": "queued",
+        "owner": str(owner or ""),
         "target_url": target.url,
         "target_hostname": target.hostname,
         "prompt": prompt,

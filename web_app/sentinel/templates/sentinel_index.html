@@ -103,7 +103,7 @@
           <a class="sentinel-run-row" href="{{ url_for('sentinel.report', run_id=run.run_id) }}">
             <span class="sentinel-run-main">
               <strong>{{ run.title or run.target_url }}</strong>
-              <small>{{ run.target_url }} &middot; {{ run.created_at }}</small>
+              <small>{{ run.target_url }} &middot; {{ run.created_at }}{% if run.owner %} &middot; {{ run.owner }}{% endif %}</small>
             </span>
             <span class="sentinel-badge sentinel-badge-{{ run.status }}">{{ run.status }}</span>
           </a>

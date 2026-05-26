@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import re
 
-from flask import Blueprint, abort, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, Response, abort, jsonify, render_template, request, send_from_directory
 from flask_login import current_user, login_required
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.runner import get_run, request_cancel, start_run
+from web_app.sentinel.runner import get_run, render_report_pdf, request_cancel, start_run
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
@@ -75,6 +75,31 @@ def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]
         token.attrSet("src", resolved)
         token.attrSet("loading", "lazy")
         token.attrSet("decoding", "async")
+        existing_class = token.attrGet("class") or ""
+        token.attrSet("class", (existing_class + " sentinel-final-report-img").strip())
+        if default_image:
+            return default_image(tokens, idx, options, env)
+        return md.renderer.renderToken(tokens, idx, options)
+
+    md.renderer.rules["image"] = render_image
+    return Markup(md.render(markdown_text or ""))
+
+
+def _render_final_report_for_pdf(markdown_text: str, run_id: str, screenshots: list[str]) -> Markup:
+    """Like _render_final_report, but inline screenshot src points to a file:// URL so headless
+    Chromium can load the image directly off disk without a server round-trip."""
+    md = MarkdownIt("commonmark", {"html": False})
+    allowed = {str(s).rsplit("/", 1)[-1] for s in screenshots or []}
+    default_image = md.renderer.rules.get("image")
+    screenshots_dir = DataInterface().screenshots_dir(run_id)
+
+    def render_image(tokens, idx, options, env):
+        token = tokens[idx]
+        src = token.attrGet("src") or ""
+        filename = src.rsplit("/", 1)[-1]
+        if filename not in allowed or not _SCREENSHOT_FILENAME_RE.match(filename):
+            return ""
+        token.attrSet("src", (screenshots_dir / filename).resolve().as_uri())
         existing_class = token.attrGet("class") or ""
         token.attrSet("class", (existing_class + " sentinel-final-report-img").strip())
         if default_image:
@@ -180,6 +205,7 @@ def create_run():
             allow_external=allow_external,
             device=device,
             demographic=demographic,
+            owner=str(getattr(current_user, "id", "") or ""),
         )),
         202,
     )
@@ -218,6 +244,42 @@ def report_json(run_id: str):
     if report_data is None:
         abort(404)
     return jsonify(_report_payload(report_data))
+
+
+@sentinel_api.route("/report/<run_id>/pdf")
+def report_pdf(run_id: str):
+    report_data = get_run(run_id)
+    if report_data is None:
+        abort(404)
+    if report_data.get("status") not in {"completed", "timed_out", "cancelled", "failed"}:
+        return jsonify({"error": "Run is still in progress"}), 409
+
+    payload = dict(report_data)
+    payload["final_report_html"] = str(
+        _render_final_report_for_pdf(
+            str(report_data.get("final_report", "")),
+            str(report_data.get("run_id", "")),
+            list(report_data.get("screenshots", []) or []),
+        )
+    )
+    cfg = ConfigManager()
+    device_key = str(report_data.get("device") or "")
+    demographic_key = str(report_data.get("demographic") or "")
+    payload["device_label"] = cfg.sentinel.device_labels.get(device_key, "")
+    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(demographic_key, "")
+
+    html = render_template("sentinel_report_pdf.html", report=payload)
+    try:
+        pdf_bytes = render_report_pdf(html)
+    except Exception as e:
+        return jsonify({"error": f"PDF generation failed: {e}"}), 500
+
+    safe_title = re.sub(r"[^A-Za-z0-9._-]+", "-", str(report_data.get("title") or run_id)).strip("-")[:80] or run_id
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="sentinel-{safe_title}.pdf"'},
+    )
 
 
 @sentinel_api.route("/report/<run_id>/screenshots/<filename>")
