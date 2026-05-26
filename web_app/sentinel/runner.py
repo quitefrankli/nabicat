@@ -74,12 +74,14 @@ _SYSTEM_BASE = (
     "Return ONLY JSON with one of these shapes: "
     "{\"action\":\"click\",\"element_id\":\"e1\",\"reason\":\"...\"}, "
     "{\"action\":\"fill\",\"element_id\":\"e2\",\"value\":\"...\",\"reason\":\"...\"}, "
+    "{\"action\":\"select\",\"element_id\":\"e3\",\"value\":\"Option label\",\"reason\":\"...\"}, "
     "{\"action\":\"goto\",\"url\":\"/path\",\"reason\":\"...\"}, "
     "{\"action\":\"scroll\",\"value\":\"down\",\"reason\":\"...\"}, "
     "{\"action\":\"wait\",\"reason\":\"...\"}, "
     "{\"action\":\"finish\",\"reason\":\"...\"}. "
     "Use scroll with value \"down\" or \"up\" when the requested flow likely continues outside "
     "the current viewport. "
+    "Use select, not fill, for native dropdowns/select elements when choosing a visible option. "
     "Prefer exploring core navigation, links, and obvious broken states. "
     "Avoid using search bars, search boxes, or generic query inputs unless the user's prompt "
     "explicitly asks you to test search. Most real users navigate by clicking visible links and "
@@ -856,15 +858,24 @@ def _observe_page(page) -> dict:
             const r = el.getBoundingClientRect();
             return {x: r.x, y: r.y, w: r.width, h: r.height};
           };
-          const visible = (el) => {
+          document.querySelectorAll('[data-sentinel-id]').forEach(el => el.removeAttribute('data-sentinel-id'));
+          const usable = (el) => {
             const r = el.getBoundingClientRect();
             const style = window.getComputedStyle(el);
-            return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            if (r.width <= 0 || r.height <= 0) return false;
+            if (r.bottom <= 0 || r.right <= 0 || r.top >= window.innerHeight || r.left >= window.innerWidth) return false;
+            if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') return false;
+            if (el.disabled || el.getAttribute('aria-hidden') === 'true' || el.closest('[aria-hidden="true"],[inert]')) return false;
+            const cx = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1);
+            const cy = Math.min(Math.max(r.top + r.height / 2, 0), window.innerHeight - 1);
+            const top = document.elementFromPoint(cx, cy);
+            return Boolean(top && (el === top || el.contains(top)));
           };
           const candidates = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role="button"]'));
           const elements = [];
-          for (const el of candidates.slice(0, maxElements)) {
-            if (!visible(el)) continue;
+          for (const el of candidates) {
+            if (elements.length >= maxElements) break;
+            if (!usable(el)) continue;
             const id = `e${elements.length + 1}`;
             el.setAttribute('data-sentinel-id', id);
             elements.push({
@@ -956,6 +967,9 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
                 pass
         elif action.action == "fill":
             locator.fill(action.value or "test")
+        elif action.action == "select":
+            locator.select_option(label=action.value or "")
+            page.wait_for_timeout(ConfigManager().sentinel.wait_action_ms)
         return {"ok": True, "url": page.url}
     except Exception as e:
         return {"ok": False, "error": str(e), "url": getattr(page, "url", "")}

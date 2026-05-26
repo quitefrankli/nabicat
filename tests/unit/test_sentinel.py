@@ -24,6 +24,7 @@ from web_app.sentinel.runner import (
     _get_provider,
     _host_allowed,
     _MeridianProvider,
+    _observe_page,
     _system_prompt,
     ensure_screenshot_thumbnail,
 )
@@ -79,6 +80,11 @@ def test_parse_agent_action_allows_only_known_actions_and_elements():
     assert scroll.action == "scroll"
     assert scroll.value == "down"
     assert scroll.element_id is None
+
+    select = parse_agent_action('{"action": "select", "element_id": "e2", "value": "Price: Low - High"}', {"e2"})
+    assert select.action == "select"
+    assert select.element_id == "e2"
+    assert select.value == "Price: Low - High"
 
     with pytest.raises(ActionValidationError):
         parse_agent_action('{"action": "delete_database"}', {"e1"})
@@ -470,6 +476,73 @@ def test_scroll_action_moves_page_and_waits():
     assert result == {"ok": True, "url": "https://example.com/"}
     assert page.mouse.calls == [(0, ConfigManager().sentinel.scroll_action_delta_px)]
     assert page.waits == [ConfigManager().sentinel.wait_action_ms]
+
+
+def test_select_action_sets_option_and_waits():
+    class DummyLocator:
+        def __init__(self):
+            self.calls = []
+
+        def select_option(self, **kwargs):
+            self.calls.append(kwargs)
+
+    class DummyPage:
+        url = "https://example.com/"
+
+        def __init__(self):
+            self.locator_obj = DummyLocator()
+            self.waits = []
+
+        def locator(self, selector):
+            self.selector = selector
+            return type("LocatorHandle", (), {"first": self.locator_obj})()
+
+        def wait_for_timeout(self, ms):
+            self.waits.append(ms)
+
+    page = DummyPage()
+    action = parse_agent_action('{"action": "select", "element_id": "e2", "value": "Price: Low - High"}', {"e2"})
+    result = _apply_action(page, action, ValidatedTarget("https://example.com/", "example.com"))
+
+    assert result == {"ok": True, "url": "https://example.com/"}
+    assert page.selector == '[data-sentinel-id="e2"]'
+    assert page.locator_obj.calls == [{"label": "Price: Low - High"}]
+    assert page.waits == [ConfigManager().sentinel.wait_action_ms]
+
+
+def test_observe_page_ignores_offscreen_hidden_and_covered_elements():
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        pytest.skip("Playwright unavailable")
+
+    html = """
+    <style>
+      body { margin: 0; }
+      #cover { position: absolute; left: 0; top: 90px; width: 160px; height: 60px; background: white; z-index: 2; }
+      #covered { position: absolute; left: 0; top: 90px; width: 160px; height: 60px; z-index: 1; }
+      #ok { position: absolute; left: 0; top: 180px; width: 160px; height: 60px; }
+      #offscreen { position: absolute; left: 0; top: -500px; }
+    </style>
+    <a id="offscreen" href="#">Offscreen</a>
+    <a id="hidden" aria-hidden="true" href="#">Hidden</a>
+    <button id="covered">Covered</button>
+    <div id="cover"></div>
+    <select id="ok"><option>Best Match</option><option>Price: Low - High</option></select>
+    """
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 400, "height": 300})
+            page.set_content(html)
+            observation = _observe_page(page)
+            browser.close()
+    except Exception as e:
+        pytest.skip(f"Playwright browser unavailable: {e}")
+
+    labels = [el["text"] for el in observation["elements"]]
+    assert labels == ["Best Match\nPrice: Low - High"]
 
 
 def test_sentinel_cancel_signals_active_run(client):
