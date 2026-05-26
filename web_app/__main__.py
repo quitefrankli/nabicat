@@ -227,20 +227,21 @@ def configure_logging(debug: bool) -> None:
 @click.option('--port', default=80, type=int)
 def cli_start(debug: bool, port: int):
     configure_logging(debug=debug)
-    app.secret_key = ConfigManager().flask_secret_key
     ConfigManager().debug_mode = debug
+    app.secret_key = ConfigManager().flask_secret_key
 
     logging.info("Starting server")
     app.run(host='0.0.0.0', port=port, debug=debug)
 
-if __name__ == '__main__':
-    # Dev Startup
-    cli_start()
-else:
-    # Prod Startup
+def prod_entry():
     configure_logging(debug=False)
     app.secret_key = ConfigManager().flask_secret_key
     ConfigManager().debug_mode = False
 
     logging.info("Starting server")
     start_scheduler()
+    return app
+
+
+if __name__ == '__main__':
+    cli_start()
