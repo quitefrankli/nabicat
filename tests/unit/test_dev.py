@@ -2,7 +2,7 @@ from collections import Counter
 from unittest.mock import patch
 
 from web_app.app import app
-from web_app.dev.logs import _read_log_lines
+from web_app.dev.logs import _read_log_lines, get_logs
 from web_app.dev.map import (
     _build_hit_series,
     _collect_client_ip_counts,
@@ -81,6 +81,17 @@ def test_read_log_lines_hides_suppressed_request_paths(tmp_path):
     assert _read_log_lines(tmp_path) == [
         "2026-05-25 17:41:10,281 INFO Processing request: client=1.1.1.1, path=/example, method=GET"
     ]
+
+
+def test_get_logs_returns_all_selected_files_without_default_line_limit(tmp_path):
+    (tmp_path / "web_app.log").write_text("".join(f"line {idx}\n" for idx in range(2100)))
+
+    with app.test_request_context("/dev/logs"), patch("web_app.dev.logs._LOGS_DIR", tmp_path):
+        payload = get_logs().get_json()
+
+    assert payload["start"] == 0
+    assert payload["total"] == 2100
+    assert len(payload["lines"]) == 2100
 
 
 def test_collect_client_ip_counts_can_filter_by_path_glob(tmp_path):

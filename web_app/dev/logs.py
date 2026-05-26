@@ -50,19 +50,25 @@ def _read_log_lines(logs_dir: Path, file_count: int | None = None) -> list[str]:
     return lines
 
 
-def register_logs_routes(dev_api):
-    @dev_api.route('/logs', methods=['GET'])
-    def get_logs():
-        config = ConfigManager()
-        since = request.args.get('since', type=int)
-        limit = min(request.args.get('limit', 2000, type=int), config.dev.log_viewer_max_lines)
+def get_logs():
+    config = ConfigManager()
+    since = request.args.get('since', type=int)
+    requested_limit = request.args.get('limit', type=int)
 
-        all_lines = _read_log_lines(_LOGS_DIR)
-        total = len(all_lines)
-        if since is not None:
-            lines = all_lines[since:]
-            start = since
-        else:
-            start = max(0, total - limit)
-            lines = all_lines[start:]
-        return jsonify({'lines': lines, 'start': start, 'total': total})
+    all_lines = _read_log_lines(_LOGS_DIR)
+    total = len(all_lines)
+    if since is not None:
+        lines = all_lines[since:]
+        start = since
+    elif requested_limit is not None:
+        limit = min(requested_limit, config.dev.log_viewer_max_lines)
+        start = max(0, total - limit)
+        lines = all_lines[start:]
+    else:
+        start = 0
+        lines = all_lines
+    return jsonify({'lines': lines, 'start': start, 'total': total})
+
+
+def register_logs_routes(dev_api):
+    dev_api.add_url_rule('/logs', view_func=get_logs, methods=['GET'])
