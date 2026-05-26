@@ -135,10 +135,16 @@ body.sentinel-resizing * {
 
 .sentinel-sidebar-row-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.5rem;
-  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) 2.25rem;
   align-items: stretch;
   border-radius: var(--hw-radius-md);
+  background: rgba(135, 168, 120, 0.08);
+  overflow: hidden;
+  transition: background var(--hw-transition-fast), box-shadow var(--hw-transition-fast);
+}
+
+.sentinel-sidebar-row-shell:hover {
+  background: rgba(135, 168, 120, 0.14);
 }
 
 .sentinel-sidebar-row {
@@ -171,33 +177,36 @@ body.sentinel-resizing * {
 }
 
 .sentinel-sidebar-row-shell.is-active .sentinel-sidebar-row {
-  background: rgba(135, 168, 120, 0.22);
   border-left: 3px solid var(--hw-sage-dark);
   padding-left: calc(0.6rem - 3px);
 }
 
+.sentinel-sidebar-row-shell.is-active {
+  background: rgba(135, 168, 120, 0.22);
+}
+
 .sentinel-run-delete {
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-  align-self: center;
+  width: 2.25rem;
+  min-height: 100%;
+  align-self: stretch;
   border: 1px solid transparent;
-  border-radius: var(--hw-radius-md);
-  background: rgba(224, 122, 95, 0.1);
+  border-radius: 0;
+  background: transparent;
   color: var(--hw-coral);
   cursor: pointer;
-  transition: background var(--hw-transition-fast), transform var(--hw-transition-fast);
+  transition: background var(--hw-transition-fast), color var(--hw-transition-fast);
 }
 
 .sentinel-run-delete:hover,
 .sentinel-run-delete:focus {
-  background: rgba(224, 122, 95, 0.18);
-  transform: translateY(-2px);
+  background: rgba(224, 122, 95, 0.16);
+  color: var(--hw-coral);
+  outline: none;
 }
 
 .sentinel-run-delete:disabled {
   opacity: 0.55;
   cursor: default;
-  transform: none;
 }
 
 @media (max-width: 768px) {
@@ -386,7 +395,7 @@ body.sentinel-resizing * {
   border-radius: var(--hw-radius-md);
   color: inherit;
   text-decoration: none;
-  background: rgba(135, 168, 120, 0.08);
+  background: transparent;
 }
 
 .sentinel-run-main {
