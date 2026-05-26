@@ -11,6 +11,7 @@ from web_app.sentinel.runner import (
     _add_finding,
     _agent_prompt,
     _annotate_screenshot,
+    _apply_action,
     _BedrockProvider,
     _build_codex_cmd,
     _clean_title,
@@ -24,8 +25,9 @@ from web_app.sentinel.runner import (
     _host_allowed,
     _MeridianProvider,
     _system_prompt,
+    ensure_screenshot_thumbnail,
 )
-from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
+from web_app.sentinel.target_policy import TargetValidationError, ValidatedTarget, validate_public_web_url
 from web_app.users import User
 
 
@@ -73,11 +75,19 @@ def test_parse_agent_action_allows_only_known_actions_and_elements():
     assert action.action == "click"
     assert action.element_id == "e1"
 
+    scroll = parse_agent_action('{"action": "scroll", "value": "down", "reason": "See products"}', set())
+    assert scroll.action == "scroll"
+    assert scroll.value == "down"
+    assert scroll.element_id is None
+
     with pytest.raises(ActionValidationError):
         parse_agent_action('{"action": "delete_database"}', {"e1"})
 
     with pytest.raises(ActionValidationError):
         parse_agent_action('{"action": "click", "element_id": "missing"}', {"e1"})
+
+    with pytest.raises(ActionValidationError):
+        parse_agent_action('{"action": "scroll", "element_id": "e1"}', {"e1"})
 
 
 def test_runner_allows_only_exact_host_or_www_redirect_variant():
@@ -270,11 +280,36 @@ def test_final_report_inlines_allowlisted_screenshots_and_drops_other_images():
     )
 
     html = payload["final_report_html"]
-    assert f'src="/sentinel/report/{run_id}/screenshots/step-01.png"' in html
+    assert f'src="/sentinel/report/{run_id}/screenshots/thumb/step-01.png"' in html
+    assert f'data-full="/sentinel/report/{run_id}/screenshots/step-01.png"' in html
     assert "evil.example.com" not in html
     assert "step-99.png" not in html
     assert 'class="sentinel-final-report-img"' in html
     assert 'loading="lazy"' in html
+
+
+def test_sentinel_thumbnail_generation_creates_small_copy(tmp_path):
+    from PIL import Image
+
+    run_id = "c" * 32
+    screenshots_dir = tmp_path / "screenshots"
+    screenshots_dir.mkdir()
+    Image.new("RGB", (1200, 800), (255, 255, 255)).save(screenshots_dir / "step-01.png")
+
+    class DummyDataInterface:
+        def screenshots_dir(self, _run_id):
+            return screenshots_dir
+
+        def screenshot_thumbnail_path(self, _run_id, filename):
+            return screenshots_dir / "thumbs" / filename
+
+    with patch("web_app.sentinel.runner.DataInterface", return_value=DummyDataInterface()):
+        thumb = ensure_screenshot_thumbnail(run_id, "step-01.png")
+
+    assert thumb is not None
+    assert thumb.exists()
+    with Image.open(thumb) as img:
+        assert max(img.size) <= ConfigManager().sentinel.screenshot_thumb_max_px
 
 
 def test_sentinel_routes_require_admin_and_start_run(client):
@@ -326,6 +361,31 @@ def test_sentinel_index_prefills_form_from_clone_query_params(client):
     assert 'value="5"' in body
     assert 'value="small_phone" selected' in body
     assert 'value="senior" selected' in body
+
+
+def test_sentinel_index_defaults_to_desktop_adult_australia(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+
+    with patch("web_app.helpers.DataInterface") as mock_users, patch(
+        "web_app.sentinel.DataInterface"
+    ) as mock_sentinel_data:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        mock_sentinel_data.return_value.list_reports.return_value = []
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        res = client.get("/sentinel/")
+
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert 'value="desktop" selected' in body
+    assert 'value="adult" selected' in body
+    assert 'id="sentinel-region"' in body
+    assert 'value="australia" selected' in body
+    assert 'value="china"' in body
+    assert 'value="us"' in body
+    assert 'value="uk"' in body
+    assert 'value="japan"' in body
 
 
 def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
@@ -385,6 +445,33 @@ def test_system_prompt_prepends_demographic_persona():
     assert _system_prompt(allow_accounts=False, demographic="bogus") == without
 
 
+def test_scroll_action_moves_page_and_waits():
+    class DummyMouse:
+        def __init__(self):
+            self.calls = []
+
+        def wheel(self, x, y):
+            self.calls.append((x, y))
+
+    class DummyPage:
+        url = "https://example.com/"
+
+        def __init__(self):
+            self.mouse = DummyMouse()
+            self.waits = []
+
+        def wait_for_timeout(self, ms):
+            self.waits.append(ms)
+
+    page = DummyPage()
+    action = parse_agent_action('{"action": "scroll", "value": "down"}', set())
+    result = _apply_action(page, action, ValidatedTarget("https://example.com/", "example.com"))
+
+    assert result == {"ok": True, "url": "https://example.com/"}
+    assert page.mouse.calls == [(0, ConfigManager().sentinel.scroll_action_delta_px)]
+    assert page.waits == [ConfigManager().sentinel.wait_action_ms]
+
+
 def test_sentinel_cancel_signals_active_run(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
     active_report = {"run_id": "r1", "status": "running"}
@@ -410,5 +497,3 @@ def test_sentinel_cancel_signals_active_run(client):
         assert res.status_code == 200
         assert res.get_json()["cancelled"] is False
         mock_cancel_completed.assert_not_called()
-
-

@@ -18,7 +18,7 @@ class AgentAction:
     url: str | None = None
 
 
-_ALLOWED_ACTIONS = {"click", "fill", "goto", "wait", "finish"}
+_ALLOWED_ACTIONS = {"click", "fill", "goto", "scroll", "wait", "finish"}
 
 
 def _json_from_text(text: str) -> dict:

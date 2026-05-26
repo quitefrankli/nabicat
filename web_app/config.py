@@ -144,6 +144,7 @@ class SentinelConfig:
     navigation_timeout_ms: int = 30000
     post_click_load_timeout_ms: int = 5000
     wait_action_ms: int = 1000
+    scroll_action_delta_px: int = 650
     observation_max_elements: int = 80
     observation_text_max_chars: int = 3000
     observation_element_text_max_chars: int = 140
@@ -160,6 +161,7 @@ class SentinelConfig:
     screenshot_load_stagger_ms: int = 200
     screenshot_load_max_retries: int = 3
     screenshot_load_retry_delay_ms: int = 1000
+    screenshot_thumb_max_px: int = 360
     # Provider-agnostic capability tier; LLMConfig.model_for() resolves it
     # to a concrete model for the active api_source.
     llm_tier: str = "strong"  # weak | medium | strong
@@ -199,7 +201,15 @@ class SentinelConfig:
         "senior": "Senior",
         "techie": "Techie",
     })
-    default_demographic: str = ""
+    default_demographic: str = "adult"
+    region_labels: dict = field(default_factory=lambda: {
+        "australia": "Australia",
+        "china":     "China",
+        "us":        "US",
+        "uk":        "UK",
+        "japan":     "Japan",
+    })
+    default_region: str = "australia"
 
 
 @dataclass

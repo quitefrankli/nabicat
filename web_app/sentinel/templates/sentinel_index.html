@@ -80,6 +80,16 @@
           </div>
         </div>
         <div>
+          <label class="form-label" for="sentinel-region">Region</label>
+          <div class="sentinel-select-wrap">
+            <select class="form-select sentinel-select" id="sentinel-region" name="region">
+              {% for key, label in region_options %}
+                <option value="{{ key }}" {% if key == prefill_region %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div>
           <label class="form-label" for="sentinel-limit">Time Limit (mins)</label>
           <input class="form-control" type="number" id="sentinel-limit" name="limit"
                  min="{{ min_limit }}" max="{{ max_limit }}"

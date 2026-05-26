@@ -10,7 +10,7 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.runner import get_run, render_report_pdf, request_cancel, start_run
+from web_app.sentinel.runner import ensure_screenshot_thumbnail, get_run, render_report_pdf, request_cancel, start_run
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
@@ -59,11 +59,16 @@ def _limit_from_request(raw_limit) -> int:
     return limit_mins * 60
 
 
-def _resolve_screenshot_src(src: str, run_id: str, allowed_filenames: set[str]) -> str | None:
+def _screenshot_url(run_id: str, filename: str, thumbnail: bool = False) -> str:
+    suffix = f"/thumb/{filename}" if thumbnail else f"/{filename}"
+    return f"/sentinel/report/{run_id}/screenshots{suffix}"
+
+
+def _resolve_screenshot_src(src: str, run_id: str, allowed_filenames: set[str], thumbnail: bool = False) -> str | None:
     filename = src.rsplit("/", 1)[-1]
     if filename not in allowed_filenames or not _SCREENSHOT_FILENAME_RE.match(filename):
         return None
-    return f"/sentinel/report/{run_id}/screenshots/{filename}"
+    return _screenshot_url(run_id, filename, thumbnail=thumbnail)
 
 
 def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]) -> Markup:
@@ -74,10 +79,11 @@ def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]
     def render_image(tokens, idx, options, env):
         token = tokens[idx]
         src = token.attrGet("src") or ""
-        resolved = _resolve_screenshot_src(src, run_id, allowed)
+        resolved = _resolve_screenshot_src(src, run_id, allowed, thumbnail=True)
         if resolved is None:
             return ""
         token.attrSet("src", resolved)
+        token.attrSet("data-full", _resolve_screenshot_src(src, run_id, allowed) or "")
         token.attrSet("loading", "lazy")
         token.attrSet("decoding", "async")
         existing_class = token.attrGet("class") or ""
@@ -158,15 +164,21 @@ def index():
 
     raw_device = str(request.args.get("device", "")).strip()
     prefill_device = raw_device if raw_device in cfg.sentinel.device_profiles else cfg.sentinel.default_device
-    raw_demographic = str(request.args.get("demographic", "")).strip()
+    raw_demographic_param = request.args.get("demographic")
+    raw_demographic = str(raw_demographic_param).strip() if raw_demographic_param is not None else None
     prefill_demographic = (
-        raw_demographic if raw_demographic in cfg.sentinel.demographic_personas else cfg.sentinel.default_demographic
+        raw_demographic
+        if raw_demographic is not None and raw_demographic in cfg.sentinel.demographic_personas
+        else cfg.sentinel.default_demographic
     )
+    raw_region = str(request.args.get("region", "")).strip()
+    prefill_region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
 
     device_options = [(key, cfg.sentinel.device_labels.get(key, key)) for key in cfg.sentinel.device_profiles]
     demographic_options = [
         (key, cfg.sentinel.demographic_labels.get(key, key)) for key in cfg.sentinel.demographic_personas
     ]
+    region_options = [(key, label) for key, label in cfg.sentinel.region_labels.items()]
 
     return render_template(
         "sentinel_index.html",
@@ -184,8 +196,10 @@ def index():
         prefill_allow_external=prefill_allow_external,
         prefill_device=prefill_device,
         prefill_demographic=prefill_demographic,
+        prefill_region=prefill_region,
         device_options=device_options,
         demographic_options=demographic_options,
+        region_options=region_options,
     )
 
 
@@ -301,5 +315,19 @@ def screenshot(run_id: str, filename: str):
     try:
         directory = DataInterface().screenshots_dir(run_id)
     except ValueError:
+        abort(404)
+    return send_from_directory(directory, filename)
+
+
+@sentinel_api.route("/report/<run_id>/screenshots/thumb/<filename>")
+def screenshot_thumbnail(run_id: str, filename: str):
+    if not _SCREENSHOT_FILENAME_RE.match(filename):
+        abort(404)
+    try:
+        path = ensure_screenshot_thumbnail(run_id, filename)
+        directory = DataInterface().screenshot_thumbnail_path(run_id, filename).parent
+    except ValueError:
+        abort(404)
+    if path is None:
         abort(404)
     return send_from_directory(directory, filename)

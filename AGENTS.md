@@ -10,6 +10,8 @@
 
 * Don't narrate tool use: Skip "Let me read the file" or "Let me check the status" ? just do it.
 
+* Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why.
+
 * Context preservation: Background tasks return completion notifications with `<result>` tags containing only the final message. Do NOT call `TaskOutput` to check results. `TaskOutput` returns the full conversation transcript (every tool call, file read, and intermediate message), which wastes massive amounts of context. Wait for each task's completion notification and use the `<result>` tag content directly.
 
 * Minimise comments/docstrings, only add comments when they are truly helpful i.e. deep functions, surprsing logic. Don't add any readme.md files or other documentation files unless explicitly asked to.

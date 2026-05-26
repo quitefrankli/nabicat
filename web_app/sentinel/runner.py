@@ -75,8 +75,11 @@ _SYSTEM_BASE = (
     "{\"action\":\"click\",\"element_id\":\"e1\",\"reason\":\"...\"}, "
     "{\"action\":\"fill\",\"element_id\":\"e2\",\"value\":\"...\",\"reason\":\"...\"}, "
     "{\"action\":\"goto\",\"url\":\"/path\",\"reason\":\"...\"}, "
+    "{\"action\":\"scroll\",\"value\":\"down\",\"reason\":\"...\"}, "
     "{\"action\":\"wait\",\"reason\":\"...\"}, "
     "{\"action\":\"finish\",\"reason\":\"...\"}. "
+    "Use scroll with value \"down\" or \"up\" when the requested flow likely continues outside "
+    "the current viewport. "
     "Prefer exploring core navigation, links, and obvious broken states. "
     "Avoid using search bars, search boxes, or generic query inputs unless the user's prompt "
     "explicitly asks you to test search. Most real users navigate by clicking visible links and "
@@ -688,9 +691,39 @@ def _capture_screenshot(page, report: dict) -> str | None:
     path = DataInterface().screenshot_path(report["run_id"], len(report["screenshots"]) + 1)
     path.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(path), full_page=False)
+    ensure_screenshot_thumbnail(report["run_id"], path.name)
     rel = f"screenshots/{path.name}"
     report["screenshots"].append(rel)
     return rel
+
+
+def ensure_screenshot_thumbnail(run_id: str, filename: str) -> Path | None:
+    if not re.match(r"^step-\d{2}(?:-annot)?\.png$", filename):
+        return None
+    data = DataInterface()
+    source_path = data.screenshots_dir(run_id) / filename
+    thumb_path = data.screenshot_thumbnail_path(run_id, filename)
+    if thumb_path.exists():
+        return thumb_path
+    if not source_path.exists():
+        return None
+    try:
+        from PIL import Image
+    except Exception:
+        logging.warning("Pillow unavailable; skipping screenshot thumbnail")
+        return None
+
+    try:
+        max_px = ConfigManager().sentinel.screenshot_thumb_max_px
+        with Image.open(source_path) as img:
+            img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
+            thumb = img.copy()
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+        thumb.save(thumb_path, format="PNG", optimize=True)
+    except Exception as e:
+        logging.warning("Failed to create screenshot thumbnail %s: %s", thumb_path, e)
+        return None
+    return thumb_path
 
 
 def _screenshot_image_paths(report: dict, screenshot: str | None) -> list[Path]:
@@ -716,6 +749,7 @@ def _capture_annotated_screenshot(report: dict, screenshot: str | None, observat
     )
     if written is None:
         return None
+    ensure_screenshot_thumbnail(report["run_id"], out_path.name)
     rel = f"screenshots/{out_path.name}"
     report.setdefault("annotated_screenshots", []).append(rel)
     return rel
@@ -899,6 +933,12 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
             return {"ok": True, "url": page.url}
         if action.action == "wait":
             page.wait_for_timeout(ConfigManager().sentinel.wait_action_ms)
+            return {"ok": True, "url": page.url}
+        if action.action == "scroll":
+            cfg = ConfigManager().sentinel
+            delta = -cfg.scroll_action_delta_px if (action.value or "").lower() == "up" else cfg.scroll_action_delta_px
+            page.mouse.wheel(0, delta)
+            page.wait_for_timeout(cfg.wait_action_ms)
             return {"ok": True, "url": page.url}
         if action.action == "goto":
             next_url = urljoin(page.url, action.url or target.url)

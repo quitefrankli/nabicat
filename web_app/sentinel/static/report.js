@@ -121,6 +121,7 @@ function syncScreenshots(container, items, runId, tag) {
   for (let i = existing; i < items.length; i++) {
     const file = items[i].split('/').pop();
     const url = `/sentinel/report/${runId}/screenshots/${file}`;
+    const thumbUrl = `/sentinel/report/${runId}/screenshots/thumb/${file}`;
     const button = document.createElement('button');
     button.className = 'sentinel-screenshot-btn';
     button.type = 'button';
@@ -129,7 +130,7 @@ function syncScreenshots(container, items, runId, tag) {
       ? `<span class="sentinel-screenshot-tag sentinel-screenshot-tag-annot">annotated</span>`
       : '';
     button.innerHTML = `${tagSpan}<img loading="lazy" decoding="async" src="${placeholder}"
-        data-screenshot-src="${url}" alt="QA screenshot${tag ? ' ' + tag : ''}">`;
+        data-screenshot-src="${thumbUrl}" alt="QA screenshot${tag ? ' ' + tag : ''}">`;
     container.appendChild(button);
   }
 }
@@ -263,7 +264,7 @@ function bindFinalReportImages() {
     if (img.dataset.boundLightbox) return;
     img.dataset.boundLightbox = 'true';
     img.addEventListener('click', function () {
-      sentinelLightboxImage.src = img.src;
+      sentinelLightboxImage.src = img.dataset.full || img.src;
       sentinelLightbox.classList.add('open');
     });
   });
