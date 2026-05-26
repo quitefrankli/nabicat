@@ -30,6 +30,15 @@ function renderReport(report) {
     status.className = `sentinel-badge sentinel-badge-${report.status}`;
     status.textContent = report.status;
   }
+  const title = document.getElementById('sentinel-report-title');
+  if (title && report.title) {
+    title.textContent = report.title;
+  }
+  const cancelButton = document.getElementById('sentinel-cancel-run');
+  if (cancelButton) {
+    const active = ['queued', 'running', 'summarizing'].includes(report.status);
+    cancelButton.hidden = !active;
+  }
   if (stepCount) stepCount.textContent = report.steps.length;
   if (findingsCount) findingsCount.textContent = report.findings.length;
   if (screenshotCount) screenshotCount.textContent = report.screenshots.length;
@@ -65,23 +74,40 @@ function renderReport(report) {
   }
 
   if (screenshots) {
-    screenshots.innerHTML = report.screenshots.length ? report.screenshots.map(function (shot) {
-      const filename = shot.split('/').pop();
-      const url = `/sentinel/report/${report.run_id}/screenshots/${filename}`;
-      return `<button class="sentinel-screenshot-btn" type="button" data-full="${url}">
-        <img loading="lazy" decoding="async"
-             src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-             data-screenshot-src="${url}" alt="QA screenshot">
-      </button>`;
-    }).join('') : '<div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>';
+    syncScreenshots(screenshots, report);
     setupScreenshotLoading(report);
     bindScreenshotButtons();
   }
 }
 
+function syncScreenshots(container, report) {
+  if (!report.screenshots.length) {
+    container.innerHTML = '<div class="sentinel-empty sentinel-empty-small">No screenshots captured yet.</div>';
+    return;
+  }
+
+  const empty = container.querySelector('.sentinel-empty');
+  if (empty) empty.remove();
+
+  const existing = container.querySelectorAll('.sentinel-screenshot-btn').length;
+  for (let i = existing; i < report.screenshots.length; i++) {
+    const filename = report.screenshots[i].split('/').pop();
+    const url = `/sentinel/report/${report.run_id}/screenshots/${filename}`;
+    const button = document.createElement('button');
+    button.className = 'sentinel-screenshot-btn';
+    button.type = 'button';
+    button.dataset.full = url;
+    button.innerHTML = `<img loading="lazy" decoding="async"
+        src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+        data-screenshot-src="${url}" alt="QA screenshot">`;
+    container.appendChild(button);
+  }
+}
+
 function setupScreenshotLoading(report) {
   const shell = document.querySelector('[data-run-id]');
-  const screenshotImages = Array.from(document.querySelectorAll('img[data-screenshot-src]'));
+  const screenshotImages = Array.from(document.querySelectorAll('img[data-screenshot-src]'))
+    .filter(img => img.dataset.loaded !== 'true');
   if (!shell || screenshotImages.length === 0) return;
 
   const fallback = function (value, defaultValue) {
@@ -205,26 +231,20 @@ document.addEventListener('DOMContentLoaded', function () {
   const shell = document.querySelector('[data-run-id]');
   if (!shell) return;
   const runId = shell.dataset.runId;
-  const rerunButton = document.getElementById('sentinel-rerun-run');
   setupScreenshotLoading();
   bindScreenshotButtons();
 
-  if (rerunButton) {
-    rerunButton.addEventListener('click', async function () {
-      rerunButton.disabled = true;
+  const cancelButton = document.getElementById('sentinel-cancel-run');
+  if (cancelButton) {
+    cancelButton.addEventListener('click', async function () {
+      cancelButton.disabled = true;
       try {
-        const response = await fetch(`/sentinel/api/runs/${runId}/rerun`, {
+        await fetch(`/sentinel/api/runs/${runId}/cancel`, {
           method: 'POST',
           headers: { 'X-CSRFToken': csrfToken() }
         });
-        const data = await response.json();
-        if (!response.ok) {
-          rerunButton.disabled = false;
-          return;
-        }
-        window.location.href = `/sentinel/report/${data.run_id}`;
-      } catch (error) {
-        rerunButton.disabled = false;
+      } catch (_) {
+        cancelButton.disabled = false;
       }
     });
   }

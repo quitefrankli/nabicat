@@ -13,7 +13,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const payload = {
       url: form.url.value,
       prompt: form.prompt.value,
-      limit: form.limit.value
+      limit: form.limit.value,
+      title: form.title.value,
+      allow_accounts: form.allow_accounts.checked
     };
     status.textContent = 'Starting run...';
     button.disabled = true;

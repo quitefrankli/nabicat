@@ -5,18 +5,23 @@ import pytest
 from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, register_all_blueprints
-from web_app.sentinel import _limit_from_report, _limit_from_request, _report_payload
+from web_app.sentinel import _limit_from_request, _report_payload
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.runner import (
     _add_finding,
     _BedrockProvider,
     _build_codex_cmd,
+    _clean_title,
     _codex_text,
     _CodexProvider,
+    _ensure_summary_heading,
+    _fallback_title,
     _final_report_prompt,
+    _generate_title,
     _get_provider,
     _host_allowed,
     _MeridianProvider,
+    _system_prompt,
 )
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 from web_app.users import User
@@ -167,7 +172,6 @@ def test_time_limit_input_is_minutes_capped_at_ten():
     assert _limit_from_request("1") == 60
     assert _limit_from_request("10") == 600
     assert _limit_from_request("99") == 600
-    assert _limit_from_report({"limit_s": 9999}) == 600
 
 
 def test_finding_details_are_truncated_and_single_line():
@@ -212,6 +216,41 @@ def test_report_payload_renders_final_report_markdown_without_html():
     assert payload["screenshot_load_stagger_ms"] == ConfigManager().sentinel.screenshot_load_stagger_ms
     assert payload["screenshot_load_max_retries"] == ConfigManager().sentinel.screenshot_load_max_retries
     assert payload["screenshot_load_retry_delay_ms"] == ConfigManager().sentinel.screenshot_load_retry_delay_ms
+
+
+def test_generate_title_uses_provider_when_title_blank_and_falls_back_on_error():
+    report = {
+        "target_url": "https://example.com",
+        "target_hostname": "example.com",
+        "prompt": "Test the checkout flow",
+    }
+
+    class _OkProvider:
+        def title_text(self, _user):
+            return '"Checkout flow smoke test"\n'
+
+    with patch("web_app.sentinel.runner._get_provider", return_value=_OkProvider()):
+        assert _generate_title(report) == "Checkout flow smoke test"
+
+    class _BadProvider:
+        def title_text(self, _user):
+            raise RuntimeError("nope")
+
+    with patch("web_app.sentinel.runner._get_provider", return_value=_BadProvider()):
+        assert _generate_title(report) == _fallback_title(report) == "example.com"
+
+
+def test_clean_title_strips_quotes_collapses_whitespace_and_truncates():
+    assert _clean_title('  "Hello   world"  ') == "Hello world"
+    long_input = "word " * 100
+    assert len(_clean_title(long_input)) <= ConfigManager().sentinel.title_max_chars
+
+
+def test_ensure_summary_heading_prepends_when_missing_and_keeps_when_present():
+    assert _ensure_summary_heading("Some body without a heading.").startswith("## Summary\n\n")
+    assert _ensure_summary_heading("## Summary\n\nAlready here.") == "## Summary\n\nAlready here."
+    assert _ensure_summary_heading("# summary\n\nany level").startswith("# summary")
+    assert _ensure_summary_heading("") == "## Summary\n\nNo report content was generated."
 
 
 def test_final_report_inlines_allowlisted_screenshots_and_drops_other_images():
@@ -262,23 +301,50 @@ def test_sentinel_routes_require_admin_and_start_run(client):
     mock_start.assert_called_once()
 
 
-def test_sentinel_rerun_starts_from_existing_report(client):
+def test_sentinel_index_prefills_form_from_clone_query_params(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
-    report = {"target_url": "https://example.com", "prompt": "check nav", "limit_s": 120}
+
+    with patch("web_app.helpers.DataInterface") as mock_users, patch(
+        "web_app.sentinel.DataInterface"
+    ) as mock_sentinel_data:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        mock_sentinel_data.return_value.list_reports.return_value = []
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        res = client.get("/sentinel/?url=https://example.com&prompt=Test+checkout&limit=5")
+
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert 'value="https://example.com"' in body
+    assert "Test checkout" in body
+    assert 'value="5"' in body
+
+
+def test_sentinel_cancel_signals_active_run(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    active_report = {"run_id": "r1", "status": "running"}
+    finished_report = {"run_id": "r2", "status": "completed"}
 
     with patch("web_app.helpers.DataInterface") as mock_users:
         mock_users.return_value.load_users.return_value = {"admin": admin}
         with client.session_transaction() as sess:
             sess["_user_id"] = "admin"
 
-        with patch("web_app.sentinel.get_run", return_value=report), patch(
-            "web_app.sentinel.validate_public_web_url"
-        ) as mock_validate, patch("web_app.sentinel.start_run") as mock_start:
-            mock_start.return_value = {"run_id": "new-run", "status": "queued"}
+        with patch("web_app.sentinel.get_run", return_value=active_report), patch(
+            "web_app.sentinel.request_cancel", return_value=True
+        ) as mock_cancel:
+            res = client.post("/sentinel/api/runs/r1/cancel")
+        assert res.status_code == 200
+        assert res.get_json() == {"run_id": "r1", "cancelled": True}
+        mock_cancel.assert_called_once_with("r1")
 
-            res = client.post("/sentinel/api/runs/old-run/rerun")
+        with patch("web_app.sentinel.get_run", return_value=finished_report), patch(
+            "web_app.sentinel.request_cancel"
+        ) as mock_cancel_completed:
+            res = client.post("/sentinel/api/runs/r2/cancel")
+        assert res.status_code == 200
+        assert res.get_json()["cancelled"] is False
+        mock_cancel_completed.assert_not_called()
 
-    assert res.status_code == 202
-    assert res.get_json()["run_id"] == "new-run"
-    mock_validate.assert_called_once_with("https://example.com")
-    mock_start.assert_called_once_with(mock_validate.return_value, "check nav", 120)
+

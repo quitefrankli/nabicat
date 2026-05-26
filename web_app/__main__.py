@@ -218,9 +218,10 @@ def configure_logging(debug: bool) -> None:
     rotating_log_handler = RotatingFileHandler(str(log_path),
                                                    maxBytes=int(1e6),
                                                    backupCount=10)
-    logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, 
+    logging.basicConfig(level=logging.DEBUG if debug else logging.INFO,
                         handlers=[] if debug else [rotating_log_handler],
                         format='%(asctime)s %(levelname)s %(message)s')
+    logging.getLogger("markdown_it").setLevel(logging.INFO)
 
 @click.command()
 @click.option('--debug', is_flag=True, default=False)

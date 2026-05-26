@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 import tempfile
 import threading
@@ -18,9 +19,37 @@ from web_app.sentinel.target_policy import ValidatedTarget, validate_public_web_
 
 
 _active_runs: dict[str, dict] = {}
+_cancel_events: dict[str, threading.Event] = {}
 _active_lock = threading.RLock()
 
-_SYSTEM = (
+
+def request_cancel(run_id: str) -> bool:
+    with _active_lock:
+        event = _cancel_events.get(run_id)
+    if event is None:
+        return False
+    event.set()
+    return True
+
+
+def _cancel_event(run_id: str) -> threading.Event | None:
+    with _active_lock:
+        return _cancel_events.get(run_id)
+
+
+def _is_cancelled(run_id: str) -> bool:
+    event = _cancel_event(run_id)
+    return event is not None and event.is_set()
+
+_TITLE_SYSTEM = (
+    "You are titling a Sentinel QA run. Given the target URL and the user's prompt, return a single "
+    "short, professional title (4 to 8 words) describing the run. Plain text only. No quotes, no "
+    "trailing punctuation, no emojis, no em or en dashes. Do not start with words like 'Sentinel' "
+    "or 'QA'."
+)
+
+
+_SYSTEM_BASE = (
     "You are controlling a browser as a practical human QA tester. "
     "Given the current observation and prior steps, choose exactly one next action. "
     "Return ONLY JSON with one of these shapes: "
@@ -30,10 +59,23 @@ _SYSTEM = (
     "{\"action\":\"wait\",\"reason\":\"...\"}, "
     "{\"action\":\"finish\",\"reason\":\"...\"}. "
     "Prefer exploring core navigation, forms, buttons, and obvious broken states. "
-    "Do not attempt payment or destructive account actions. "
-    "Only attempt login, account registration, or credential entry when the user's prompt explicitly asks for it, "
-    "and use synthetic test values."
+    "Do not attempt payment or destructive account actions."
 )
+
+_SYSTEM_ACCOUNTS_FORBIDDEN = (
+    " Do not attempt login, account registration, account deletion, password reset, or any "
+    "credential entry. Skip authentication flows entirely."
+)
+
+_SYSTEM_ACCOUNTS_ALLOWED = (
+    " You may attempt login, account registration, account deletion, and credential entry as part "
+    "of testing the requested flows. Always use synthetic, throwaway test values; never use real "
+    "personal data."
+)
+
+
+def _system_prompt(allow_accounts: bool) -> str:
+    return _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
 
 _REPORT_SYSTEM = (
     "You are writing the final QA report for Sentinel. Directly answer the user's original prompt "
@@ -43,6 +85,10 @@ _REPORT_SYSTEM = (
     "neutral prose and standard punctuation. Do not use emojis. Do not use em dashes or en dashes; "
     "use commas, periods, parentheses, or colons instead. Avoid marketing language, exclamation "
     "marks, and filler superlatives. Prefer short paragraphs and short bullet lists over long prose. "
+    "The report MUST begin with a level-2 markdown heading exactly equal to '## Summary' followed "
+    "by a brief two to four sentence overview answering the user's prompt and stating the overall "
+    "outcome. Additional sections (for example '## Findings', '## What Was Tested', '## Caveats') "
+    "may follow the Summary as needed. "
     "Output GitHub-flavored markdown. Embed relevant screenshots inline as evidence using exactly "
     "this syntax: ![short caption](step-NN.png), where step-NN.png is one of the filenames listed "
     "in the run data's screenshots array. Reference at most one screenshot per finding, and only "
@@ -66,15 +112,24 @@ def get_run(run_id: str) -> dict | None:
         return None
 
 
-def start_run(target: ValidatedTarget, prompt: str, limit_s: int) -> dict:
+def start_run(
+    target: ValidatedTarget,
+    prompt: str,
+    limit_s: int,
+    title: str = "",
+    allow_accounts: bool = False,
+) -> dict:
     run_id = uuid.uuid4().hex
     now = utc_now_iso()
+    title = _clean_title(title)
     report = {
         "run_id": run_id,
         "status": "queued",
         "target_url": target.url,
         "target_hostname": target.hostname,
         "prompt": prompt,
+        "title": title,
+        "allow_accounts": bool(allow_accounts),
         "limit_s": limit_s,
         "created_at": now,
         "updated_at": now,
@@ -88,6 +143,8 @@ def start_run(target: ValidatedTarget, prompt: str, limit_s: int) -> dict:
         "error": None,
     }
     _save(report)
+    with _active_lock:
+        _cancel_events[run_id] = threading.Event()
     thread = threading.Thread(target=_run_background, args=(report,), daemon=True)
     thread.start()
     return {"run_id": run_id, "status": "queued"}
@@ -96,15 +153,23 @@ def start_run(target: ValidatedTarget, prompt: str, limit_s: int) -> dict:
 def _run_background(report: dict) -> None:
     report["status"] = "running"
     report["started_at"] = utc_now_iso()
+    if not report.get("title"):
+        report["title"] = _generate_title(report)
     _save(report)
     try:
         _execute_browser_run(report)
+        if _is_cancelled(report["run_id"]):
+            report["status"] = "cancelled"
         outcome_status = "completed" if report["status"] == "running" else report["status"]
         report["run_outcome"] = outcome_status
-        report["status"] = "summarizing"
-        _save(report)
-        _add_final_report(report)
-        report["status"] = outcome_status
+        if outcome_status == "cancelled":
+            report["final_report"] = "## Summary\n\nThis run was cancelled before it finished."
+            report["status"] = outcome_status
+        else:
+            report["status"] = "summarizing"
+            _save(report)
+            _add_final_report(report)
+            report["status"] = outcome_status
     except Exception as e:
         logging.exception("Sentinel run failed")
         report["status"] = "failed"
@@ -112,6 +177,8 @@ def _run_background(report: dict) -> None:
     finally:
         report["finished_at"] = utc_now_iso()
         _save(report)
+        with _active_lock:
+            _cancel_events.pop(report["run_id"], None)
         DataInterface().prune_reports()
 
 
@@ -170,17 +237,30 @@ def _codex_text(system: str, user_message: str, image_paths: list[Path] | None, 
 
 
 class _LLMProvider:
-    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+    def agent_text(
+        self,
+        user_message: str,
+        image_paths: list[Path] | None = None,
+        allow_accounts: bool = False,
+    ) -> str:
         raise NotImplementedError
 
     def final_report_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
         raise NotImplementedError
 
+    def title_text(self, user_message: str) -> str:
+        raise NotImplementedError
+
 
 class _CodexProvider(_LLMProvider):
-    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+    def agent_text(
+        self,
+        user_message: str,
+        image_paths: list[Path] | None = None,
+        allow_accounts: bool = False,
+    ) -> str:
         return _codex_text(
-            system=_SYSTEM,
+            system=_system_prompt(allow_accounts),
             user_message=user_message,
             image_paths=image_paths,
             timeout_s=ConfigManager().sentinel.llm_step_timeout_s,
@@ -194,17 +274,30 @@ class _CodexProvider(_LLMProvider):
             timeout_s=ConfigManager().sentinel.final_report_timeout_s,
         )
 
+    def title_text(self, user_message: str) -> str:
+        return _codex_text(
+            system=_TITLE_SYSTEM,
+            user_message=user_message,
+            image_paths=None,
+            timeout_s=ConfigManager().sentinel.llm_title_timeout_s,
+        )
+
 
 class _MeridianProvider(_LLMProvider):
     def _model(self) -> str | None:
         cfg = ConfigManager()
         return cfg.llm.model_for(cfg.sentinel.llm_tier)
 
-    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+    def agent_text(
+        self,
+        user_message: str,
+        image_paths: list[Path] | None = None,
+        allow_accounts: bool = False,
+    ) -> str:
         cfg = ConfigManager()
         return meridian_text(
             user_message=user_message,
-            system=_SYSTEM,
+            system=_system_prompt(allow_accounts),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -222,6 +315,18 @@ class _MeridianProvider(_LLMProvider):
             timeout_s=cfg.sentinel.final_report_timeout_s,
             agent="sentinel",
             image_paths=image_paths,
+        )
+
+    def title_text(self, user_message: str) -> str:
+        cfg = ConfigManager()
+        return meridian_text(
+            user_message=user_message,
+            system=_TITLE_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_title_max_tokens,
+            timeout_s=cfg.sentinel.llm_title_timeout_s,
+            agent="sentinel",
+            image_paths=None,
         )
 
 
@@ -230,11 +335,16 @@ class _BedrockProvider(_LLMProvider):
         cfg = ConfigManager()
         return cfg.llm.model_for(cfg.sentinel.llm_tier)
 
-    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+    def agent_text(
+        self,
+        user_message: str,
+        image_paths: list[Path] | None = None,
+        allow_accounts: bool = False,
+    ) -> str:
         cfg = ConfigManager()
         return bedrock_text(
             user_message=user_message,
-            system=_SYSTEM,
+            system=_system_prompt(allow_accounts),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -250,6 +360,17 @@ class _BedrockProvider(_LLMProvider):
             max_tokens=cfg.sentinel.llm_final_report_max_tokens,
             timeout_s=cfg.sentinel.final_report_timeout_s,
             image_paths=image_paths,
+        )
+
+    def title_text(self, user_message: str) -> str:
+        cfg = ConfigManager()
+        return bedrock_text(
+            user_message=user_message,
+            system=_TITLE_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_title_max_tokens,
+            timeout_s=cfg.sentinel.llm_title_timeout_s,
+            image_paths=None,
         )
 
 
@@ -319,6 +440,8 @@ def _execute_browser_run(report: dict) -> None:
             page.route("**/*", guard_route)
 
             while time.monotonic() < deadline and len(report["steps"]) < cfg.sentinel.max_steps:
+                if _is_cancelled(report["run_id"]):
+                    break
                 observation = _observe_page(page)
                 known_ids = {item["id"] for item in observation["elements"]}
                 screenshot = _capture_screenshot(page, report)
@@ -326,7 +449,11 @@ def _execute_browser_run(report: dict) -> None:
                     observation["screenshot"] = screenshot
 
                 image_paths = _screenshot_image_paths(report, screenshot)
-                agent_text = _get_provider().agent_text(_agent_prompt(report, observation), image_paths=image_paths)
+                agent_text = _get_provider().agent_text(
+                    _agent_prompt(report, observation),
+                    image_paths=image_paths,
+                    allow_accounts=bool(report.get("allow_accounts")),
+                )
                 try:
                     action = parse_agent_action(agent_text, known_ids)
                 except ActionValidationError as e:
@@ -363,6 +490,33 @@ def _goto_page(page, url: str, target: ValidatedTarget) -> dict:
     return {"ok": True, "url": page.url}
 
 
+def _clean_title(text: str) -> str:
+    cfg = ConfigManager()
+    text = " ".join(str(text or "").split()).strip().strip('"').strip("'")
+    if len(text) > cfg.sentinel.title_max_chars:
+        text = text[: cfg.sentinel.title_max_chars].rstrip()
+    return text
+
+
+def _generate_title(report: dict) -> str:
+    payload = json.dumps(
+        {
+            "target_url": report.get("target_url", ""),
+            "user_prompt": report.get("prompt") or "Explore and test the site's main unauthenticated flows.",
+        },
+        indent=2,
+    )
+    try:
+        return _clean_title(_get_provider().title_text(payload)) or _fallback_title(report)
+    except Exception as e:
+        logging.warning("Sentinel title generation failed: %s", e)
+        return _fallback_title(report)
+
+
+def _fallback_title(report: dict) -> str:
+    return _clean_title(report.get("target_hostname") or report.get("target_url") or "Sentinel run")
+
+
 def _add_finding(report: dict, severity: str, title: str, detail: str) -> None:
     max_chars = ConfigManager().sentinel.finding_detail_max_chars
     detail = " ".join(str(detail).split())
@@ -380,8 +534,21 @@ def _add_final_report(report: dict) -> None:
     except Exception as e:
         logging.warning("Sentinel final report generation failed: %s", e)
         text = _fallback_final_report(report)
+    text = _ensure_summary_heading(text)
     report["final_report"] = _truncate_text(text, ConfigManager().sentinel.final_report_max_chars)
     _save(report)
+
+
+_SUMMARY_HEADING_RE = re.compile(r"^\s*#{1,6}\s*summary\b", re.IGNORECASE)
+
+
+def _ensure_summary_heading(text: str) -> str:
+    body = str(text or "").lstrip()
+    if not body:
+        return "## Summary\n\nNo report content was generated."
+    if _SUMMARY_HEADING_RE.match(body):
+        return body
+    return f"## Summary\n\n{body}"
 
 
 def _final_report_prompt(report: dict) -> str:

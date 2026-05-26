@@ -24,19 +24,36 @@
       <div>
         <label class="form-label" for="sentinel-url">URL</label>
         <input class="form-control form-control-lg" type="text" id="sentinel-url" name="url"
+               value="{{ prefill_url or '' }}"
                placeholder="google.com" inputmode="url" required>
+      </div>
+      <div>
+        <label class="form-label" for="sentinel-title">Title <span class="text-muted">(optional)</span></label>
+        <input class="form-control" type="text" id="sentinel-title" name="title"
+               value="{{ prefill_title or '' }}"
+               maxlength="{{ title_max_chars }}"
+               placeholder="Auto-generated if blank">
       </div>
       <div>
         <label class="form-label" for="sentinel-prompt">Prompt</label>
         <textarea class="form-control" id="sentinel-prompt" name="prompt" rows="4"
                   maxlength="{{ prompt_max_chars }}"
-                  placeholder="Focus on signup, navigation, search, and broken UI states."></textarea>
+                  placeholder="Focus on signup, navigation, search, and broken UI states.">{{ prefill_prompt or '' }}</textarea>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="sentinel-allow-accounts" name="allow_accounts"
+               value="1" {% if prefill_allow_accounts %}checked{% endif %}>
+        <label class="form-check-label" for="sentinel-allow-accounts">
+          Permit account creation, login, and deletion
+          <small class="text-muted d-block">Off by default. Uses synthetic test credentials only.</small>
+        </label>
       </div>
       <div class="sentinel-inline-fields">
         <div>
           <label class="form-label" for="sentinel-limit">Time Limit (mins)</label>
           <input class="form-control" type="number" id="sentinel-limit" name="limit"
-                 min="{{ min_limit }}" max="{{ max_limit }}" value="{{ default_limit }}">
+                 min="{{ min_limit }}" max="{{ max_limit }}"
+                 value="{{ prefill_limit if prefill_limit is defined else default_limit }}">
         </div>
         <button class="btn btn-primary sentinel-submit" type="submit">
           <i class="bi bi-play-fill"></i>
@@ -57,8 +74,8 @@
         {% for run in runs %}
           <a class="sentinel-run-row" href="{{ url_for('sentinel.report', run_id=run.run_id) }}">
             <span class="sentinel-run-main">
-              <strong>{{ run.target_url }}</strong>
-              <small>{{ run.created_at }}</small>
+              <strong>{{ run.title or run.target_url }}</strong>
+              <small>{{ run.target_url }} &middot; {{ run.created_at }}</small>
             </span>
             <span class="sentinel-badge sentinel-badge-{{ run.status }}">{{ run.status }}</span>
           </a>

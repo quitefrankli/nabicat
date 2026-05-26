@@ -9,7 +9,7 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.runner import get_run, start_run
+from web_app.sentinel.runner import get_run, request_cancel, start_run
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
@@ -36,6 +36,14 @@ def inject_app_name():
     return dict(app_name="Sentinel")
 
 
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _limit_from_request(raw_limit) -> int:
     cfg = ConfigManager()
     try:
@@ -44,17 +52,6 @@ def _limit_from_request(raw_limit) -> int:
         limit_mins = cfg.sentinel.default_limit_mins
     limit_mins = max(cfg.sentinel.min_limit_mins, min(limit_mins, cfg.sentinel.max_limit_mins))
     return limit_mins * 60
-
-
-def _limit_from_report(report: dict) -> int:
-    cfg = ConfigManager()
-    min_seconds = cfg.sentinel.min_limit_mins * 60
-    max_seconds = cfg.sentinel.max_limit_mins * 60
-    try:
-        limit_s = int(report.get("limit_s", cfg.sentinel.default_limit_mins * 60))
-    except (TypeError, ValueError):
-        limit_s = cfg.sentinel.default_limit_mins * 60
-    return max(min_seconds, min(limit_s, max_seconds))
 
 
 def _resolve_screenshot_src(src: str, run_id: str, allowed_filenames: set[str]) -> str | None:
@@ -107,6 +104,16 @@ def _report_payload(report: dict) -> dict:
 @sentinel_api.route("/")
 def index():
     cfg = ConfigManager()
+    prefill_url = str(request.args.get("url", "")).strip()
+    prefill_prompt = str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars]
+    prefill_title = str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
+    prefill_allow_accounts = _truthy(request.args.get("allow_accounts"))
+    try:
+        prefill_limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
+    except (TypeError, ValueError):
+        prefill_limit = cfg.sentinel.default_limit_mins
+    prefill_limit = max(cfg.sentinel.min_limit_mins, min(prefill_limit, cfg.sentinel.max_limit_mins))
+
     return render_template(
         "sentinel_index.html",
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
@@ -114,6 +121,12 @@ def index():
         min_limit=cfg.sentinel.min_limit_mins,
         max_limit=cfg.sentinel.max_limit_mins,
         prompt_max_chars=cfg.sentinel.prompt_max_chars,
+        title_max_chars=cfg.sentinel.title_max_chars,
+        prefill_url=prefill_url,
+        prefill_prompt=prefill_prompt,
+        prefill_limit=prefill_limit,
+        prefill_title=prefill_title,
+        prefill_allow_accounts=prefill_allow_accounts,
     )
 
 
@@ -123,6 +136,8 @@ def create_run():
     payload = request.get_json(silent=True) or request.form
     raw_url = str(payload.get("url", "")).strip()
     prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
+    title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
+    allow_accounts = _truthy(payload.get("allow_accounts"))
     limit_s = _limit_from_request(payload.get("limit"))
 
     try:
@@ -130,7 +145,10 @@ def create_run():
     except TargetValidationError as e:
         return jsonify({"error": str(e)}), 400
 
-    return jsonify(start_run(target, prompt, limit_s)), 202
+    return (
+        jsonify(start_run(target, prompt, limit_s, title=title, allow_accounts=allow_accounts)),
+        202,
+    )
 
 
 @sentinel_api.route("/api/runs/<run_id>")
@@ -141,18 +159,15 @@ def run_status(run_id: str):
     return jsonify(_report_payload(report))
 
 
-@sentinel_api.route("/api/runs/<run_id>/rerun", methods=["POST"])
-def rerun(run_id: str):
+@sentinel_api.route("/api/runs/<run_id>/cancel", methods=["POST"])
+def cancel(run_id: str):
     report = get_run(run_id)
     if report is None:
         abort(404)
-
-    try:
-        target = validate_public_web_url(str(report.get("target_url", "")))
-    except TargetValidationError as e:
-        return jsonify({"error": str(e)}), 400
-
-    return jsonify(start_run(target, str(report.get("prompt", "")), _limit_from_report(report))), 202
+    if report.get("status") not in {"queued", "running", "summarizing"}:
+        return jsonify({"run_id": run_id, "status": report.get("status"), "cancelled": False})
+    cancelled = request_cancel(run_id)
+    return jsonify({"run_id": run_id, "cancelled": cancelled})
 
 
 @sentinel_api.route("/report/<run_id>")

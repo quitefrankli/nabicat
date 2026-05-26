@@ -148,6 +148,9 @@ class SentinelConfig:
     final_report_max_chars: int = 4000
     final_report_max_images: int = 4
     final_report_timeout_s: float = 60.0
+    title_max_chars: int = 80
+    llm_title_max_tokens: int = 80
+    llm_title_timeout_s: float = 15.0
     screenshot_load_stagger_ms: int = 200
     screenshot_load_max_retries: int = 3
     screenshot_load_retry_delay_ms: int = 1000

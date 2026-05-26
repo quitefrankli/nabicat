@@ -41,6 +41,16 @@
   color: var(--hw-text-secondary);
 }
 
+.sentinel-report-subtitle a {
+  color: var(--hw-sage-dark);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.sentinel-report-subtitle a:hover {
+  text-decoration: underline;
+}
+
 .sentinel-heading i {
   color: var(--hw-sage);
   font-size: 2.5rem;
@@ -160,7 +170,8 @@
 }
 
 .sentinel-badge-timed_out,
-.sentinel-badge-warning {
+.sentinel-badge-warning,
+.sentinel-badge-cancelled {
   background: var(--hw-peach);
 }
 
