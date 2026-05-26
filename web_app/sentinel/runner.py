@@ -163,6 +163,21 @@ def get_run(run_id: str) -> dict | None:
         return None
 
 
+def delete_run(run_id: str) -> bool:
+    report = get_run(run_id)
+    if report is None or report.get("status") in {"queued", "running", "summarizing"}:
+        return False
+    try:
+        deleted = DataInterface().delete_run(run_id)
+    except ValueError:
+        return False
+    if deleted:
+        with _active_lock:
+            _active_runs.pop(run_id, None)
+            _cancel_events.pop(run_id, None)
+    return deleted
+
+
 def start_run(
     target: ValidatedTarget,
     prompt: str,

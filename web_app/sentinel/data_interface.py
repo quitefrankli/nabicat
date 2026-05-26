@@ -86,6 +86,13 @@ class DataInterface(BaseDataInterface):
         for old_dir in run_dirs[max_runs:]:
             shutil.rmtree(old_dir, ignore_errors=True)
 
+    def delete_run(self, run_id: str) -> bool:
+        run_dir = self.run_dir(run_id)
+        if not run_dir.exists():
+            return False
+        shutil.rmtree(run_dir)
+        return True
+
     def delete_user_data(self, user) -> None:
         return None
 

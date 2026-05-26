@@ -3,6 +3,10 @@
   const MIN = 200;
   const MAX = 560;
 
+  function csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+  }
+
   function applyWidth(shell, width) {
     const clamped = Math.max(MIN, Math.min(MAX, Math.round(width)));
     shell.style.setProperty('--sentinel-sidebar-w', clamped + 'px');
@@ -64,6 +68,31 @@
     resizer.addEventListener('dblclick', function () {
       shell.style.removeProperty('--sentinel-sidebar-w');
       localStorage.removeItem(STORAGE_KEY);
+    });
+
+    document.querySelectorAll('.sentinel-run-delete').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        const runId = button.dataset.runId;
+        if (!runId || !window.confirm('Delete this Sentinel run?')) return;
+        button.disabled = true;
+        try {
+          const response = await fetch(`/sentinel/api/runs/${runId}/delete`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken() }
+          });
+          if (!response.ok) {
+            button.disabled = false;
+            return;
+          }
+          if (button.dataset.current === '1') {
+            window.location.href = '/sentinel/';
+            return;
+          }
+          button.closest('[data-run-row]')?.remove();
+        } catch (_) {
+          button.disabled = false;
+        }
+      });
     });
   });
 })();

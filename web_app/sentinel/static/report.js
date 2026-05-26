@@ -18,12 +18,17 @@ function csrfToken() {
 
 let sentinelCancelRequested = false;
 
+function findingText(finding) {
+  return [finding.severity, finding.title, finding.detail]
+    .filter(value => value !== undefined && value !== null && value !== '')
+    .join(' ');
+}
+
 function renderReport(report) {
   const status = document.getElementById('sentinel-report-status');
   const steps = document.getElementById('sentinel-steps');
   const stepCount = document.getElementById('sentinel-step-count');
   const findings = document.getElementById('sentinel-findings');
-  const findingsCount = document.getElementById('sentinel-findings-count');
   const finalReport = document.getElementById('sentinel-final-report');
   const screenshots = document.getElementById('sentinel-screenshots');
   const screenshotCount = document.getElementById('sentinel-screenshot-count');
@@ -59,7 +64,6 @@ function renderReport(report) {
     }
   }
   if (stepCount) stepCount.textContent = report.steps.length;
-  if (findingsCount) findingsCount.textContent = report.findings.length;
   if (screenshotCount) screenshotCount.textContent = report.screenshots.length;
 
   if (finalReport) {
@@ -74,10 +78,6 @@ function renderReport(report) {
         <div>
           <strong>${escapeText(step.action)}</strong>
           <p>${escapeText(step.reason)}</p>
-          <details class="sentinel-step-result">
-            <summary>Details</summary>
-            <code>${escapeText(JSON.stringify(step.result))}</code>
-          </details>
         </div>
       </article>`;
     }).join('') : '<div class="sentinel-empty sentinel-empty-small">Waiting for the first browser action.</div>';
@@ -85,11 +85,18 @@ function renderReport(report) {
 
   if (findings) {
     findings.innerHTML = report.findings.length ? report.findings.map(function (finding) {
-      return `<p class="sentinel-finding-line">
-        ${renderBadge(escapeText(finding.severity))}
-        <strong>${escapeText(finding.title)}</strong>
-        <span>${escapeText(finding.detail)}</span>
-      </p>`;
+      const fullText = escapeText(findingText(finding));
+      return `<details class="sentinel-finding-line">
+        <summary>
+          ${renderBadge(escapeText(finding.severity))}
+          <strong>${escapeText(finding.title)}</strong>
+          <span class="sentinel-finding-detail">${escapeText(finding.detail)}</span>
+        </summary>
+        <div class="sentinel-finding-full">
+          <textarea readonly spellcheck="false">${fullText}</textarea>
+          <button class="sentinel-copy-finding" type="button">Copy</button>
+        </div>
+      </details>`;
     }).join('') : '<div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>';
   }
 
@@ -99,8 +106,6 @@ function renderReport(report) {
     if (debug) {
       syncScreenshots(debug, report.annotated_screenshots || [], report.run_id, 'annotated');
     }
-    const debugCount = document.getElementById('sentinel-debug-screenshot-count');
-    if (debugCount) debugCount.textContent = (report.annotated_screenshots || []).length;
     setupScreenshotLoading(report);
     bindScreenshotButtons();
   }
@@ -270,6 +275,31 @@ function bindFinalReportImages() {
   });
 }
 
+function bindFindingCopyButtons() {
+  const findings = document.getElementById('sentinel-findings');
+  if (!findings || findings.dataset.boundCopy) return;
+  findings.dataset.boundCopy = 'true';
+  findings.addEventListener('click', async function (event) {
+    const button = event.target.closest('.sentinel-copy-finding');
+    if (!button) return;
+    const textarea = button.closest('.sentinel-finding-full')?.querySelector('textarea');
+    if (!textarea) return;
+
+    try {
+      await navigator.clipboard.writeText(textarea.value);
+    } catch (_) {
+      textarea.select();
+      document.execCommand('copy');
+    }
+
+    const original = button.textContent;
+    button.textContent = 'Copied';
+    window.setTimeout(function () {
+      button.textContent = original;
+    }, 1200);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   const shell = document.querySelector('[data-run-id]');
   if (!shell) return;
@@ -277,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function () {
   setupScreenshotLoading();
   bindScreenshotButtons();
   bindFinalReportImages();
+  bindFindingCopyButtons();
 
   const exportLink = document.getElementById('sentinel-export-pdf');
   if (exportLink) {

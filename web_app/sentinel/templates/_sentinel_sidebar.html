@@ -12,15 +12,26 @@
   {% if sidebar_runs %}
     <div class="sentinel-sidebar-list">
       {% for run in sidebar_runs %}
-        <a class="sentinel-run-row sentinel-sidebar-row{% if run.run_id == active_run_id %} is-active{% endif %}"
-           href="{{ url_for('sentinel.report', run_id=run.run_id) }}">
-          <span class="sentinel-run-main">
-            <strong>{{ run.title or run.target_url }}</strong>
-            <small>{{ run.target_url }}</small>
-            <small class="text-muted">{{ run.created_at }}{% if run.owner %} &middot; {{ run.owner }}{% endif %}</small>
-          </span>
-          <span class="sentinel-badge sentinel-badge-{{ run.status }}">{{ run.status }}</span>
-        </a>
+        <div class="sentinel-sidebar-row-shell{% if run.run_id == active_run_id %} is-active{% endif %}"
+             data-run-row="{{ run.run_id }}">
+          <a class="sentinel-run-row sentinel-sidebar-row"
+             href="{{ url_for('sentinel.report', run_id=run.run_id) }}">
+            <span class="sentinel-run-main">
+              <strong>{{ run.title or run.target_url }}</strong>
+              <small>{{ run.target_url }}</small>
+              <small class="text-muted">{{ run.created_at }}{% if run.owner %} &middot; {{ run.owner }}{% endif %}</small>
+            </span>
+            <span class="sentinel-badge sentinel-badge-{{ run.status }}">{{ run.status }}</span>
+          </a>
+          <button class="sentinel-run-delete"
+                  type="button"
+                  data-run-id="{{ run.run_id }}"
+                  data-current="{% if run.run_id == active_run_id %}1{% else %}0{% endif %}"
+                  aria-label="Delete run {{ run.title or run.target_url }}"
+                  {% if run.status in ['queued', 'running', 'summarizing'] %}disabled{% endif %}>
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       {% endfor %}
     </div>
   {% else %}

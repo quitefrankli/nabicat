@@ -570,3 +570,29 @@ def test_sentinel_cancel_signals_active_run(client):
         assert res.status_code == 200
         assert res.get_json()["cancelled"] is False
         mock_cancel_completed.assert_not_called()
+
+
+def test_sentinel_delete_run_removes_finished_runs_and_rejects_active_runs(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    active_report = {"run_id": "r1", "status": "running"}
+    finished_report = {"run_id": "r2", "status": "completed"}
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.get_run", return_value=active_report), patch(
+            "web_app.sentinel.delete_run"
+        ) as mock_delete:
+            res = client.post("/sentinel/api/runs/r1/delete")
+        assert res.status_code == 409
+        mock_delete.assert_not_called()
+
+        with patch("web_app.sentinel.get_run", return_value=finished_report), patch(
+            "web_app.sentinel.delete_run", return_value=True
+        ) as mock_delete:
+            res = client.post("/sentinel/api/runs/r2/delete")
+        assert res.status_code == 200
+        assert res.get_json() == {"run_id": "r2", "deleted": True}
+        mock_delete.assert_called_once_with("r2")

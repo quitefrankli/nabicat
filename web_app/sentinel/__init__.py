@@ -10,7 +10,14 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.runner import ensure_screenshot_thumbnail, get_run, render_report_pdf, request_cancel, start_run
+from web_app.sentinel.runner import (
+    delete_run,
+    ensure_screenshot_thumbnail,
+    get_run,
+    render_report_pdf,
+    request_cancel,
+    start_run,
+)
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
@@ -254,6 +261,18 @@ def cancel(run_id: str):
         return jsonify({"run_id": run_id, "status": report.get("status"), "cancelled": False})
     cancelled = request_cancel(run_id)
     return jsonify({"run_id": run_id, "cancelled": cancelled})
+
+
+@sentinel_api.route("/api/runs/<run_id>/delete", methods=["POST"])
+def delete(run_id: str):
+    report = get_run(run_id)
+    if report is None:
+        abort(404)
+    if report.get("status") in {"queued", "running", "summarizing"}:
+        return jsonify({"error": "Run is still active"}), 409
+    if not delete_run(run_id):
+        abort(404)
+    return jsonify({"run_id": run_id, "deleted": True})
 
 
 @sentinel_api.route("/report/<run_id>")

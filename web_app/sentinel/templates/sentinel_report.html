@@ -93,12 +93,8 @@
         <article class="sentinel-step">
           <span>{{ step.index }}</span>
           <div>
-          <strong>{{ step.action }}</strong>
+            <strong>{{ step.action }}</strong>
             <p>{{ step.reason }}</p>
-            <details class="sentinel-step-result">
-              <summary>Details</summary>
-              <code>{{ step.result }}</code>
-            </details>
           </div>
         </article>
       {% else %}
@@ -130,7 +126,6 @@
   <details id="sentinel-debug-screenshots-panel" class="sentinel-panel sentinel-diagnostics">
     <summary class="sentinel-section-title">
       <h2>Debug Screenshots</h2>
-      <span id="sentinel-debug-screenshot-count">{{ report.annotated_screenshots|length if report.annotated_screenshots else 0 }}</span>
     </summary>
     <div id="sentinel-debug-screenshots" class="sentinel-screenshots">
       {% for annot in report.annotated_screenshots or [] %}
@@ -151,15 +146,20 @@
   <details class="sentinel-panel sentinel-diagnostics">
     <summary class="sentinel-section-title">
       <h2>Diagnostics</h2>
-      <span id="sentinel-findings-count">{{ report.findings|length }}</span>
     </summary>
     <div id="sentinel-findings" class="sentinel-findings">
       {% for finding in report.findings %}
-        <p class="sentinel-finding-line">
-          <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
-          <strong>{{ finding.title }}</strong>
-          <span>{{ finding.detail }}</span>
-        </p>
+        <details class="sentinel-finding-line">
+          <summary>
+            <span class="sentinel-badge sentinel-badge-{{ finding.severity }}">{{ finding.severity }}</span>
+            <strong>{{ finding.title }}</strong>
+            <span class="sentinel-finding-detail">{{ finding.detail }}</span>
+          </summary>
+          <div class="sentinel-finding-full">
+            <textarea readonly spellcheck="false">{{ finding.severity }} {{ finding.title }} {{ finding.detail }}</textarea>
+            <button class="sentinel-copy-finding" type="button">Copy</button>
+          </div>
+        </details>
       {% else %}
         <div class="sentinel-empty sentinel-empty-small">No diagnostics recorded yet.</div>
       {% endfor %}
