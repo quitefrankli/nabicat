@@ -38,7 +38,15 @@ _SYSTEM = (
 _REPORT_SYSTEM = (
     "You are writing the final QA report for Sentinel. Directly answer the user's original prompt "
     "using only the run data provided. Be concise, factual, and practical. Include what was tested, "
-    "what worked, what failed or looked risky, and any important caveats. Do not invent findings."
+    "what worked, what failed or looked risky, and any important caveats. Do not invent findings. "
+    "Write in the voice of a human QA engineer producing a professional internal report. Use plain, "
+    "neutral prose and standard punctuation. Do not use emojis. Do not use em dashes or en dashes; "
+    "use commas, periods, parentheses, or colons instead. Avoid marketing language, exclamation "
+    "marks, and filler superlatives. Prefer short paragraphs and short bullet lists over long prose. "
+    "Output GitHub-flavored markdown. Embed relevant screenshots inline as evidence using exactly "
+    "this syntax: ![short caption](step-NN.png), where step-NN.png is one of the filenames listed "
+    "in the run data's screenshots array. Reference at most one screenshot per finding, and only "
+    "when it visually supports the claim. Do not invent filenames or use any other image URL."
 )
 
 

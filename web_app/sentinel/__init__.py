@@ -13,6 +13,9 @@ from web_app.sentinel.runner import get_run, start_run
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 
 
+_SCREENSHOT_FILENAME_RE = re.compile(r"^step-\d{2}\.png$")
+
+
 sentinel_api = Blueprint(
     "sentinel",
     __name__,
@@ -20,9 +23,6 @@ sentinel_api = Blueprint(
     static_folder="static",
     url_prefix="/sentinel",
 )
-
-_MD = MarkdownIt("commonmark", {"html": False})
-
 
 @sentinel_api.before_request
 @login_required
@@ -57,14 +57,47 @@ def _limit_from_report(report: dict) -> int:
     return max(min_seconds, min(limit_s, max_seconds))
 
 
-def _render_final_report(markdown_text: str) -> Markup:
-    return Markup(_MD.render(markdown_text or ""))
+def _resolve_screenshot_src(src: str, run_id: str, allowed_filenames: set[str]) -> str | None:
+    filename = src.rsplit("/", 1)[-1]
+    if filename not in allowed_filenames or not _SCREENSHOT_FILENAME_RE.match(filename):
+        return None
+    return f"/sentinel/report/{run_id}/screenshots/{filename}"
+
+
+def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]) -> Markup:
+    md = MarkdownIt("commonmark", {"html": False})
+    allowed = {str(s).rsplit("/", 1)[-1] for s in screenshots or []}
+    default_image = md.renderer.rules.get("image")
+
+    def render_image(tokens, idx, options, env):
+        token = tokens[idx]
+        src = token.attrGet("src") or ""
+        resolved = _resolve_screenshot_src(src, run_id, allowed)
+        if resolved is None:
+            return ""
+        token.attrSet("src", resolved)
+        token.attrSet("loading", "lazy")
+        token.attrSet("decoding", "async")
+        existing_class = token.attrGet("class") or ""
+        token.attrSet("class", (existing_class + " sentinel-final-report-img").strip())
+        if default_image:
+            return default_image(tokens, idx, options, env)
+        return md.renderer.renderToken(tokens, idx, options)
+
+    md.renderer.rules["image"] = render_image
+    return Markup(md.render(markdown_text or ""))
 
 
 def _report_payload(report: dict) -> dict:
     cfg = ConfigManager()
     payload = dict(report)
-    payload["final_report_html"] = str(_render_final_report(str(report.get("final_report", ""))))
+    payload["final_report_html"] = str(
+        _render_final_report(
+            str(report.get("final_report", "")),
+            str(report.get("run_id", "")),
+            list(report.get("screenshots", []) or []),
+        )
+    )
     payload["screenshot_load_stagger_ms"] = cfg.sentinel.screenshot_load_stagger_ms
     payload["screenshot_load_max_retries"] = cfg.sentinel.screenshot_load_max_retries
     payload["screenshot_load_retry_delay_ms"] = cfg.sentinel.screenshot_load_retry_delay_ms

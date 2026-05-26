@@ -197,7 +197,13 @@ def test_final_report_prompt_directly_includes_original_prompt():
 
 
 def test_report_payload_renders_final_report_markdown_without_html():
-    payload = _report_payload({"final_report": "## Summary\n\n- **Works**\n<script>alert(1)</script>"})
+    payload = _report_payload(
+        {
+            "run_id": "a" * 32,
+            "screenshots": [],
+            "final_report": "## Summary\n\n- **Works**\n<script>alert(1)</script>",
+        }
+    )
 
     assert "<h2>Summary</h2>" in payload["final_report_html"]
     assert "<strong>Works</strong>" in payload["final_report_html"]
@@ -206,6 +212,28 @@ def test_report_payload_renders_final_report_markdown_without_html():
     assert payload["screenshot_load_stagger_ms"] == ConfigManager().sentinel.screenshot_load_stagger_ms
     assert payload["screenshot_load_max_retries"] == ConfigManager().sentinel.screenshot_load_max_retries
     assert payload["screenshot_load_retry_delay_ms"] == ConfigManager().sentinel.screenshot_load_retry_delay_ms
+
+
+def test_final_report_inlines_allowlisted_screenshots_and_drops_other_images():
+    run_id = "b" * 32
+    payload = _report_payload(
+        {
+            "run_id": run_id,
+            "screenshots": ["screenshots/step-01.png", "screenshots/step-02.png"],
+            "final_report": (
+                "Login worked: ![login screen](step-01.png)\n\n"
+                "Bad: ![evil](https://evil.example.com/x.png)\n\n"
+                "Missing: ![missing](step-99.png)"
+            ),
+        }
+    )
+
+    html = payload["final_report_html"]
+    assert f'src="/sentinel/report/{run_id}/screenshots/step-01.png"' in html
+    assert "evil.example.com" not in html
+    assert "step-99.png" not in html
+    assert 'class="sentinel-final-report-img"' in html
+    assert 'loading="lazy"' in html
 
 
 def test_sentinel_routes_require_admin_and_start_run(client):
