@@ -98,6 +98,10 @@ def _report_payload(report: dict) -> dict:
     payload["screenshot_load_stagger_ms"] = cfg.sentinel.screenshot_load_stagger_ms
     payload["screenshot_load_max_retries"] = cfg.sentinel.screenshot_load_max_retries
     payload["screenshot_load_retry_delay_ms"] = cfg.sentinel.screenshot_load_retry_delay_ms
+    device_key = str(report.get("device") or "")
+    demographic_key = str(report.get("demographic") or "")
+    payload["device_label"] = cfg.sentinel.device_labels.get(device_key, "")
+    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(demographic_key, "")
     return payload
 
 
@@ -114,6 +118,18 @@ def index():
         prefill_limit = cfg.sentinel.default_limit_mins
     prefill_limit = max(cfg.sentinel.min_limit_mins, min(prefill_limit, cfg.sentinel.max_limit_mins))
 
+    raw_device = str(request.args.get("device", "")).strip()
+    prefill_device = raw_device if raw_device in cfg.sentinel.device_profiles else cfg.sentinel.default_device
+    raw_demographic = str(request.args.get("demographic", "")).strip()
+    prefill_demographic = (
+        raw_demographic if raw_demographic in cfg.sentinel.demographic_personas else cfg.sentinel.default_demographic
+    )
+
+    device_options = [(key, cfg.sentinel.device_labels.get(key, key)) for key in cfg.sentinel.device_profiles]
+    demographic_options = [
+        (key, cfg.sentinel.demographic_labels.get(key, key)) for key in cfg.sentinel.demographic_personas
+    ]
+
     return render_template(
         "sentinel_index.html",
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
@@ -127,6 +143,10 @@ def index():
         prefill_limit=prefill_limit,
         prefill_title=prefill_title,
         prefill_allow_accounts=prefill_allow_accounts,
+        prefill_device=prefill_device,
+        prefill_demographic=prefill_demographic,
+        device_options=device_options,
+        demographic_options=demographic_options,
     )
 
 
@@ -138,6 +158,8 @@ def create_run():
     prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
     title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
     allow_accounts = _truthy(payload.get("allow_accounts"))
+    device = str(payload.get("device", "")).strip()
+    demographic = str(payload.get("demographic", "")).strip()
     limit_s = _limit_from_request(payload.get("limit"))
 
     try:
@@ -146,7 +168,15 @@ def create_run():
         return jsonify({"error": str(e)}), 400
 
     return (
-        jsonify(start_run(target, prompt, limit_s, title=title, allow_accounts=allow_accounts)),
+        jsonify(start_run(
+            target,
+            prompt,
+            limit_s,
+            title=title,
+            allow_accounts=allow_accounts,
+            device=device,
+            demographic=demographic,
+        )),
         202,
     )
 

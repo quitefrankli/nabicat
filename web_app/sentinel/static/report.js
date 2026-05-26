@@ -16,6 +16,8 @@ function csrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.content || '';
 }
 
+let sentinelCancelRequested = false;
+
 function renderReport(report) {
   const status = document.getElementById('sentinel-report-status');
   const steps = document.getElementById('sentinel-steps');
@@ -26,9 +28,13 @@ function renderReport(report) {
   const screenshots = document.getElementById('sentinel-screenshots');
   const screenshotCount = document.getElementById('sentinel-screenshot-count');
 
+  const active = ['queued', 'running', 'summarizing'].includes(report.status);
+  if (!active) sentinelCancelRequested = false;
+  const displayStatus = sentinelCancelRequested && active ? 'cancelling' : report.status;
+
   if (status) {
-    status.className = `sentinel-badge sentinel-badge-${report.status}`;
-    status.textContent = report.status;
+    status.className = `sentinel-badge sentinel-badge-${displayStatus}`;
+    status.textContent = displayStatus;
   }
   const title = document.getElementById('sentinel-report-title');
   if (title && report.title) {
@@ -36,8 +42,16 @@ function renderReport(report) {
   }
   const cancelButton = document.getElementById('sentinel-cancel-run');
   if (cancelButton) {
-    const active = ['queued', 'running', 'summarizing'].includes(report.status);
     cancelButton.hidden = !active;
+    if (sentinelCancelRequested && active) {
+      cancelButton.disabled = true;
+      const label = cancelButton.querySelector('span');
+      if (label) label.textContent = 'Cancelling...';
+    } else if (!active) {
+      cancelButton.disabled = false;
+      const label = cancelButton.querySelector('span');
+      if (label) label.textContent = 'Cancel';
+    }
   }
   if (stepCount) stepCount.textContent = report.steps.length;
   if (findingsCount) findingsCount.textContent = report.findings.length;
@@ -237,14 +251,24 @@ document.addEventListener('DOMContentLoaded', function () {
   const cancelButton = document.getElementById('sentinel-cancel-run');
   if (cancelButton) {
     cancelButton.addEventListener('click', async function () {
+      sentinelCancelRequested = true;
       cancelButton.disabled = true;
+      const label = cancelButton.querySelector('span');
+      if (label) label.textContent = 'Cancelling...';
+      const status = document.getElementById('sentinel-report-status');
+      if (status) {
+        status.className = 'sentinel-badge sentinel-badge-cancelling';
+        status.textContent = 'cancelling';
+      }
       try {
         await fetch(`/sentinel/api/runs/${runId}/cancel`, {
           method: 'POST',
           headers: { 'X-CSRFToken': csrfToken() }
         });
       } catch (_) {
+        sentinelCancelRequested = false;
         cancelButton.disabled = false;
+        if (label) label.textContent = 'Cancel';
       }
     });
   }

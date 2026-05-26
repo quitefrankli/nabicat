@@ -11,6 +11,12 @@
 
 {% block page_actions %}
   <li>
+    <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('sentinel.index') }}">
+      <i class="bi bi-plus-circle"></i>
+      <span>New Run</span>
+    </a>
+  </li>
+  <li>
     <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('sentinel.report_json', run_id=report.run_id) }}">
       <i class="bi bi-filetype-json"></i>
       <span>View JSON</span>
@@ -29,6 +35,16 @@
       <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
       <h1 id="sentinel-report-title">{{ report.title or report.target_url }}</h1>
       <p class="sentinel-report-subtitle"><a href="{{ report.target_url }}" target="_blank" rel="noopener noreferrer">{{ report.target_url }}</a></p>
+      {% if report.device_label or report.demographic_label %}
+        <p class="sentinel-report-meta">
+          {% if report.device_label %}
+            <span class="sentinel-badge sentinel-badge-meta">{{ report.device_label }}</span>
+          {% endif %}
+          {% if report.demographic_label and report.demographic %}
+            <span class="sentinel-badge sentinel-badge-meta">{{ report.demographic_label }}</span>
+          {% endif %}
+        </p>
+      {% endif %}
       {% if report.prompt %}
         <p>{{ report.prompt }}</p>
       {% endif %}
@@ -39,13 +55,9 @@
         <span>Cancel</span>
       </button>
       <a class="btn btn-primary"
-         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else '')) }}">
+         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), device=report.device or '', demographic=report.demographic or '') }}">
         <i class="bi bi-arrow-clockwise"></i>
         <span>Rerun</span>
-      </a>
-      <a class="btn btn-outline-primary" href="{{ url_for('sentinel.index') }}">
-        <i class="bi bi-plus-circle"></i>
-        <span>New Run</span>
       </a>
     </div>
   </section>

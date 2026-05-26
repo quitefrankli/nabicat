@@ -128,7 +128,7 @@ class CrosswordsConfig:
 
 @dataclass
 class SentinelConfig:
-    default_limit_mins: int = 1
+    default_limit_mins: int = 5
     min_limit_mins: int = 1
     max_limit_mins: int = 10
     max_steps: int = 20
@@ -163,6 +163,37 @@ class SentinelConfig:
     llm_final_report_max_tokens: int = 2048
     # Codex-only quirk: sandbox profile name passed via -c default_permissions=...
     codex_permissions_profile: str = "sentinel_qa"
+    # Friendly device key -> Playwright devices registry name. Empty string
+    # means "no emulation; use browser_width/height_px viewport".
+    device_profiles: dict = field(default_factory=lambda: {
+        "desktop":     "",
+        "tablet":      "iPad (gen 7)",
+        "large_phone": "iPhone 13 Pro Max",
+        "small_phone": "iPhone SE",
+    })
+    device_labels: dict = field(default_factory=lambda: {
+        "desktop":     "Desktop",
+        "tablet":      "Tablet",
+        "large_phone": "Large Phone",
+        "small_phone": "Small Phone",
+    })
+    default_device: str = "desktop"
+    # Demographic key -> persona sentence prepended to the agent system prompt.
+    demographic_personas: dict = field(default_factory=lambda: {
+        "":       "",
+        "child":  "You are an 8-year-old child using a website for the first time; you click colorful things, get bored fast, and cannot read long text.",
+        "adult":  "You are a typical adult web user with average tech literacy who skims interfaces and expects standard web conventions.",
+        "senior": "You are a senior in your 70s with limited tech experience; small targets, jargon, and unexpected layouts confuse you, and you prefer obvious, labeled controls.",
+        "techie": "You are a power user comfortable with developer tools, keyboard shortcuts, and dense UIs; you probe edge cases and unusual flows.",
+    })
+    demographic_labels: dict = field(default_factory=lambda: {
+        "":       "None",
+        "child":  "Child",
+        "adult":  "Adult",
+        "senior": "Senior",
+        "techie": "Techie",
+    })
+    default_demographic: str = ""
 
 
 @dataclass

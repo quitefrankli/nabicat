@@ -74,8 +74,12 @@ _SYSTEM_ACCOUNTS_ALLOWED = (
 )
 
 
-def _system_prompt(allow_accounts: bool) -> str:
-    return _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
+def _system_prompt(allow_accounts: bool, demographic: str = "") -> str:
+    persona = ConfigManager().sentinel.demographic_personas.get(demographic, "")
+    base = _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
+    if persona:
+        return f"{persona} {base}"
+    return base
 
 _REPORT_SYSTEM = (
     "You are writing the final QA report for Sentinel. Directly answer the user's original prompt "
@@ -118,10 +122,17 @@ def start_run(
     limit_s: int,
     title: str = "",
     allow_accounts: bool = False,
+    device: str = "",
+    demographic: str = "",
 ) -> dict:
     run_id = uuid.uuid4().hex
     now = utc_now_iso()
     title = _clean_title(title)
+    cfg = ConfigManager()
+    if device not in cfg.sentinel.device_profiles:
+        device = cfg.sentinel.default_device
+    if demographic not in cfg.sentinel.demographic_personas:
+        demographic = cfg.sentinel.default_demographic
     report = {
         "run_id": run_id,
         "status": "queued",
@@ -130,6 +141,8 @@ def start_run(
         "prompt": prompt,
         "title": title,
         "allow_accounts": bool(allow_accounts),
+        "device": device,
+        "demographic": demographic,
         "limit_s": limit_s,
         "created_at": now,
         "updated_at": now,
@@ -242,6 +255,7 @@ class _LLMProvider:
         user_message: str,
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
+        demographic: str = "",
     ) -> str:
         raise NotImplementedError
 
@@ -258,9 +272,10 @@ class _CodexProvider(_LLMProvider):
         user_message: str,
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
+        demographic: str = "",
     ) -> str:
         return _codex_text(
-            system=_system_prompt(allow_accounts),
+            system=_system_prompt(allow_accounts, demographic),
             user_message=user_message,
             image_paths=image_paths,
             timeout_s=ConfigManager().sentinel.llm_step_timeout_s,
@@ -293,11 +308,12 @@ class _MeridianProvider(_LLMProvider):
         user_message: str,
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
+        demographic: str = "",
     ) -> str:
         cfg = ConfigManager()
         return meridian_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts),
+            system=_system_prompt(allow_accounts, demographic),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -340,11 +356,12 @@ class _BedrockProvider(_LLMProvider):
         user_message: str,
         image_paths: list[Path] | None = None,
         allow_accounts: bool = False,
+        demographic: str = "",
     ) -> str:
         cfg = ConfigManager()
         return bedrock_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts),
+            system=_system_prompt(allow_accounts, demographic),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -403,15 +420,24 @@ def _execute_browser_run(report: dict) -> None:
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
+        context = None
         try:
-            page = browser.new_page(
-                viewport={"width": cfg.sentinel.browser_width_px, "height": cfg.sentinel.browser_height_px},
-                # Playwright's Chromium uses NSS / system trust stores, not
-                # $SSL_CERT_FILE, so dev environments without a populated NSS
-                # DB hit ERR_CERT_AUTHORITY_INVALID on perfectly valid public
-                # sites. Bypass cert validation in debug mode only.
-                ignore_https_errors=cfg.debug_mode,
-            )
+            device_key = str(report.get("device") or cfg.sentinel.default_device)
+            profile_name = cfg.sentinel.device_profiles.get(device_key, "")
+            context_kwargs: dict = {"ignore_https_errors": cfg.debug_mode}
+            if profile_name:
+                context_kwargs.update(playwright.devices[profile_name])
+            else:
+                context_kwargs["viewport"] = {
+                    "width": cfg.sentinel.browser_width_px,
+                    "height": cfg.sentinel.browser_height_px,
+                }
+            # Playwright's Chromium uses NSS / system trust stores, not
+            # $SSL_CERT_FILE, so dev environments without a populated NSS
+            # DB hit ERR_CERT_AUTHORITY_INVALID on perfectly valid public
+            # sites. Bypass cert validation in debug mode only.
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
             page.set_default_timeout(cfg.sentinel.browser_default_timeout_ms)
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
             page.on("pageerror", lambda err: _add_finding(report, "error", "Page error", str(err)))
@@ -453,6 +479,7 @@ def _execute_browser_run(report: dict) -> None:
                     _agent_prompt(report, observation),
                     image_paths=image_paths,
                     allow_accounts=bool(report.get("allow_accounts")),
+                    demographic=str(report.get("demographic") or ""),
                 )
                 try:
                     action = parse_agent_action(agent_text, known_ids)
@@ -472,6 +499,8 @@ def _execute_browser_run(report: dict) -> None:
             _add_finding(report, "error", "Browser timeout", str(e)[:500])
             report["status"] = "timed_out"
         finally:
+            if context is not None:
+                context.close()
             browser.close()
 
 

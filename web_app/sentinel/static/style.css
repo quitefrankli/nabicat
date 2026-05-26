@@ -82,6 +82,47 @@
   align-items: center;
 }
 
+.sentinel-select-wrap {
+  position: relative;
+}
+
+.sentinel-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 0.85rem;
+  top: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--hw-sage-dark);
+  border-bottom: 2px solid var(--hw-sage-dark);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.sentinel-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+  padding-right: 2.5rem;
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 2px solid var(--hw-sage-light);
+  border-radius: var(--hw-radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--hw-transition-fast), box-shadow var(--hw-transition-fast);
+}
+
+.sentinel-select:hover {
+  border-color: var(--hw-sage);
+}
+
+.sentinel-select:focus {
+  border-color: var(--hw-sage-dark);
+  box-shadow: 0 0 0 4px rgba(135, 168, 120, 0.15);
+  outline: none;
+}
+
 .sentinel-status-text {
   min-height: 1.4rem;
   color: var(--hw-text-secondary);
@@ -171,12 +212,26 @@
 
 .sentinel-badge-timed_out,
 .sentinel-badge-warning,
-.sentinel-badge-cancelled {
+.sentinel-badge-cancelled,
+.sentinel-badge-cancelling {
   background: var(--hw-peach);
 }
 
 .sentinel-badge-completed {
   background: var(--hw-sage-dark);
+}
+
+.sentinel-badge-meta {
+  background: var(--hw-bg-cream);
+  color: var(--hw-text-secondary);
+  border: 1px solid var(--hw-border);
+}
+
+.sentinel-report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
 }
 
 .sentinel-diagnostics summary {

@@ -312,13 +312,29 @@ def test_sentinel_index_prefills_form_from_clone_query_params(client):
         with client.session_transaction() as sess:
             sess["_user_id"] = "admin"
 
-        res = client.get("/sentinel/?url=https://example.com&prompt=Test+checkout&limit=5")
+        res = client.get(
+            "/sentinel/?url=https://example.com&prompt=Test+checkout&limit=5"
+            "&device=small_phone&demographic=senior"
+        )
 
     assert res.status_code == 200
     body = res.get_data(as_text=True)
     assert 'value="https://example.com"' in body
     assert "Test checkout" in body
     assert 'value="5"' in body
+    assert 'value="small_phone" selected' in body
+    assert 'value="senior" selected' in body
+
+
+def test_system_prompt_prepends_demographic_persona():
+    cfg = ConfigManager()
+    senior_persona = cfg.sentinel.demographic_personas["senior"]
+    with_persona = _system_prompt(allow_accounts=False, demographic="senior")
+    without = _system_prompt(allow_accounts=False, demographic="")
+    assert with_persona.startswith(senior_persona)
+    assert senior_persona not in without
+    # Unknown demographic falls back to no persona.
+    assert _system_prompt(allow_accounts=False, demographic="bogus") == without
 
 
 def test_sentinel_cancel_signals_active_run(client):
