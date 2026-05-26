@@ -36,6 +36,18 @@
 
 * start every new session with "CLAUDE.md read!"
 
+## Sentinel subapp
+
+- Admin-only blueprint (`web_app/sentinel/__init__.py`): every route is gated by `current_user.is_admin`.
+- Run data lives at `~/.nabicat/data/sentinel/runs/<run_id>/`: `report.json` plus `screenshots/step-NN.png` (raw viewport capture) and `screenshots/step-NN-annot.png` (numbered-box overlay produced by `_annotate_screenshot`). Older runs are pruned to `max_retained_runs` on completion.
+- Agent input model is **Set-of-Mark style**: each step the LLM receives the *annotated* PNG plus a slim `{id, tag, type, label}` map — no full DOM, no body text. `_observe_page` stamps `data-sentinel-id="eN"` on each visible interactive element so `_apply_action` can drive Playwright deterministically.
+- Run config flows through `start_run(...)` and is stored on the report dict: `title`, `owner` (= `current_user.id`), `device`, `demographic`, `allow_accounts`, `allow_external`, `limit_s`. Form fields round-trip via `?url=&prompt=&...` query params (the Rerun button builds this URL).
+- Device profiles map friendly keys to Playwright's `playwright.devices[...]` registry (`config.py SentinelConfig.device_profiles`); demographic prepends a persona sentence to the agent system prompt (`demographic_personas`).
+- Off-host navigation is gated at the network layer via Playwright's `page.route("**/*", guard_route)` unless `allow_external=True`. The system prompt also tells the agent to stay on-site (TODO comment in `runner.py` notes this could be relaxed).
+- PDF export (`/sentinel/report/<run_id>/pdf`) reuses headless Chromium via `render_report_pdf` in `runner.py` — Playwright is already a dep, no extra libs. Inline screenshots are embedded as base64 data URIs (`_render_final_report_for_pdf`) because `page.set_content` runs at `about:blank` which blocks `file://` subresource loads.
+- Cancel uses a per-run `threading.Event` (`_cancel_events`); the run loop checks `_is_cancelled` between steps. UI shows a "cancelling" state immediately before the server confirms.
+- Layout: `_sentinel_sidebar.html` is a shared partial fed by `sidebar_runs` from the blueprint context processor; both index and report pages render it. The sidebar is resizable (drag `#sentinel-sidebar-resizer`, persisted in `localStorage` as `sentinel.sidebar.width`).
+
 ## Hammock subapp
 
 - Posts live on the filesystem: `~/.nabicat/data/hammock/projects/<project>/<post>/`. Each post has a `meta.json` with `template` (`markdown`/`gallery`/`raw`), `owner` (username), `title`, `date`.
