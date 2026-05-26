@@ -346,6 +346,95 @@ class CodexCLIError(RuntimeError):
     """Raised when the local Codex CLI is unavailable or returns an error."""
 
 
+class BedrockError(RuntimeError):
+    """Raised when the AWS Bedrock Anthropic call fails."""
+
+
+_bedrock_client = None
+
+
+def _get_bedrock_client():
+    """Return a cached boto3 bedrock-runtime client.
+
+    We use boto3 directly rather than the anthropic SDK's AnthropicBedrock
+    because the SDK double-URL-encodes inference-profile ARNs in the request
+    path, which breaks SigV4 signing. boto3 handles ARN model IDs correctly.
+
+    Region is read from AWS_REGION (or AWS_DEFAULT_REGION); we pass it
+    explicitly because profile-level ``region`` in ~/.aws/config takes
+    precedence over the AWS_REGION env var otherwise — which would point
+    the client at the wrong region for inference-profile ARNs.
+    """
+    global _bedrock_client
+    if _bedrock_client is None:
+        import os
+        import boto3
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        _bedrock_client = boto3.client("bedrock-runtime", region_name=region)
+    return _bedrock_client
+
+
+def bedrock_text(
+    user_message: str,
+    system: str,
+    model: str,
+    max_tokens: int = 1024,
+    timeout_s: float = 120.0,  # noqa: ARG001 — accepted for symmetry with meridian_text; boto3 timeouts are set on the client, not per-call
+    image_paths: list | None = None,
+) -> str:
+    """Invoke AWS Bedrock via boto3 with an Anthropic Messages payload.
+
+    Uses the standard AWS credential chain (AWS_REGION + AWS_PROFILE / env
+    keys / instance role). ``model`` is a Bedrock foundation-model ID or an
+    inference-profile ARN.
+    """
+    if image_paths:
+        content: list = [{"type": "text", "text": user_message}]
+        for path in image_paths:
+            p = Path(path)
+            if not p.exists():
+                continue
+            ext = p.suffix.lower()
+            media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.b64encode(p.read_bytes()).decode("ascii"),
+                },
+            })
+        message_content = content
+    else:
+        message_content = user_message
+
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": message_content}],
+    })
+
+    try:
+        resp = _get_bedrock_client().invoke_model(modelId=model, body=body)
+    except Exception as e:
+        msg = str(e)
+        if "Unable to locate credentials" in msg or "could not resolve credentials" in msg:
+            raise BedrockError(
+                "AWS credentials not found. Set AWS_PROFILE in .env (and run aws sso login if needed)."
+            ) from e
+        if "ExpiredToken" in msg or ("security token" in msg.lower() and "expired" in msg.lower()):
+            raise BedrockError("AWS session expired. Refresh your SSO credentials.") from e
+        if "AccessDeniedException" in msg or "is not authorized to perform" in msg:
+            raise BedrockError(f"Bedrock access denied for model {model!r}: {msg[:300]}") from e
+        raise BedrockError(f"bedrock call failed: {e}") from e
+
+    payload = json.loads(resp["body"].read())
+    return "".join(
+        b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text"
+    ).strip()
+
+
 def call_meridian(
     messages: list,
     system: str,
@@ -363,7 +452,7 @@ def call_meridian(
     config = ConfigManager()
     headers = {"Content-Type": "application/json", "x-meridian-agent": agent}
     body = {
-        "model": model or config.llm.meridian_model,
+        "model": model or config.llm.meridian_models.get("medium", ""),
         "max_tokens": max_tokens,
         "system": system,
         "messages": messages,

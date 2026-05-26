@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from web_app.config import ConfigManager
-from web_app.helpers import meridian_text
+from web_app.helpers import bedrock_text, meridian_text
 from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
 from web_app.sentinel.data_interface import DataInterface, utc_now_iso
 from web_app.sentinel.target_policy import ValidatedTarget, validate_public_web_url
@@ -217,9 +217,40 @@ class _MeridianProvider(_LLMProvider):
         )
 
 
+class _BedrockProvider(_LLMProvider):
+    def _model(self) -> str:
+        cfg = ConfigManager()
+        return cfg.llm.model_for(cfg.sentinel.llm_tier)
+
+    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        cfg = ConfigManager()
+        return bedrock_text(
+            user_message=user_message,
+            system=_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_step_max_tokens,
+            timeout_s=cfg.sentinel.llm_step_timeout_s,
+            image_paths=image_paths,
+        )
+
+    def final_report_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        cfg = ConfigManager()
+        return bedrock_text(
+            user_message=user_message,
+            system=_REPORT_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_final_report_max_tokens,
+            timeout_s=cfg.sentinel.final_report_timeout_s,
+            image_paths=image_paths,
+        )
+
+
 def _get_provider() -> _LLMProvider:
-    if ConfigManager().llm.api_source == "meridian":
+    source = ConfigManager().llm.api_source
+    if source == "meridian":
         return _MeridianProvider()
+    if source == "bedrock":
+        return _BedrockProvider()
     return _CodexProvider()
 
 

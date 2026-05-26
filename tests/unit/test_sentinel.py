@@ -9,6 +9,7 @@ from web_app.sentinel import _limit_from_report, _limit_from_request, _report_pa
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.runner import (
     _add_finding,
+    _BedrockProvider,
     _build_codex_cmd,
     _codex_text,
     _CodexProvider,
@@ -141,6 +142,8 @@ def test_provider_switch_follows_global_llm_api_source():
         assert isinstance(_get_provider(), _MeridianProvider)
         cfg.llm.api_source = "codex"
         assert isinstance(_get_provider(), _CodexProvider)
+        cfg.llm.api_source = "bedrock"
+        assert isinstance(_get_provider(), _BedrockProvider)
     finally:
         cfg.llm.api_source = original
 

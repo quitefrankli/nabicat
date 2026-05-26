@@ -225,12 +225,17 @@ def configure_logging(debug: bool) -> None:
 @click.command()
 @click.option('--debug', is_flag=True, default=False)
 @click.option('--port', default=80, type=int)
-def cli_start(debug: bool, port: int):
+@click.option('--llm-source', type=click.Choice(['meridian', 'codex', 'bedrock']), default=None,
+              help='Override the default LLM provider for this process.')
+def cli_start(debug: bool, port: int, llm_source: str | None):
     configure_logging(debug=debug)
-    ConfigManager().debug_mode = debug
-    app.secret_key = ConfigManager().flask_secret_key
+    cfg = ConfigManager()
+    cfg.debug_mode = debug
+    if llm_source:
+        cfg.llm.api_source = llm_source
+    app.secret_key = cfg.flask_secret_key
 
-    logging.info("Starting server")
+    logging.info("Starting server (llm_source=%s)", cfg.llm.api_source)
     app.run(host='0.0.0.0', port=port, debug=debug)
 
 def prod_entry():

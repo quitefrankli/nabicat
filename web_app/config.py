@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Callable, Literal
 from dotenv import load_dotenv
 
-LLMSource = Literal["meridian", "codex"]
+LLMSource = Literal["meridian", "codex", "bedrock"]
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
@@ -14,7 +14,7 @@ load_dotenv(env_path)
 
 @dataclass
 class LLMConfig:
-    api_source: LLMSource = "meridian"
+    api_source: LLMSource = "codex"
 
     # Meridian (local Claude proxy) transport
     meridian_default_port: int = 3456
@@ -35,6 +35,19 @@ class LLMConfig:
         "strong": "",
     })
 
+    # Bedrock (Anthropic-on-AWS via boto3 / anthropic[bedrock] SDK).
+    # AWS auth comes from the standard AWS credential chain; AWS_REGION must be set.
+    # Values may be inference-profile ARNs or anthropic.<model> IDs.
+    # Bedrock model IDs / inference-profile ARNs. Inference-profile ARNs are
+    # required when your IAM policy only grants InvokeModel on the profile,
+    # not on the bare foundation-model ID — set BEDROCK_{TIER}_MODEL in .env
+    # to override per-environment without committing the ARN.
+    bedrock_models: dict = field(default_factory=lambda: {
+        "weak":   getenv("BEDROCK_WEAK_MODEL")   or "anthropic.claude-haiku-4-5",
+        "medium": getenv("BEDROCK_MEDIUM_MODEL") or "anthropic.claude-sonnet-4-6",
+        "strong": getenv("BEDROCK_STRONG_MODEL") or "anthropic.claude-opus-4-7",
+    })
+
     @property
     def meridian_url(self) -> str:
         return f"http://127.0.0.1:{self.meridian_default_port}/v1/messages"
@@ -44,7 +57,11 @@ class LLMConfig:
         name for the currently-configured ``api_source``. Unknown tiers fall
         back to ``medium``.
         """
-        models = self.meridian_models if self.api_source == "meridian" else self.codex_models
+        models = {
+            "meridian": self.meridian_models,
+            "codex":    self.codex_models,
+            "bedrock":  self.bedrock_models,
+        }.get(self.api_source, self.codex_models)
         return models.get(tier, models.get("medium", ""))
 
 
