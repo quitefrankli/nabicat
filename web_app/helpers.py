@@ -11,6 +11,7 @@ import logging
 
 import requests as http_requests
 from io import BytesIO
+from pathlib import Path
 from flask import request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -391,14 +392,37 @@ def meridian_text(
     max_tokens: int = 1024,
     timeout_s: float = 120.0,
     agent: str = "nabicat",
+    image_paths: list | None = None,
 ) -> str:
-    """Convenience wrapper around ``call_meridian`` for text-only prompts.
+    """Convenience wrapper around ``call_meridian`` for text/multimodal prompts.
 
-    Concatenates all ``text`` blocks from the response and returns the
-    stripped result. Raises ``MeridianError`` on transport failures.
+    When ``image_paths`` is provided, each existing PNG/JPEG file is base64-
+    encoded and attached as an Anthropic image content block alongside the
+    user text. Concatenates all ``text`` blocks from the response and returns
+    the stripped result. Raises ``MeridianError`` on transport failures.
     """
+    if image_paths:
+        content: list = [{"type": "text", "text": user_message}]
+        for path in image_paths:
+            p = Path(path)
+            if not p.exists():
+                continue
+            ext = p.suffix.lower()
+            media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.b64encode(p.read_bytes()).decode("ascii"),
+                },
+            })
+        message_content = content
+    else:
+        message_content = user_message
+
     result = call_meridian(
-        messages=[{"role": "user", "content": user_message}],
+        messages=[{"role": "user", "content": message_content}],
         system=system,
         model=model,
         max_tokens=max_tokens,
@@ -424,14 +448,14 @@ def codex_cli_text(
     prompt = f"{instructions}\n\nUser request:\n{user_message}"
     with tempfile.NamedTemporaryFile("r+", encoding="utf-8") as output:
         cmd = [
-            config.crosswords.codex_cli_command,
+            config.llm.codex_cli_command,
             "-a",
-            config.crosswords.codex_cli_approval_policy,
+            config.llm.codex_cli_approval_policy,
             "exec",
             "--ephemeral",
             "--skip-git-repo-check",
             "--sandbox",
-            config.crosswords.codex_cli_sandbox,
+            config.llm.codex_cli_sandbox,
             "--output-last-message",
             output.name,
         ]
@@ -448,7 +472,7 @@ def codex_cli_text(
                 check=False,
             )
         except FileNotFoundError as e:
-            raise CodexCLIError(f"codex cli not found: {config.crosswords.codex_cli_command}") from e
+            raise CodexCLIError(f"codex cli not found: {config.llm.codex_cli_command}") from e
         except subprocess.TimeoutExpired as e:
             raise CodexCLIError(f"codex cli timed out after {timeout_s}s") from e
 

@@ -105,9 +105,9 @@ class MeridianSource(WordSource):
             text = meridian_text(
                 user_message=prompt,
                 system=self._SYSTEM,
-                model=config.crosswords.model,
-                max_tokens=config.crosswords.generation_max_tokens,
-                timeout_s=self._timeout or config.crosswords.generation_timeout_s,
+                model=config.llm.model_for(config.crosswords.llm_tier),
+                max_tokens=config.crosswords.llm_generation_max_tokens,
+                timeout_s=self._timeout or config.crosswords.llm_generation_timeout_s,
                 agent="crosswords",
             )
         except MeridianError as e:
@@ -138,8 +138,8 @@ class CodexSource(WordSource):
             text = codex_cli_text(
                 user_message=prompt,
                 instructions=self._SYSTEM,
-                model=config.crosswords.codex_model,
-                timeout_s=self._timeout or config.crosswords.generation_timeout_s,
+                model=config.llm.model_for(config.crosswords.llm_tier),
+                timeout_s=self._timeout or config.crosswords.llm_generation_timeout_s,
             )
         except CodexCLIError as e:
             logging.warning("CodexSource: %s", e)
@@ -217,14 +217,6 @@ def default_source() -> WordSource:
     if config.debug_mode:
         return ChainedSource([DebugSource(), FallbackSource()])
 
-    provider = config.llm.api_source.lower()
-    if provider == "meridian":
+    if config.llm.api_source == "meridian":
         return ChainedSource([MeridianSource(), FallbackSource()])
-    if provider == "codex":
-        return ChainedSource([CodexSource(), FallbackSource()])
-    if provider == "hardcoded":
-        logging.info("Crosswords using hardcoded provider")
-        return FallbackSource()
-
-    logging.warning("Unknown llm_api_source=%r; using hardcoded fallback", config.llm.api_source)
-    return FallbackSource()
+    return ChainedSource([CodexSource(), FallbackSource()])

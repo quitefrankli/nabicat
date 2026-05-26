@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from web_app.config import ConfigManager
+from web_app.helpers import meridian_text
 from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
 from web_app.sentinel.data_interface import DataInterface, utc_now_iso
 from web_app.sentinel.target_policy import ValidatedTarget, validate_public_web_url
@@ -110,9 +111,9 @@ def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) ->
     cfg = ConfigManager()
     permissions_profile = cfg.sentinel.codex_permissions_profile
     cmd = [
-        cfg.sentinel.codex_cli_command,
+        cfg.llm.codex_cli_command,
         "-a",
-        cfg.sentinel.codex_cli_approval_policy,
+        cfg.llm.codex_cli_approval_policy,
         "exec",
         "--ephemeral",
         "--skip-git-repo-check",
@@ -130,8 +131,9 @@ def _build_codex_cmd(output_path: str, image_paths: list[Path] | None = None) ->
         if image_path.exists():
             cmd.extend(["--image", str(image_path)])
     cmd.extend(["--output-last-message", output_path])
-    if cfg.sentinel.codex_model:
-        cmd.extend(["--model", cfg.sentinel.codex_model])
+    model = cfg.llm.model_for(cfg.sentinel.llm_tier)
+    if model:
+        cmd.extend(["--model", model])
     return cmd
 
 
@@ -159,22 +161,66 @@ def _codex_text(system: str, user_message: str, image_paths: list[Path] | None, 
         return text
 
 
-def _codex_agent_text(user_message: str, image_paths: list[Path] | None = None) -> str:
-    return _codex_text(
-        system=_SYSTEM,
-        user_message=user_message,
-        image_paths=image_paths,
-        timeout_s=ConfigManager().sentinel.codex_step_timeout_s,
-    )
+class _LLMProvider:
+    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        raise NotImplementedError
+
+    def final_report_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        raise NotImplementedError
 
 
-def _codex_final_report_text(user_message: str, image_paths: list[Path] | None = None) -> str:
-    return _codex_text(
-        system=_REPORT_SYSTEM,
-        user_message=user_message,
-        image_paths=image_paths,
-        timeout_s=ConfigManager().sentinel.final_report_timeout_s,
-    )
+class _CodexProvider(_LLMProvider):
+    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        return _codex_text(
+            system=_SYSTEM,
+            user_message=user_message,
+            image_paths=image_paths,
+            timeout_s=ConfigManager().sentinel.llm_step_timeout_s,
+        )
+
+    def final_report_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        return _codex_text(
+            system=_REPORT_SYSTEM,
+            user_message=user_message,
+            image_paths=image_paths,
+            timeout_s=ConfigManager().sentinel.final_report_timeout_s,
+        )
+
+
+class _MeridianProvider(_LLMProvider):
+    def _model(self) -> str | None:
+        cfg = ConfigManager()
+        return cfg.llm.model_for(cfg.sentinel.llm_tier)
+
+    def agent_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        cfg = ConfigManager()
+        return meridian_text(
+            user_message=user_message,
+            system=_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_step_max_tokens,
+            timeout_s=cfg.sentinel.llm_step_timeout_s,
+            agent="sentinel",
+            image_paths=image_paths,
+        )
+
+    def final_report_text(self, user_message: str, image_paths: list[Path] | None = None) -> str:
+        cfg = ConfigManager()
+        return meridian_text(
+            user_message=user_message,
+            system=_REPORT_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_final_report_max_tokens,
+            timeout_s=cfg.sentinel.final_report_timeout_s,
+            agent="sentinel",
+            image_paths=image_paths,
+        )
+
+
+def _get_provider() -> _LLMProvider:
+    if ConfigManager().llm.api_source == "meridian":
+        return _MeridianProvider()
+    return _CodexProvider()
 
 
 def _host_allowed(hostname: str, target_hostname: str) -> bool:
@@ -199,7 +245,12 @@ def _execute_browser_run(report: dict) -> None:
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page(
-                viewport={"width": cfg.sentinel.browser_width_px, "height": cfg.sentinel.browser_height_px}
+                viewport={"width": cfg.sentinel.browser_width_px, "height": cfg.sentinel.browser_height_px},
+                # Playwright's Chromium uses NSS / system trust stores, not
+                # $SSL_CERT_FILE, so dev environments without a populated NSS
+                # DB hit ERR_CERT_AUTHORITY_INVALID on perfectly valid public
+                # sites. Bypass cert validation in debug mode only.
+                ignore_https_errors=cfg.debug_mode,
             )
             page.set_default_timeout(cfg.sentinel.browser_default_timeout_ms)
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
@@ -236,7 +287,7 @@ def _execute_browser_run(report: dict) -> None:
                     observation["screenshot"] = screenshot
 
                 image_paths = _screenshot_image_paths(report, screenshot)
-                agent_text = _codex_agent_text(_agent_prompt(report, observation), image_paths=image_paths)
+                agent_text = _get_provider().agent_text(_agent_prompt(report, observation), image_paths=image_paths)
                 try:
                     action = parse_agent_action(agent_text, known_ids)
                 except ActionValidationError as e:
@@ -283,7 +334,7 @@ def _add_finding(report: dict, severity: str, title: str, detail: str) -> None:
 
 def _add_final_report(report: dict) -> None:
     try:
-        text = _codex_final_report_text(
+        text = _get_provider().final_report_text(
             _final_report_prompt(report),
             image_paths=_final_report_image_paths(report),
         )

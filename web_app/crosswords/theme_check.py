@@ -28,9 +28,9 @@ def is_real_word(theme: str, timeout_s: float | None = None) -> bool:
         text = meridian_text(
             user_message=theme,
             system=_SYSTEM,
-            model=config.crosswords.model,
-            max_tokens=config.crosswords.theme_check_max_tokens,
-            timeout_s=timeout_s or config.crosswords.theme_check_timeout_s,
+            model=config.llm.model_for(config.crosswords.llm_tier),
+            max_tokens=config.crosswords.llm_theme_check_max_tokens,
+            timeout_s=timeout_s or config.crosswords.llm_theme_check_timeout_s,
             agent="crosswords-theme",
         )
     except MeridianError as e:
@@ -53,8 +53,8 @@ def is_real_word_codex(theme: str, timeout_s: float | None = None) -> bool | Non
         text = codex_cli_text(
             user_message=theme,
             instructions=_SYSTEM,
-            model=config.crosswords.codex_model,
-            timeout_s=timeout_s or config.crosswords.theme_check_timeout_s,
+            model=config.llm.model_for(config.crosswords.llm_tier),
+            timeout_s=timeout_s or config.crosswords.llm_theme_check_timeout_s,
         )
     except CodexCLIError as e:
         logging.warning("theme_check_codex: %s", e)
@@ -68,21 +68,15 @@ def is_real_word_codex(theme: str, timeout_s: float | None = None) -> bool | Non
 def require_real_word(theme: str) -> None:
     """Raise InvalidThemeError when the configured provider rejects the theme."""
     config = ConfigManager()
-    provider = config.llm.api_source.lower()
-    if config.debug_mode or provider == "hardcoded":
-        logging.info("Crosswords theme check skipped: theme=%s source=%s debug=%s", theme, provider, config.debug_mode)
+    if config.debug_mode:
+        logging.info("Crosswords theme check skipped in debug mode: theme=%s", theme)
         return
 
-    if provider == "codex":
+    if config.llm.api_source == "codex":
         codex_ok = is_real_word_codex(theme)
         if codex_ok is not False:
             return
-        raise InvalidThemeError(
-            f"'{theme}' doesn't look like a real word. Try a single common English word."
-        )
-
-    meridian_ok = is_real_word(theme)
-    if meridian_ok:
+    elif is_real_word(theme):
         return
 
     raise InvalidThemeError(

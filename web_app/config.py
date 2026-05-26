@@ -2,8 +2,10 @@ from dataclasses import dataclass, field
 from os import getenv
 from pathlib import Path
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, Literal
 from dotenv import load_dotenv
+
+LLMSource = Literal["meridian", "codex"]
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
@@ -12,13 +14,38 @@ load_dotenv(env_path)
 
 @dataclass
 class LLMConfig:
+    api_source: LLMSource = "meridian"
+
+    # Meridian (local Claude proxy) transport
     meridian_default_port: int = 3456
-    meridian_model: str = "claude-opus-4-7"
-    api_source: str = "codex"  # meridian | codex | hardcoded
+    meridian_models: dict = field(default_factory=lambda: {
+        "weak":   "claude-haiku-4-5-20251001",
+        "medium": "claude-sonnet-4-6",
+        "strong": "claude-opus-4-7",
+    })
+
+    # Codex CLI transport (shared by all apps that shell out to codex).
+    # Empty model strings mean "let codex CLI pick its native default".
+    codex_cli_command: str = "codex"
+    codex_cli_approval_policy: str = "never"
+    codex_cli_sandbox: str = "read-only"
+    codex_models: dict = field(default_factory=lambda: {
+        "weak":   "",
+        "medium": "",
+        "strong": "",
+    })
 
     @property
     def meridian_url(self) -> str:
         return f"http://127.0.0.1:{self.meridian_default_port}/v1/messages"
+
+    def model_for(self, tier: str) -> str:
+        """Resolve a tier (``weak``/``medium``/``strong``) to a concrete model
+        name for the currently-configured ``api_source``. Unknown tiers fall
+        back to ``medium``.
+        """
+        models = self.meridian_models if self.api_source == "meridian" else self.codex_models
+        return models.get(tier, models.get("medium", ""))
 
 
 @dataclass
@@ -65,17 +92,15 @@ class DevConfig:
 
 @dataclass
 class CrosswordsConfig:
-    model: str = "claude-sonnet-4-6"
-    codex_model: str = ""
-    codex_cli_command: str = "codex"
-    codex_cli_sandbox: str = "read-only"
-    codex_cli_approval_policy: str = "never"
+    # Provider-agnostic capability tier; LLMConfig.model_for() resolves it
+    # to a concrete model for the active api_source.
+    llm_tier: str = "medium"  # weak | medium | strong
     word_count: int = 7
     min_placed_words: int = 3
-    generation_max_tokens: int = 1024
-    generation_timeout_s: float = 20.0
-    theme_check_max_tokens: int = 4
-    theme_check_timeout_s: float = 10.0
+    llm_generation_max_tokens: int = 1024
+    llm_generation_timeout_s: float = 20.0
+    llm_theme_check_max_tokens: int = 4
+    llm_theme_check_timeout_s: float = 10.0
     default_theme: str = "cats"
     default_difficulty: int = 2
     difficulty_min: int = 1
@@ -109,11 +134,15 @@ class SentinelConfig:
     screenshot_load_stagger_ms: int = 200
     screenshot_load_max_retries: int = 3
     screenshot_load_retry_delay_ms: int = 1000
-    codex_cli_command: str = "codex"
-    codex_model: str = ""
-    codex_cli_approval_policy: str = "never"
+    # Provider-agnostic capability tier; LLMConfig.model_for() resolves it
+    # to a concrete model for the active api_source.
+    llm_tier: str = "strong"  # weak | medium | strong
+    # Provider-agnostic LLM behavior knobs.
+    llm_step_timeout_s: float = 45.0
+    llm_step_max_tokens: int = 1024
+    llm_final_report_max_tokens: int = 2048
+    # Codex-only quirk: sandbox profile name passed via -c default_permissions=...
     codex_permissions_profile: str = "sentinel_qa"
-    codex_step_timeout_s: float = 45.0
 
 
 @dataclass

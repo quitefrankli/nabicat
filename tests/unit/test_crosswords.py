@@ -196,9 +196,6 @@ def test_default_source_uses_configured_provider():
         source = default_source()
         assert isinstance(source, ChainedSource)
         assert isinstance(source._sources[0], CodexSource)
-
-        cfg.llm.api_source = 'hardcoded'
-        assert isinstance(default_source(), FallbackSource)
     finally:
         cfg.debug_mode = prev_debug
         cfg.llm.api_source = prev_source

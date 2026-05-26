@@ -4,10 +4,19 @@ import pytest
 
 from web_app.app import app
 from web_app.config import ConfigManager
-from web_app.helpers import limiter
+from web_app.helpers import limiter, register_all_blueprints
 from web_app.sentinel import _limit_from_report, _limit_from_request, _report_payload
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
-from web_app.sentinel.runner import _add_finding, _build_codex_cmd, _codex_text, _final_report_prompt, _host_allowed
+from web_app.sentinel.runner import (
+    _add_finding,
+    _build_codex_cmd,
+    _codex_text,
+    _CodexProvider,
+    _final_report_prompt,
+    _get_provider,
+    _host_allowed,
+    _MeridianProvider,
+)
 from web_app.sentinel.target_policy import TargetValidationError, validate_public_web_url
 from web_app.users import User
 
@@ -18,6 +27,8 @@ def client():
     app.config["WTF_CSRF_ENABLED"] = False
     app.secret_key = "test-secret"
     limiter.enabled = False
+    if "sentinel" not in app.blueprints:
+        register_all_blueprints(app)
     with app.test_client() as client:
         yield client
 
@@ -120,6 +131,33 @@ def test_codex_runs_from_project_dir_with_project_docs_disabled():
 
     assert mock_run.call_args.kwargs["cwd"] == str(ConfigManager().project_dir)
     assert "project_doc_max_bytes=0" in mock_run.call_args.args[0]
+
+
+def test_provider_switch_follows_global_llm_api_source():
+    cfg = ConfigManager()
+    original = cfg.llm.api_source
+    try:
+        cfg.llm.api_source = "meridian"
+        assert isinstance(_get_provider(), _MeridianProvider)
+        cfg.llm.api_source = "codex"
+        assert isinstance(_get_provider(), _CodexProvider)
+    finally:
+        cfg.llm.api_source = original
+
+
+def test_meridian_provider_calls_meridian_text_with_screenshots(tmp_path):
+    image = tmp_path / "step.png"
+    image.write_bytes(b"png-bytes")
+
+    with patch("web_app.sentinel.runner.meridian_text", return_value="agent reply") as mock_meridian:
+        result = _MeridianProvider().agent_text("user prompt", image_paths=[image])
+
+    assert result == "agent reply"
+    kwargs = mock_meridian.call_args.kwargs
+    assert kwargs["user_message"] == "user prompt"
+    assert kwargs["image_paths"] == [image]
+    assert kwargs["agent"] == "sentinel"
+    assert "QA tester" in kwargs["system"]
 
 
 def test_time_limit_input_is_minutes_capped_at_ten():
