@@ -13,11 +13,6 @@ def test_metrics_page_loads(metrics_page):
     expect(metrics_page).to_have_title("Metrics")
 
 
-def test_dashboard_navigation(metrics_page):
-    """Test that Dashboard nav item is present."""
-    expect(metrics_page.locator("a", has_text="Dashboard")).to_be_visible()
-
-
 def test_actions_dropdown(metrics_page):
     """Test that Actions dropdown is present."""
     expect(metrics_page.locator("button:has-text('Actions')")).to_be_visible()

@@ -3,14 +3,7 @@
 {% block subapp_index_url %}/metrics{% endblock %}
 {% block navbar_brand %}Metrics{% endblock %}
 
-{% block page_nav_items %}
-  <li class="nav-item mx-1">
-    <a class="nav-link {{'active' if active == 'Home' else ''}} d-flex align-items-center gap-2" href="/metrics">
-      <i class="bi bi-speedometer2"></i>
-      <span>Dashboard</span>
-    </a>
-  </li>
-{% endblock %}
+{% block page_nav_items %}{% endblock %}
 
 {% block scripts %}
   {{ super() }}
