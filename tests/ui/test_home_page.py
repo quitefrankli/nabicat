@@ -16,7 +16,7 @@ def test_home_page_loads(logged_in_page, test_server):
 
 def test_app_grid_visible(logged_in_page, test_server):
     """Test that the app grid is displayed with all expected apps for admin."""
-    expected_apps = ["Todoist", "Metrics", "Tubio", "JSwipe", "File Store"]
+    expected_apps = ["Todoist", "Metrics", "Tubio", "JSwipe", "File Store", "Sentinel"]
     
     for app_name in expected_apps:
         app_card = logged_in_page.locator("text=" + app_name)
@@ -31,6 +31,7 @@ def test_all_app_cards_clickable(logged_in_page, test_server):
         ("Tubio", "/tubio"),
         ("JSwipe", "/jswipe"),
         ("File Store", "/file_store"),
+        ("Sentinel", "/sentinel"),
     ]
     
     for app_name, path in apps:
@@ -84,6 +85,7 @@ def test_admin_only_apps_disabled_for_non_admin(page, test_server):
     # Verify public/private apps are still available.
     expect(page.locator("text=Todoist")).to_be_visible()
     expect(page.locator("text=Crosswords")).to_be_visible()
+    expect(page.locator("a[href='/sentinel']:has-text('Sentinel')")).to_be_visible()
 
     # Verify admin-only apps are shown as disabled entries.
     for app_name in ["JSwipe", "Proxy", "Dev"]:

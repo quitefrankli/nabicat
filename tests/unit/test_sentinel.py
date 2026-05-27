@@ -358,30 +358,21 @@ def test_sentinel_thumbnail_generation_creates_small_copy(tmp_path):
         assert max(img.size) <= ConfigManager().sentinel.screenshot_thumb_max_px
 
 
-def test_sentinel_routes_require_admin_and_start_run(client):
-    non_admin = User(username="user", password="pass", folder="uf", is_admin=False)
-    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+def test_sentinel_routes_are_public_and_start_run(client):
+    with patch("web_app.sentinel.DataInterface") as mock_data, patch(
+        "web_app.sentinel.validate_public_web_url"
+    ) as mock_validate, patch("web_app.sentinel.start_run") as mock_start:
+        mock_data.return_value.list_reports.return_value = []
+        assert client.get("/sentinel/").status_code == 200
+        mock_validate.return_value.url = "https://example.com"
+        mock_start.return_value = {"run_id": "run-123", "status": "queued"}
 
-    with patch("web_app.helpers.DataInterface") as mock_users:
-        mock_users.return_value.load_users.return_value = {"user": non_admin, "admin": admin}
-        with client.session_transaction() as sess:
-            sess["_user_id"] = "user"
-        assert client.get("/sentinel/").status_code == 403
-
-        with client.session_transaction() as sess:
-            sess["_user_id"] = "admin"
-
-        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
-            "web_app.sentinel.start_run"
-        ) as mock_start:
-            mock_validate.return_value.url = "https://example.com"
-            mock_start.return_value = {"run_id": "run-123", "status": "queued"}
-
-            res = client.post("/sentinel/api/runs", json={"url": "https://example.com", "limit": 5})
+        res = client.post("/sentinel/api/runs", json={"url": "https://example.com", "limit": 5})
 
     assert res.status_code == 202
     assert res.get_json()["run_id"] == "run-123"
     mock_start.assert_called_once()
+    assert mock_start.call_args.kwargs["owner"] == ""
 
 
 def test_sentinel_card_details_validate_and_never_persist(client, tmp_path):
