@@ -45,6 +45,7 @@
     <a href="{{ report.target_url }}">{{ report.target_url }}</a>
     {% if report.owner %} &middot; Started by <strong>{{ report.owner }}</strong>{% endif %}
     {% if report.created_at %} &middot; {{ report.created_at }}{% endif %}
+    {% if report.additional_domains %} &middot; Additional domains: {{ report.additional_domains|join(', ') }}{% endif %}
   </div>
 
   <div class="badges">

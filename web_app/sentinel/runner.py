@@ -109,6 +109,7 @@ def start_run(
     title: str = "",
     allow_accounts: bool = False,
     allow_external: bool = False,
+    additional_domains: list[str] | None = None,
     allow_financial: bool = False,
     card_details: dict | None = None,
     account_credentials: dict | None = None,
@@ -134,6 +135,7 @@ def start_run(
         "title": title,
         "allow_accounts": bool(allow_accounts),
         "allow_external": bool(allow_external),
+        "additional_domains": list(additional_domains or []),
         "allow_financial": bool(allow_financial and card_details),
         "device": device,
         "demographic": demographic,
@@ -219,6 +221,12 @@ def _host_allowed(hostname: str, target_hostname: str) -> bool:
     )
 
 
+def _navigation_host_allowed(hostname: str, target_hostname: str, additional_domains: list[str] | None = None) -> bool:
+    return _host_allowed(hostname, target_hostname) or any(
+        _host_allowed(hostname, domain) for domain in (additional_domains or [])
+    )
+
+
 def _execute_browser_run(report: dict) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
@@ -252,6 +260,7 @@ def _execute_browser_run(report: dict) -> None:
             page.on("pageerror", lambda err: _add_finding(report, "error", "Page error", str(err)))
 
             allow_external = bool(report.get("allow_external"))
+            additional_domains = list(report.get("additional_domains") or [])
 
             def guard_route(route):
                 req_url = route.request.url
@@ -261,7 +270,7 @@ def _execute_browser_run(report: dict) -> None:
                     if (
                         is_navigation
                         and not allow_external
-                        and not _host_allowed(checked.hostname, target.hostname)
+                        and not _navigation_host_allowed(checked.hostname, target.hostname, additional_domains)
                     ):
                         route.abort()
                         return
@@ -301,7 +310,13 @@ def _execute_browser_run(report: dict) -> None:
                 if action is None:
                     break
 
-                result = _apply_action(page, action, target, allow_external=allow_external)
+                result = _apply_action(
+                    page,
+                    action,
+                    target,
+                    allow_external=allow_external,
+                    additional_domains=additional_domains,
+                )
                 _record_step(report, action.action, action.reason, result)
                 # step-N.png: state AFTER step N's action — this is what gets
                 # surfaced in the final report so step number matches outcome.
@@ -332,12 +347,18 @@ def _execute_browser_run(report: dict) -> None:
             browser.close()
 
 
-def _goto_page(page, url: str, target: ValidatedTarget, allow_external: bool = False) -> dict:
+def _goto_page(
+    page,
+    url: str,
+    target: ValidatedTarget,
+    allow_external: bool = False,
+    additional_domains: list[str] | None = None,
+) -> dict:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
     cfg = ConfigManager()
     checked = validate_public_web_url(url)
-    if not allow_external and not _host_allowed(checked.hostname, target.hostname):
+    if not allow_external and not _navigation_host_allowed(checked.hostname, target.hostname, additional_domains):
         return {"ok": False, "error": "Navigation outside target host blocked", "url": checked.url}
     page.goto(checked.url, wait_until="commit", timeout=cfg.sentinel.navigation_timeout_ms)
     try:
@@ -414,6 +435,7 @@ def _verdict_prompt(report: dict) -> str:
         "target_url": report.get("target_url"),
         "allow_accounts": bool(report.get("allow_accounts")),
         "allow_external": bool(report.get("allow_external")),
+        "additional_domains": list(report.get("additional_domains") or []),
         "steps": [
             {"action": step.get("action"), "reason": step.get("reason"), "result": step.get("result")}
             for step in report.get("steps", [])
@@ -510,6 +532,7 @@ def _pick_final_report_screenshots(report: dict) -> list[str]:
     payload = json.dumps({
         "original_prompt": report.get("prompt") or "",
         "target_url": report.get("target_url"),
+        "additional_domains": list(report.get("additional_domains") or []),
         "status": report.get("run_outcome") or report.get("status"),
         "budget": budget,
         "available_screenshots": manifest,
@@ -556,6 +579,7 @@ def _final_report_prompt(report: dict, picked: list[str] | None = None) -> str:
     payload = {
         "original_prompt": report.get("prompt") or "Explore and test the site's main unauthenticated flows.",
         "target_url": report.get("target_url"),
+        "additional_domains": list(report.get("additional_domains") or []),
         "status": report.get("run_outcome") or report.get("status"),
         "steps": [
             {"action": step.get("action"), "reason": step.get("reason"), "result": step.get("result")}
@@ -864,11 +888,13 @@ def _agent_prompt(report: dict, observation: dict) -> str:
             "title": observation.get("title", ""),
             "elements": elements,
         },
+        "additional_domains": list(report.get("additional_domains") or []),
         "instructions": (
             "The attached screenshot shows the page with each interactive element outlined and "
             "labelled with a synthetic id (e.g. e1, e2). Use the screenshot as your primary input "
             "and choose elements visually. The 'elements' list is only a key for resolving labels "
-            "to ids; do not rely on it for spatial layout."
+            "to ids; do not rely on it for spatial layout. If additional_domains is non-empty, "
+            "external navigation is permitted only to those domains; other external domains are blocked."
         ),
     }
     if hints:
@@ -876,7 +902,13 @@ def _agent_prompt(report: dict, observation: dict) -> str:
     return json.dumps(payload, indent=2)
 
 
-def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_external: bool = False) -> dict:
+def _apply_action(
+    page,
+    action: AgentAction,
+    target: ValidatedTarget,
+    allow_external: bool = False,
+    additional_domains: list[str] | None = None,
+) -> dict:
     cfg = ConfigManager().sentinel
     try:
         if action.action == "finish":
@@ -891,11 +923,11 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
             return {"ok": True, "url": page.url}
         if action.action == "goto":
             next_url = urljoin(page.url, action.url or target.url)
-            return _goto_page(page, next_url, target, allow_external=allow_external)
+            return _goto_page(page, next_url, target, allow_external=allow_external, additional_domains=additional_domains)
 
         locator = page.locator(f'[data-sentinel-id="{action.element_id}"]').first
         if action.action == "click":
-            blocked_url = _blocked_external_click_url(page, locator, target, allow_external)
+            blocked_url = _blocked_external_click_url(page, locator, target, allow_external, additional_domains)
             if blocked_url:
                 return {
                     "ok": False,
@@ -923,7 +955,13 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
         return {"ok": False, "error": str(e), "url": getattr(page, "url", "")}
 
 
-def _blocked_external_click_url(page, locator, target: ValidatedTarget, allow_external: bool) -> str:
+def _blocked_external_click_url(
+    page,
+    locator,
+    target: ValidatedTarget,
+    allow_external: bool,
+    additional_domains: list[str] | None = None,
+) -> str:
     if allow_external:
         return ""
     href = locator.evaluate(
@@ -941,7 +979,7 @@ def _blocked_external_click_url(page, locator, target: ValidatedTarget, allow_ex
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return ""
     hostname = parsed.hostname.rstrip(".").lower()
-    if _host_allowed(hostname, target.hostname):
+    if _navigation_host_allowed(hostname, target.hostname, additional_domains):
         return ""
     return parsed.geturl()
 
@@ -974,7 +1012,7 @@ def _request_agent_action(report, observation, image_paths, allow_external, know
             image_paths=image_paths,
             allow_accounts=bool(report.get("allow_accounts")),
             demographic=str(report.get("demographic") or ""),
-            allow_external=allow_external,
+            allow_external=allow_external or bool(report.get("additional_domains")),
             card_details=report.get("_card_details"),
             account_credentials=report.get("_account_credentials"),
         )

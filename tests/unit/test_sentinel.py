@@ -5,7 +5,7 @@ import pytest
 from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, register_all_blueprints
-from web_app.sentinel import _limit_from_request, _report_payload
+from web_app.sentinel import _limit_from_request, _report_payload, _validate_additional_domains
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.providers import (
     _build_codex_cmd,
@@ -27,6 +27,7 @@ from web_app.sentinel.runner import (
     _final_report_prompt,
     _generate_title,
     _host_allowed,
+    _navigation_host_allowed,
     _observe_page,
     _parse_picker_payload,
     _parse_verdict_payload,
@@ -76,6 +77,49 @@ def test_validate_public_web_url_rejects_local_and_private_targets():
             validate_public_web_url("https://user:pass@example.com/path").url
             == "https://user:pass@example.com/path"
         )
+
+
+def test_validate_additional_domains_normalizes_public_urls_and_domains():
+    with patch("web_app.sentinel.target_policy.socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+        assert _validate_additional_domains("recruitment.macquarie.com\nhttps://careers.macquarie.com/jobs") == [
+            "recruitment.macquarie.com",
+            "careers.macquarie.com",
+        ]
+        assert _validate_additional_domains(["https://EXAMPLE.com/path", "example.com"]) == ["example.com"]
+
+
+def test_additional_domains_allow_specific_external_navigation(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    captured = {}
+
+    def fake_start_run(target, prompt, limit_s, **kwargs):
+        captured.update(kwargs)
+        return {"run_id": "rdom", "status": "queued"}
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+            "web_app.sentinel.start_run", side_effect=fake_start_run
+        ):
+            mock_validate.side_effect = [
+                ValidatedTarget("https://example.com/", "example.com"),
+                ValidatedTarget("https://jobs.example.org/apply", "jobs.example.org"),
+            ]
+            res = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "find the application form",
+                    "additional_domains": "https://jobs.example.org/apply",
+                    "allow_external": False,
+                },
+            )
+
+    assert res.status_code == 202
+    assert captured["additional_domains"] == ["jobs.example.org"]
 
 
 def test_parse_agent_action_allows_only_known_actions_and_elements():
@@ -134,6 +178,12 @@ def test_runner_allows_only_exact_host_or_www_redirect_variant():
     assert _host_allowed("google.com", "www.google.com")
     assert not _host_allowed("accounts.google.com", "google.com")
     assert not _host_allowed("example.com", "google.com")
+
+
+def test_navigation_host_allowed_accepts_additional_domains():
+    assert _navigation_host_allowed("jobs.example.org", "example.com", ["jobs.example.org"])
+    assert _navigation_host_allowed("www.jobs.example.org", "example.com", ["jobs.example.org"])
+    assert not _navigation_host_allowed("evil.example.org", "example.com", ["jobs.example.org"])
 
 
 def test_codex_command_includes_screenshot_images(tmp_path):

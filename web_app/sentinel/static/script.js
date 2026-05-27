@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', function () {
       title: form.title.value,
       allow_accounts: form.allow_accounts.checked,
       allow_external: form.allow_external.checked,
+      additional_domains: form.additional_domains.value,
       allow_financial: form.allow_financial.checked,
       device: form.device.value,
       demographic: form.demographic.value

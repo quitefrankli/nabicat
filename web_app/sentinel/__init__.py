@@ -118,6 +118,38 @@ def _limit_from_request(raw_limit) -> int:
     return limit_mins * 60
 
 
+def _validate_additional_domains(raw) -> list[str]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, str):
+        values = re.split(r"[\s,]+", raw)
+    elif isinstance(raw, (list, tuple)):
+        values = raw
+    else:
+        raise ValueError("Additional domains must be a newline, comma, or space separated list.")
+
+    cfg = ConfigManager().sentinel
+    domains = []
+    seen = set()
+    for value in values:
+        item = str(value or "").strip()
+        if not item:
+            continue
+        if len(item) > cfg.additional_domain_max_chars:
+            raise ValueError("Additional domain is too long.")
+        try:
+            checked = validate_public_web_url(item)
+        except TargetValidationError as e:
+            raise ValueError(f"Additional domain {item!r} is invalid: {e}") from e
+        hostname = checked.hostname.lower().rstrip(".")
+        if hostname not in seen:
+            seen.add(hostname)
+            domains.append(hostname)
+        if len(domains) > cfg.additional_domains_max_count:
+            raise ValueError(f"Additional domains are limited to {cfg.additional_domains_max_count}.")
+    return domains
+
+
 def _screenshot_url(run_id: str, filename: str, thumbnail: bool = False) -> str:
     suffix = f"/thumb/{filename}" if thumbnail else f"/{filename}"
     return f"/sentinel/report/{run_id}/screenshots{suffix}"
@@ -215,6 +247,7 @@ def index():
     prefill_title = str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
     prefill_allow_accounts = _truthy(request.args.get("allow_accounts"))
     prefill_allow_external = _truthy(request.args.get("allow_external"))
+    prefill_additional_domains = str(request.args.get("additional_domains", "")).strip()
     try:
         prefill_limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
     except (TypeError, ValueError):
@@ -253,6 +286,8 @@ def index():
         prefill_title=prefill_title,
         prefill_allow_accounts=prefill_allow_accounts,
         prefill_allow_external=prefill_allow_external,
+        prefill_additional_domains=prefill_additional_domains,
+        additional_domains_max_count=cfg.sentinel.additional_domains_max_count,
         prefill_device=prefill_device,
         prefill_demographic=prefill_demographic,
         prefill_region=prefill_region,
@@ -272,6 +307,7 @@ def create_run():
     allow_accounts = _truthy(payload.get("allow_accounts"))
     allow_external = _truthy(payload.get("allow_external"))
     allow_financial = _truthy(payload.get("allow_financial"))
+    raw_additional_domains = payload.get("additional_domains")
     device = str(payload.get("device", "")).strip()
     demographic = str(payload.get("demographic", "")).strip()
     limit_s = _limit_from_request(payload.get("limit"))
@@ -279,6 +315,11 @@ def create_run():
     try:
         target = validate_public_web_url(raw_url)
     except TargetValidationError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        additional_domains = _validate_additional_domains(raw_additional_domains)
+    except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     if not allow_accounts:
@@ -313,6 +354,7 @@ def create_run():
             title=title,
             allow_accounts=allow_accounts,
             allow_external=allow_external,
+            additional_domains=additional_domains,
             allow_financial=allow_financial,
             card_details=card_details,
             account_credentials=account_credentials,

@@ -149,6 +149,8 @@ class SentinelConfig:
     click_loop_max_warnings: int = 3
     max_retained_runs: int = 25
     prompt_max_chars: int = 4000
+    additional_domains_max_count: int = 10
+    additional_domain_max_chars: int = 253
     browser_width_px: int = 1366
     browser_height_px: int = 900
     browser_default_timeout_ms: int = 15000

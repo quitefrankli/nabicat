@@ -62,6 +62,10 @@
           <dt>Prompt</dt>
           <dd class="sentinel-report-prompt">{{ report.prompt }}</dd>
         {% endif %}
+        {% if report.additional_domains %}
+          <dt>Additional Domains</dt>
+          <dd>{{ report.additional_domains|join(', ') }}</dd>
+        {% endif %}
         {% if report.verdict_reason %}
           <dt>Verdict</dt>
           <dd class="sentinel-report-verdict">{{ report.verdict_reason }}</dd>
@@ -74,7 +78,7 @@
         <span>Cancel</span>
       </button>
       <a class="btn btn-primary"
-         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), allow_external=('1' if report.allow_external else ''), device=report.device or '', demographic=report.demographic or '') }}">
+         href="{{ url_for('sentinel.index', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), allow_external=('1' if report.allow_external else ''), additional_domains=(report.additional_domains or [])|join('\n'), device=report.device or '', demographic=report.demographic or '') }}">
         <i class="bi bi-arrow-clockwise"></i>
         <span>Rerun</span>
       </a>
