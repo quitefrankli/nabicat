@@ -668,6 +668,8 @@ def test_sentinel_index_defaults_to_desktop_adult_australia(client):
     assert 'value="us"' in body
     assert 'value="uk"' in body
     assert 'value="japan"' in body
+    assert 'placeholder="nabicat.site"' in body
+    assert "recruitment.macquarie.com" not in body
 
 
 def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
