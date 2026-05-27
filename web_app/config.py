@@ -188,14 +188,12 @@ class SentinelConfig:
     default_device: str = "desktop"
     # Demographic key -> persona sentence prepended to the agent system prompt.
     demographic_personas: dict = field(default_factory=lambda: {
-        "":       "",
         "child":  "You are an 8-year-old child using a website for the first time; you click colorful things, get bored fast, and cannot read long text.",
         "adult":  "You are a typical adult web user with average tech literacy who skims interfaces and expects standard web conventions.",
         "senior": "You are a senior in your 70s with limited tech experience; small targets, jargon, and unexpected layouts confuse you, and you prefer obvious, labeled controls.",
         "techie": "You are a power user comfortable with developer tools, keyboard shortcuts, and dense UIs; you probe edge cases and unusual flows.",
     })
     demographic_labels: dict = field(default_factory=lambda: {
-        "":       "None",
         "child":  "Child",
         "adult":  "Adult",
         "senior": "Senior",

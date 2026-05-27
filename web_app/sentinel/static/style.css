@@ -256,6 +256,63 @@ body.sentinel-resizing * {
   text-decoration: underline;
 }
 
+.sentinel-report-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 1rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+
+.sentinel-report-fields dt {
+  color: var(--hw-text-muted);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  align-self: start;
+  padding-top: 0.1rem;
+}
+
+.sentinel-report-fields dd {
+  margin: 0;
+  color: var(--hw-text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sentinel-report-fields dd a {
+  color: var(--hw-sage-dark);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.sentinel-report-fields dd a:hover {
+  text-decoration: underline;
+}
+
+.sentinel-report-prompt {
+  white-space: pre-wrap;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--hw-sage);
+  background: rgba(135, 168, 120, 0.08);
+  border-radius: var(--hw-radius-sm);
+  color: var(--hw-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .sentinel-report-fields {
+    grid-template-columns: 1fr;
+    gap: 0.15rem 0;
+  }
+  .sentinel-report-fields dt {
+    margin-top: 0.5rem;
+  }
+  .sentinel-report-fields dt:first-child {
+    margin-top: 0;
+  }
+}
+
 .sentinel-heading i {
   color: var(--hw-sage);
   font-size: 2.5rem;

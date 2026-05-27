@@ -39,23 +39,30 @@
     <div>
       <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
       <h1 id="sentinel-report-title">{{ report.title or report.target_url }}</h1>
-      <p class="sentinel-report-subtitle"><a href="{{ report.target_url }}" target="_blank" rel="noopener noreferrer">{{ report.target_url }}</a></p>
-      {% if report.owner %}
-        <p class="sentinel-report-subtitle"><small class="text-muted">Started by <strong>{{ report.owner }}</strong>{% if report.created_at %} on {{ report.created_at }}{% endif %}</small></p>
-      {% endif %}
-      {% if report.device_label or report.demographic_label %}
-        <p class="sentinel-report-meta">
-          {% if report.device_label %}
-            <span class="sentinel-badge sentinel-badge-meta">{{ report.device_label }}</span>
-          {% endif %}
-          {% if report.demographic_label and report.demographic %}
-            <span class="sentinel-badge sentinel-badge-meta">{{ report.demographic_label }}</span>
-          {% endif %}
-        </p>
-      {% endif %}
-      {% if report.prompt %}
-        <p>{{ report.prompt }}</p>
-      {% endif %}
+      <dl class="sentinel-report-fields">
+        <dt>URL</dt>
+        <dd><a href="{{ report.target_url }}" target="_blank" rel="noopener noreferrer">{{ report.target_url }}</a></dd>
+        {% if report.owner %}
+          <dt>Started by</dt>
+          <dd>{{ report.owner }}</dd>
+        {% endif %}
+        {% if report.created_at %}
+          <dt>Date</dt>
+          <dd>{{ report.created_at }}</dd>
+        {% endif %}
+        {% if report.device_label %}
+          <dt>Device</dt>
+          <dd>{{ report.device_label }}</dd>
+        {% endif %}
+        {% if report.demographic_label and report.demographic %}
+          <dt>Demographic</dt>
+          <dd>{{ report.demographic_label }}</dd>
+        {% endif %}
+        {% if report.prompt %}
+          <dt>Prompt</dt>
+          <dd class="sentinel-report-prompt">{{ report.prompt }}</dd>
+        {% endif %}
+      </dl>
     </div>
     <div class="sentinel-report-actions">
       <button class="btn btn-outline-danger" type="button" id="sentinel-cancel-run" hidden>
