@@ -361,6 +361,25 @@ body.sentinel-resizing * {
   gap: 0.75rem;
 }
 
+.sentinel-account-extras {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.sentinel-account-extra-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sentinel-account-add-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .sentinel-inline-fields > div {
   max-width: 12rem;
 }

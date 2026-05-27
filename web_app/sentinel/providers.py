@@ -107,6 +107,7 @@ def _system_prompt(
     demographic: str = "",
     allow_external: bool = False,
     card_details: dict | None = None,
+    account_credentials: dict | None = None,
 ) -> str:
     persona = ConfigManager().sentinel.demographic_personas.get(demographic, "")
     base = _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
@@ -120,6 +121,25 @@ def _system_prompt(
         )
     else:
         base += _SYSTEM_FINANCIAL_FORBIDDEN
+    if account_credentials and (account_credentials.get("username") or account_credentials.get("password") or account_credentials.get("extras")):
+        username = account_credentials.get("username", "")
+        password = account_credentials.get("password", "")
+        extras = account_credentials.get("extras") or {}
+        cred_parts = []
+        if username:
+            cred_parts.append(f"username '{username}'")
+        if password:
+            cred_parts.append(f"password '{password}'")
+        for k, v in extras.items():
+            cred_parts.append(f"{k} '{v}'")
+        base += (
+            " When the target site asks for login or signup credentials, you MUST use exactly these "
+            f"values: {', '.join(cred_parts)}. Do not invent alternative usernames or passwords. "
+            "If these credentials are rejected (e.g. 'invalid password', 'user not found') after a "
+            "genuine attempt to log in, do NOT silently retry with different values; instead emit "
+            "{\"action\":\"finish\",\"reason\":\"login failed: <site error>\"} so the run is "
+            "recorded as a failure. Never echo the password back in your reason field."
+        )
     if persona:
         return f"{persona} {base}"
     return base
@@ -138,9 +158,26 @@ _REPORT_SYSTEM = (
     "outcome. Additional sections (for example '## Findings', '## What Was Tested', '## Caveats') "
     "may follow the Summary as needed. "
     "Output GitHub-flavored markdown. Embed relevant screenshots inline as evidence using exactly "
-    "this syntax: ![short caption](step-NN.png), where step-NN.png is one of the filenames listed "
-    "in the run data's screenshots array. Reference at most one screenshot per finding, and only "
-    "when it visually supports the claim. Do not invent filenames or use any other image URL."
+    "this syntax: ![short caption](step-NN.png). Only reference filenames listed in the run "
+    "data's 'attached_screenshots' array (those are the frames you can actually see); if that "
+    "array is empty, do not embed any screenshots. The naming convention is: step-00.png is the "
+    "page BEFORE any action; step-NN.png (N >= 1) is the page AFTER step N's action. So if step "
+    "17 was 'click View Chart', the chart appears in step-17.png, NOT step-16.png or step-18.png. "
+    "Reference at most one screenshot per finding, and only when it visually supports the claim. "
+    "Do not invent filenames."
+)
+
+
+_SCREENSHOT_PICKER_SYSTEM = (
+    "You are picking which screenshots from a Sentinel QA run are most useful as visual evidence "
+    "for the final report. You will receive the run's prompt, steps, and findings as JSON. "
+    "Reply with ONLY a single JSON object of the shape "
+    "{\"screenshots\":[\"step-NN.png\", ...], \"reason\":\"...\"}. "
+    "Pick at most the requested number of filenames, ordered by importance. "
+    "Naming convention: step-00.png is the page before any action; step-NN.png (N >= 1) is the "
+    "state AFTER step N's action. Prefer screenshots that visually confirm the user's prompt was "
+    "fulfilled (or visually demonstrate why it failed). Pick distinct moments — don't pick "
+    "consecutive screenshots showing the same state. The reason must be one short sentence."
 )
 
 
@@ -211,10 +248,11 @@ def _codex_text(system: str, user_message: str, image_paths: list[Path] | None, 
 # (it depends on per-run flags) so its slot is None — _Provider passes the
 # resolved string in directly.
 _ROLE_CONFIG = {
-    "final_report": (_REPORT_SYSTEM, "llm_final_report_max_tokens", "final_report_timeout_s"),
-    "title":        (_TITLE_SYSTEM,  "llm_title_max_tokens",        "llm_title_timeout_s"),
-    "verdict":      (_VERDICT_SYSTEM, "llm_verdict_max_tokens",     "llm_verdict_timeout_s"),
-    "agent":        (None,           "llm_step_max_tokens",         "llm_step_timeout_s"),
+    "final_report":      (_REPORT_SYSTEM,            "llm_final_report_max_tokens", "final_report_timeout_s"),
+    "title":             (_TITLE_SYSTEM,             "llm_title_max_tokens",        "llm_title_timeout_s"),
+    "verdict":           (_VERDICT_SYSTEM,           "llm_verdict_max_tokens",      "llm_verdict_timeout_s"),
+    "screenshot_picker": (_SCREENSHOT_PICKER_SYSTEM, "llm_picker_max_tokens",       "llm_picker_timeout_s"),
+    "agent":             (None,                      "llm_step_max_tokens",         "llm_step_timeout_s"),
 }
 
 
@@ -284,11 +322,18 @@ class _Provider:
         demographic: str = "",
         allow_external: bool = False,
         card_details: dict | None = None,
+        account_credentials: dict | None = None,
     ) -> str:
         return self._call(
             "agent",
             user_message,
-            system=_system_prompt(allow_accounts, demographic, allow_external, card_details),
+            system=_system_prompt(
+                allow_accounts,
+                demographic,
+                allow_external,
+                card_details,
+                account_credentials,
+            ),
             image_paths=image_paths,
         )
 
@@ -300,6 +345,9 @@ class _Provider:
 
     def verdict_text(self, user_message: str) -> str:
         return self._call("verdict", user_message, system=_VERDICT_SYSTEM)
+
+    def screenshot_picker_text(self, user_message: str) -> str:
+        return self._call("screenshot_picker", user_message, system=_SCREENSHOT_PICKER_SYSTEM)
 
 
 def _get_provider() -> _Provider:

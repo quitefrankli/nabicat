@@ -111,6 +111,7 @@ def start_run(
     allow_external: bool = False,
     allow_financial: bool = False,
     card_details: dict | None = None,
+    account_credentials: dict | None = None,
     device: str = "",
     demographic: str = "",
     owner: str = "",
@@ -151,6 +152,12 @@ def start_run(
     }
     if allow_financial and card_details:
         report["_card_details"] = dict(card_details)
+    if allow_accounts and account_credentials:
+        report["_account_credentials"] = {
+            "username": account_credentials.get("username", ""),
+            "password": account_credentials.get("password", ""),
+            "extras": dict(account_credentials.get("extras") or {}),
+        }
     _save(report)
     with _active_lock:
         _cancel_events[run_id] = threading.Event()
@@ -179,7 +186,13 @@ def _run_background(report: dict) -> None:
             _save(report)
             _add_final_report(report)
             if outcome_status == "completed":
-                outcome_status = _classify_run_verdict(report)
+                login_fail_reason = _detect_login_failure(report)
+                if login_fail_reason:
+                    outcome_status = "failed"
+                    report["verdict_reason"] = login_fail_reason
+                    _add_finding(report, "error", "Login failed", login_fail_reason)
+                else:
+                    outcome_status = _classify_run_verdict(report)
                 report["run_outcome"] = outcome_status
             report["status"] = outcome_status
     except Exception as e:
@@ -189,6 +202,7 @@ def _run_background(report: dict) -> None:
     finally:
         report["finished_at"] = utc_now_iso()
         report.pop("_card_details", None)
+        report.pop("_account_credentials", None)
         _save(report)
         with _active_lock:
             _cancel_events.pop(report["run_id"], None)
@@ -266,34 +280,34 @@ def _execute_browser_run(report: dict) -> None:
                 raise RuntimeError("Initial navigation redirected outside target host")
             page.route("**/*", guard_route)
 
+            # step-00.png: initial page state, before any agent action.
+            _capture_screenshot(page, report, 0)
+
             while time.monotonic() < deadline and len(report["steps"]) < cfg.sentinel.max_steps:
                 if _is_cancelled(report["run_id"]):
                     break
+                next_step_index = len(report["steps"]) + 1
                 observation = _observe_page(page)
                 known_ids = {item["id"] for item in observation["elements"]}
-                screenshot = _capture_screenshot(page, report)
-                annotated = _capture_annotated_screenshot(report, screenshot, observation)
-                if screenshot:
-                    observation["screenshot"] = screenshot
+                # The screenshot the agent reasons about is the *current* page
+                # state — i.e. step-(N-1).png, the post-action result of the
+                # prior step (or step-00 on the first iteration).
+                current_screenshot = f"screenshots/step-{(next_step_index - 1):02d}.png"
+                annotated = _capture_annotated_screenshot(report, current_screenshot, observation, next_step_index - 1)
+                observation["screenshot"] = current_screenshot
 
-                image_paths = _annotated_image_paths(report, annotated, screenshot)
-                agent_text = _get_provider().agent_text(
-                    _agent_prompt(report, observation),
-                    image_paths=image_paths,
-                    allow_accounts=bool(report.get("allow_accounts")),
-                    demographic=str(report.get("demographic") or ""),
-                    allow_external=allow_external,
-                    card_details=report.get("_card_details"),
-                )
-                try:
-                    action = parse_agent_action(agent_text, known_ids)
-                except ActionValidationError as e:
-                    _record_step(report, "invalid", str(e), {"agent_text": agent_text})
+                image_paths = _annotated_image_paths(report, annotated, current_screenshot)
+                action = _request_agent_action(report, observation, image_paths, allow_external, known_ids)
+                if action is None:
                     break
 
                 result = _apply_action(page, action, target, allow_external=allow_external)
                 _record_step(report, action.action, action.reason, result)
+                # step-N.png: state AFTER step N's action — this is what gets
+                # surfaced in the final report so step number matches outcome.
+                _capture_screenshot(page, report, next_step_index)
                 _save(report)
+                _detect_click_loop(report)
                 if action.action == "finish":
                     break
 
@@ -419,10 +433,11 @@ def _parse_verdict_payload(raw: str) -> tuple[str, str] | None:
 
 
 def _add_final_report(report: dict) -> None:
+    picked = _pick_final_report_screenshots(report)
     try:
         text = _get_provider().final_report_text(
-            _final_report_prompt(report),
-            image_paths=_final_report_image_paths(report),
+            _final_report_prompt(report, picked),
+            image_paths=_final_report_image_paths(report, picked),
         )
     except Exception as e:
         logging.warning("Sentinel final report generation failed: %s", e)
@@ -444,7 +459,90 @@ def _ensure_summary_heading(text: str) -> str:
     return f"## Summary\n\n{body}"
 
 
-def _final_report_prompt(report: dict) -> str:
+def _screenshot_manifest(report: dict) -> list[dict]:
+    """Build a [{filename, produced_by, url}, ...] manifest of all screenshots
+    in the run, where produced_by names the action that produced that frame
+    (or 'initial' for step-00.png).
+    """
+    steps_by_index = {int(s.get("index", 0)): s for s in report.get("steps") or []}
+    entries = []
+    for shot in report.get("screenshots") or []:
+        filename = Path(str(shot)).name
+        m = re.match(r"^step-(\d{2})\.png$", filename)
+        if not m:
+            continue
+        idx = int(m.group(1))
+        if idx == 0:
+            entries.append({"filename": filename, "produced_by": "initial", "url": report.get("target_url", "")})
+            continue
+        step = steps_by_index.get(idx) or {}
+        result = step.get("result") or {}
+        entries.append({
+            "filename": filename,
+            "produced_by": f"{step.get('action', '')}: {step.get('reason', '')}".strip(": "),
+            "url": result.get("url", ""),
+        })
+    return entries
+
+
+def _pick_final_report_screenshots(report: dict) -> list[str]:
+    """Ask a cheap LLM call which screenshots to attach to the final-report
+    call. Returns a list of filenames (e.g. ['step-04.png', 'step-17.png']).
+    Falls back to the last N screenshots on any error.
+    """
+    cfg = ConfigManager().sentinel
+    manifest = _screenshot_manifest(report)
+    if not manifest:
+        return []
+    budget = max(1, cfg.final_report_picker_budget)
+    available = [e["filename"] for e in manifest]
+    fallback = available[-min(budget, len(available)):]
+    payload = json.dumps({
+        "original_prompt": report.get("prompt") or "",
+        "target_url": report.get("target_url"),
+        "status": report.get("run_outcome") or report.get("status"),
+        "budget": budget,
+        "available_screenshots": manifest,
+        "findings": [
+            {"severity": f.get("severity"), "title": f.get("title"), "detail": f.get("detail")}
+            for f in (report.get("findings") or []) if f.get("severity") != "info"
+        ],
+    }, indent=2)
+    try:
+        raw = _get_provider().screenshot_picker_text(payload)
+    except Exception as e:
+        logging.warning("Sentinel screenshot picker failed: %s", e)
+        return fallback
+    chosen = _parse_picker_payload(raw, set(available), budget)
+    return chosen or fallback
+
+
+def _parse_picker_payload(raw: str, allowed: set[str], budget: int) -> list[str]:
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return []
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return []
+    raw_list = data.get("screenshots") if isinstance(data, dict) else None
+    if not isinstance(raw_list, list):
+        return []
+    seen: list[str] = []
+    for item in raw_list:
+        name = str(item).strip()
+        if name in allowed and name not in seen:
+            seen.append(name)
+        if len(seen) >= budget:
+            break
+    return seen
+
+
+def _final_report_prompt(report: dict, picked: list[str] | None = None) -> str:
+    manifest = _screenshot_manifest(report)
     payload = {
         "original_prompt": report.get("prompt") or "Explore and test the site's main unauthenticated flows.",
         "target_url": report.get("target_url"),
@@ -454,17 +552,29 @@ def _final_report_prompt(report: dict) -> str:
             for step in report.get("steps", [])
         ],
         "findings": report.get("findings", []),
-        "screenshots": report.get("screenshots", []),
+        "screenshots": [e["filename"] for e in manifest],
+        "screenshot_manifest": manifest,
+        "attached_screenshots": picked or [],
     }
     return json.dumps(payload, indent=2)
 
 
-def _final_report_image_paths(report: dict) -> list[Path]:
-    max_images = ConfigManager().sentinel.final_report_max_images
+def _final_report_image_paths(report: dict, picked: list[str] | None = None) -> list[Path]:
+    cfg = ConfigManager().sentinel
+    if picked:
+        names = list(picked)
+    else:
+        # Fallback: last N raw screenshots (preserves prior behavior if picker
+        # is disabled or returns nothing).
+        max_images = cfg.final_report_max_images
+        names = [Path(str(s)).name for s in (report.get("screenshots") or [])[-max_images:]]
     paths = []
-    for screenshot in report.get("screenshots", [])[-max_images:]:
-        filename = Path(str(screenshot)).name
-        path = DataInterface().screenshots_dir(report["run_id"]) / filename
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        path = DataInterface().screenshots_dir(report["run_id"]) / name
         if path.exists():
             paths.append(path)
     return paths
@@ -486,16 +596,22 @@ def _truncate_text(text: str, max_chars: int) -> str:
     return f"{text[:max_chars].rstrip()}..."
 
 
-def _capture_screenshot(page, report: dict) -> str | None:
+def _capture_screenshot(page, report: dict, index: int) -> str | None:
+    """Capture a screenshot at the given step index (0 = initial state, N = after step N).
+
+    The screenshots list is treated as ordered by index — duplicate indices
+    overwrite the existing entry rather than appending.
+    """
     cfg = ConfigManager()
     if len(report["screenshots"]) >= cfg.sentinel.max_screenshots:
         return None
-    path = DataInterface().screenshot_path(report["run_id"], len(report["screenshots"]) + 1)
+    path = DataInterface().screenshot_path(report["run_id"], index)
     path.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(path), full_page=False)
     ensure_screenshot_thumbnail(report["run_id"], path.name)
     rel = f"screenshots/{path.name}"
-    report["screenshots"].append(rel)
+    if rel not in report["screenshots"]:
+        report["screenshots"].append(rel)
     return rel
 
 
@@ -536,12 +652,11 @@ def _screenshot_image_paths(report: dict, screenshot: str | None) -> list[Path]:
     return [path] if path.exists() else []
 
 
-def _capture_annotated_screenshot(report: dict, screenshot: str | None, observation: dict) -> str | None:
+def _capture_annotated_screenshot(report: dict, screenshot: str | None, observation: dict, index: int) -> str | None:
     if not screenshot:
         return None
     raw_filename = Path(screenshot).name
     raw_path = DataInterface().screenshots_dir(report["run_id"]) / raw_filename
-    index = len(report["screenshots"])
     out_path = DataInterface().annotated_screenshot_path(report["run_id"], index)
     written = _annotate_screenshot(
         raw_path,
@@ -553,7 +668,9 @@ def _capture_annotated_screenshot(report: dict, screenshot: str | None, observat
         return None
     ensure_screenshot_thumbnail(report["run_id"], out_path.name)
     rel = f"screenshots/{out_path.name}"
-    report.setdefault("annotated_screenshots", []).append(rel)
+    annots = report.setdefault("annotated_screenshots", [])
+    if rel not in annots:
+        annots.append(rel)
     return rel
 
 
@@ -719,6 +836,11 @@ def _agent_prompt(report: dict, observation: dict) -> str:
         }
         for el in (observation.get("elements") or [])
     ]
+    hints = [
+        f["detail"]
+        for f in (report.get("findings") or [])
+        if f.get("severity") in {"warning", "error"} and f.get("title") == "Repeated click with no navigation"
+    ][-1:]
     payload = {
         "target_url": report["target_url"],
         "user_prompt": report["prompt"] or "Explore and test the site's main unauthenticated flows.",
@@ -735,6 +857,8 @@ def _agent_prompt(report: dict, observation: dict) -> str:
             "to ids; do not rely on it for spatial layout."
         ),
     }
+    if hints:
+        payload["hints"] = hints
     return json.dumps(payload, indent=2)
 
 
@@ -786,4 +910,85 @@ def _record_step(report: dict, action: str, reason: str, result: dict) -> None:
             "result": result,
             "created_at": utc_now_iso(),
         }
+    )
+
+
+def _request_agent_action(report, observation, image_paths, allow_external, known_ids):
+    """Ask the LLM for the next action, retrying once on a parse failure.
+
+    Returns the parsed AgentAction, or None if the run should abort. On abort,
+    an ``invalid`` step has already been recorded and a finding added.
+    """
+    cfg = ConfigManager().sentinel
+    attempts = max(1, cfg.agent_parse_retry_attempts + 1)
+    last_error = None
+    last_text = ""
+    for attempt in range(attempts):
+        agent_text = _get_provider().agent_text(
+            _agent_prompt(report, observation),
+            image_paths=image_paths,
+            allow_accounts=bool(report.get("allow_accounts")),
+            demographic=str(report.get("demographic") or ""),
+            allow_external=allow_external,
+            card_details=report.get("_card_details"),
+            account_credentials=report.get("_account_credentials"),
+        )
+        try:
+            return parse_agent_action(agent_text, known_ids)
+        except ActionValidationError as e:
+            last_error = e
+            last_text = agent_text
+            if attempt + 1 < attempts:
+                logging.warning("Sentinel agent parse failure, retrying: %s", e)
+    _record_step(report, "invalid", str(last_error), {"agent_text": last_text})
+    _add_finding(report, "warning", "Agent response unparseable", str(last_error))
+    return None
+
+
+_LOGIN_FAIL_PREFIX = "login failed:"
+
+
+def _detect_login_failure(report: dict) -> str:
+    """If the agent finished with a 'login failed:' marker, return the reason."""
+    if not report.get("allow_accounts") or not report.get("steps"):
+        return ""
+    last = report["steps"][-1]
+    if last.get("action") != "finish":
+        return ""
+    reason = str(last.get("reason", "")).strip()
+    if reason.lower().startswith(_LOGIN_FAIL_PREFIX):
+        return reason
+    return ""
+
+
+def _detect_click_loop(report: dict) -> None:
+    """Surface a finding when the agent clicks the same element_id repeatedly
+    without the URL changing — usually a sign the target control is broken or
+    leads back to the same page.
+    """
+    threshold = ConfigManager().sentinel.click_loop_threshold
+    if threshold <= 0:
+        return
+    steps = report.get("steps") or []
+    if len(steps) < threshold:
+        return
+    tail = steps[-threshold:]
+    if not all(s.get("action") == "click" for s in tail):
+        return
+    urls = {(s.get("result") or {}).get("url") for s in tail}
+    if len(urls) != 1:
+        return
+    reasons = {s.get("reason", "")[:60] for s in tail}
+    # Suppress if we already flagged a loop ending at this same step count.
+    last_step = tail[-1].get("index")
+    for finding in report.get("findings") or []:
+        if finding.get("title") == "Repeated click with no navigation" and str(last_step) in finding.get("detail", ""):
+            return
+    _add_finding(
+        report,
+        "warning",
+        "Repeated click with no navigation",
+        f"The agent clicked through {threshold} consecutive steps ending at step {last_step} on URL {next(iter(urls))} "
+        f"without the page changing. Reasons seen: {sorted(reasons)}. The control may be broken or self-referential; "
+        "try a different element.",
     )

@@ -32,6 +32,37 @@ def _detect_account_keyword(prompt: str, keywords) -> str:
     return ""
 
 
+def _validate_account_credentials(raw) -> dict | None:
+    """Returns a dict {username, password, extras: {field: value}} or None.
+
+    Treats an entirely-blank submission as None. If username or password is
+    given without the other, raises so the user notices.
+    """
+    if not isinstance(raw, dict):
+        return None
+    username = str(raw.get("username", "")).strip()
+    password = str(raw.get("password", ""))
+    raw_extras = raw.get("extras") or {}
+    if not isinstance(raw_extras, dict):
+        raise ValueError("Account credentials extras must be a JSON object.")
+    extras = {}
+    for key, value in raw_extras.items():
+        clean_key = str(key).strip()
+        if not clean_key:
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _-]{0,39}", clean_key):
+            raise ValueError(
+                f"Account credential field name {clean_key!r} is invalid. Use letters, numbers, spaces, "
+                "hyphens, or underscores; max 40 chars; must start with a letter."
+            )
+        extras[clean_key] = str(value)
+    if not username and not password and not extras:
+        return None
+    if bool(username) ^ bool(password):
+        raise ValueError("Provide both username and password, or leave both blank.")
+    return {"username": username, "password": password, "extras": extras}
+
+
 def _validate_card_details(payload) -> dict:
     raw_number = str(payload.get("card_number", ""))
     raw_expiry = str(payload.get("card_expiry", "")).strip()
@@ -274,6 +305,13 @@ def create_run():
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
 
+    account_credentials = None
+    if allow_accounts:
+        try:
+            account_credentials = _validate_account_credentials(payload.get("account_credentials"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
     return (
         jsonify(start_run(
             target,
@@ -284,6 +322,7 @@ def create_run():
             allow_external=allow_external,
             allow_financial=allow_financial,
             card_details=card_details,
+            account_credentials=account_credentials,
             device=device,
             demographic=demographic,
             owner=str(getattr(current_user, "id", "") or ""),

@@ -20,13 +20,19 @@ from web_app.sentinel.runner import (
     _apply_action,
     _classify_run_verdict,
     _clean_title,
+    _detect_click_loop,
+    _detect_login_failure,
     _ensure_summary_heading,
     _fallback_title,
     _final_report_prompt,
     _generate_title,
     _host_allowed,
     _observe_page,
+    _parse_picker_payload,
     _parse_verdict_payload,
+    _pick_final_report_screenshots,
+    _request_agent_action,
+    _screenshot_manifest,
     ensure_screenshot_thumbnail,
 )
 from web_app.sentinel.target_policy import TargetValidationError, ValidatedTarget, validate_public_web_url
@@ -428,6 +434,98 @@ def test_save_strips_underscore_keys_before_disk_write():
     assert captured["report"]["run_id"] == "r1"
 
 
+def test_sentinel_account_credentials_round_trip_and_invalid_field_name(client):
+    """allow_accounts with credentials forwards them to start_run; bad field
+    names get rejected; underscore-prefixed runtime field never persists."""
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+
+    captured = {}
+
+    def fake_start_run(target, prompt, limit_s, **kwargs):
+        captured.update(kwargs)
+        return {"run_id": "racc", "status": "queued"}
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+            "web_app.sentinel.start_run", side_effect=fake_start_run
+        ):
+            mock_validate.return_value.url = "https://example.com"
+
+            res_bad = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "log in to the site",
+                    "allow_accounts": True,
+                    "account_credentials": {
+                        "username": "qa",
+                        "password": "p",
+                        "extras": {"!!bad name": "x"},
+                    },
+                },
+            )
+            assert res_bad.status_code == 400
+
+            res_ok = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "log in to the site",
+                    "allow_accounts": True,
+                    "account_credentials": {
+                        "username": "qatester",
+                        "password": "hunter2",
+                        "extras": {"email": "qa@example.com"},
+                    },
+                },
+            )
+    assert res_ok.status_code == 202
+    assert captured["account_credentials"] == {
+        "username": "qatester",
+        "password": "hunter2",
+        "extras": {"email": "qa@example.com"},
+    }
+
+
+def test_system_prompt_injects_account_credentials_and_login_fail_directive():
+    prompt = _system_prompt(
+        allow_accounts=True,
+        demographic="",
+        allow_external=False,
+        card_details=None,
+        account_credentials={"username": "qatester", "password": "hunter2", "extras": {"email": "qa@example.com"}},
+    )
+    assert "qatester" in prompt
+    assert "hunter2" in prompt
+    assert "email" in prompt and "qa@example.com" in prompt
+    assert "login failed:" in prompt
+
+
+def test_detect_login_failure_marks_run_failed_only_for_login_finish_reason():
+    base_steps = [{"index": 1, "action": "click", "reason": "", "result": {"url": "https://x/"}}]
+    fail_report = {
+        "allow_accounts": True,
+        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "login failed: invalid password"}],
+    }
+    assert _detect_login_failure(fail_report) == "login failed: invalid password"
+
+    other_finish = {
+        "allow_accounts": True,
+        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "All checks passed."}],
+    }
+    assert _detect_login_failure(other_finish) == ""
+
+    accounts_off = {
+        "allow_accounts": False,
+        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "login failed: x"}],
+    }
+    assert _detect_login_failure(accounts_off) == ""
+
+
 def test_sentinel_rejects_account_prompt_when_accounts_disallowed(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 
@@ -748,3 +846,140 @@ def test_classify_run_verdict_keeps_completed_on_pass_or_provider_failure():
     raising_provider = type("P", (), {"verdict_text": lambda self, _: (_ for _ in ()).throw(RuntimeError("x"))})()
     with patch("web_app.sentinel.runner._get_provider", return_value=raising_provider):
         assert _classify_run_verdict(report) == "completed"
+
+
+def test_detect_click_loop_flags_repeated_clicks_on_same_url():
+    report = {
+        "steps": [
+            {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "go"},
+            {"index": 2, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "again"},
+            {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "still"},
+        ],
+        "findings": [],
+    }
+    _detect_click_loop(report)
+    titles = [f["title"] for f in report["findings"]]
+    assert "Repeated click with no navigation" in titles
+
+    # Idempotent: a second call with no new steps must not duplicate the finding.
+    _detect_click_loop(report)
+    assert titles.count("Repeated click with no navigation") == 1
+
+
+def test_detect_click_loop_no_flag_when_url_changes_or_action_differs():
+    moved = {
+        "steps": [
+            {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
+            {"index": 2, "action": "click", "result": {"url": "https://x.test/b"}, "reason": ""},
+            {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
+        ],
+        "findings": [],
+    }
+    _detect_click_loop(moved)
+    assert moved["findings"] == []
+
+    mixed = {
+        "steps": [
+            {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
+            {"index": 2, "action": "fill", "result": {"url": "https://x.test/a"}, "reason": ""},
+            {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
+        ],
+        "findings": [],
+    }
+    _detect_click_loop(mixed)
+    assert mixed["findings"] == []
+
+
+def test_request_agent_action_retries_once_on_parse_failure():
+    """First call returns garbage, second returns valid JSON — should succeed."""
+    report = {
+        "target_url": "https://x.test/",
+        "prompt": "go",
+        "steps": [],
+        "findings": [],
+        "allow_accounts": False,
+        "demographic": "",
+    }
+    observation = {"url": "https://x.test/", "title": "X", "elements": [{"id": "e1", "text": "Go"}]}
+
+    responses = iter(["not json", '{"action":"click","element_id":"e1","reason":"go"}'])
+    fake_provider = type("P", (), {"agent_text": lambda self, *a, **kw: next(responses)})()
+
+    with patch("web_app.sentinel.runner._get_provider", return_value=fake_provider):
+        action = _request_agent_action(report, observation, [], False, {"e1"})
+
+    assert action is not None
+    assert action.action == "click"
+    assert report["findings"] == []  # success on retry, no warning
+
+
+def test_request_agent_action_records_invalid_step_when_retry_also_fails():
+    report = {
+        "target_url": "https://x.test/",
+        "prompt": "go",
+        "steps": [],
+        "findings": [],
+        "allow_accounts": False,
+        "demographic": "",
+    }
+    observation = {"url": "https://x.test/", "title": "X", "elements": []}
+    fake_provider = type("P", (), {"agent_text": lambda self, *a, **kw: "still not json"})()
+
+    with patch("web_app.sentinel.runner._get_provider", return_value=fake_provider):
+        action = _request_agent_action(report, observation, [], False, set())
+
+    assert action is None
+    assert report["steps"] and report["steps"][0]["action"] == "invalid"
+    assert any(f["title"] == "Agent response unparseable" for f in report["findings"])
+
+
+def test_screenshot_manifest_pairs_step_filename_with_action():
+    report = {
+        "target_url": "https://x.test/",
+        "screenshots": ["screenshots/step-00.png", "screenshots/step-01.png", "screenshots/step-02.png"],
+        "steps": [
+            {"index": 1, "action": "click", "reason": "View Chart", "result": {"url": "https://x.test/c"}},
+            {"index": 2, "action": "finish", "reason": "done", "result": {"url": "https://x.test/c"}},
+        ],
+    }
+    manifest = _screenshot_manifest(report)
+    assert manifest[0] == {"filename": "step-00.png", "produced_by": "initial", "url": "https://x.test/"}
+    assert manifest[1]["filename"] == "step-01.png"
+    assert "click" in manifest[1]["produced_by"] and "View Chart" in manifest[1]["produced_by"]
+    assert manifest[1]["url"] == "https://x.test/c"
+
+
+def test_pick_final_report_screenshots_uses_picker_then_falls_back():
+    report = {
+        "run_id": "r",
+        "prompt": "verify chart shows",
+        "target_url": "https://x.test/",
+        "screenshots": [f"screenshots/step-{i:02d}.png" for i in range(0, 5)],
+        "steps": [{"index": i, "action": "click", "reason": "x", "result": {"url": ""}} for i in range(1, 5)],
+        "findings": [],
+    }
+
+    picker_provider = type("P", (), {
+        "screenshot_picker_text": lambda self, _: '{"screenshots":["step-04.png","step-02.png"],"reason":"chart and form"}'
+    })()
+    with patch("web_app.sentinel.runner._get_provider", return_value=picker_provider):
+        chosen = _pick_final_report_screenshots(report)
+    assert chosen == ["step-04.png", "step-02.png"]
+
+    raising = type("P", (), {"screenshot_picker_text": lambda self, _: (_ for _ in ()).throw(RuntimeError("x"))})()
+    with patch("web_app.sentinel.runner._get_provider", return_value=raising):
+        chosen = _pick_final_report_screenshots(report)
+    # fallback = last `budget` filenames; budget defaults to 6 so all 5 returned
+    assert chosen == ["step-00.png", "step-01.png", "step-02.png", "step-03.png", "step-04.png"]
+
+
+def test_parse_picker_payload_filters_to_allowed_and_respects_budget():
+    allowed = {"step-00.png", "step-04.png", "step-09.png"}
+    picked = _parse_picker_payload(
+        '{"screenshots":["step-04.png","step-99.png","step-09.png","step-04.png"],"reason":"x"}',
+        allowed,
+        budget=2,
+    )
+    assert picked == ["step-04.png", "step-09.png"]
+    assert _parse_picker_payload("not json", allowed, budget=3) == []
+    assert _parse_picker_payload('{"foo":"bar"}', allowed, budget=3) == []

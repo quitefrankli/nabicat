@@ -136,6 +136,13 @@ class SentinelConfig:
     max_limit_mins: int = 10
     max_steps: int = 50
     max_screenshots: int = 50
+    # If the agent emits a malformed/non-JSON response, retry once before
+    # aborting the run. Catches transient LLM hiccups.
+    agent_parse_retry_attempts: int = 1
+    # When the agent clicks the same element_id this many times consecutively
+    # without the page URL changing, surface a finding so the agent gets a
+    # hint to try something else.
+    click_loop_threshold: int = 3
     max_retained_runs: int = 25
     prompt_max_chars: int = 4000
     browser_width_px: int = 1366
@@ -167,6 +174,13 @@ class SentinelConfig:
     llm_title_timeout_s: float = 15.0
     llm_verdict_max_tokens: int = 200
     llm_verdict_timeout_s: float = 20.0
+    # The screenshot picker decides which screenshots from the run are worth
+    # attaching to the final-report LLM call. Cheaper than blindly attaching
+    # every frame.
+    llm_picker_max_tokens: int = 300
+    llm_picker_timeout_s: float = 20.0
+    # How many screenshots the picker is allowed to select.
+    final_report_picker_budget: int = 6
     annotation_box_width_px: int = 3
     annotation_label_font_px: int = 14
     annotation_label_pad_px: int = 4

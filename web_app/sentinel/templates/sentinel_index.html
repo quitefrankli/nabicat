@@ -47,8 +47,31 @@
                value="1" {% if prefill_allow_accounts %}checked{% endif %}>
         <label class="form-check-label" for="sentinel-allow-accounts">
           Permit account creation, login, and deletion
-          <small class="text-muted d-block">Off by default. Uses synthetic test credentials only.</small>
+          <small class="text-muted d-block">Off by default. Optionally provide a synthetic username + password (and any extra fields the site asks for) for the agent to use. Credentials are held in memory only for the duration of the run and are never written to disk. Leave fields blank to let the agent invent its own.</small>
         </label>
+      </div>
+      <div id="sentinel-account-fields" class="sentinel-card-fields" hidden>
+        <div class="sentinel-card-row">
+          <div>
+            <label class="form-label" for="sentinel-account-username">Username</label>
+            <input class="form-control" type="text" id="sentinel-account-username" name="account_username"
+                   autocomplete="off" placeholder="qatester">
+          </div>
+          <div>
+            <label class="form-label" for="sentinel-account-password">Password</label>
+            <input class="form-control" type="password" id="sentinel-account-password" name="account_password"
+                   autocomplete="off" placeholder="(hidden)">
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Extra fields <span class="text-muted">(optional)</span></label>
+          <small class="text-muted d-block mb-2">Add any other fields the site's signup form requires (e.g. <code>email</code>, <code>pin</code>, <code>display_name</code>).</small>
+          <div id="sentinel-account-extra-fields" class="sentinel-account-extras"></div>
+          <button type="button" class="btn btn-sm btn-outline-secondary sentinel-account-add-field">
+            <i class="bi bi-plus-circle"></i>
+            <span>Add field</span>
+          </button>
+        </div>
       </div>
       <div class="form-check">
         <input class="form-check-input" type="checkbox" id="sentinel-allow-external" name="allow_external"
