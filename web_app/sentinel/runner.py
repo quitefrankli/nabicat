@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from web_app.config import ConfigManager
 from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
@@ -895,6 +895,14 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
 
         locator = page.locator(f'[data-sentinel-id="{action.element_id}"]').first
         if action.action == "click":
+            blocked_url = _blocked_external_click_url(page, locator, target, allow_external)
+            if blocked_url:
+                return {
+                    "ok": False,
+                    "error": "Navigation outside target host blocked",
+                    "url": page.url,
+                    "blocked_url": blocked_url,
+                }
             locator.click()
             try:
                 page.wait_for_load_state(
@@ -913,6 +921,29 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
         return {"ok": True, "url": page.url}
     except Exception as e:
         return {"ok": False, "error": str(e), "url": getattr(page, "url", "")}
+
+
+def _blocked_external_click_url(page, locator, target: ValidatedTarget, allow_external: bool) -> str:
+    if allow_external:
+        return ""
+    href = locator.evaluate(
+        """
+        (el) => {
+          const anchor = el.closest ? el.closest('a[href]') : null;
+          if (anchor) return anchor.href || '';
+          const form = el.closest ? el.closest('form[action]') : null;
+          if (form) return form.action || '';
+          return '';
+        }
+        """
+    )
+    parsed = urlparse(urljoin(page.url, str(href or "")))
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return ""
+    hostname = parsed.hostname.rstrip(".").lower()
+    if _host_allowed(hostname, target.hostname):
+        return ""
+    return parsed.geturl()
 
 
 def _record_step(report: dict, action: str, reason: str, result: dict) -> None:

@@ -1,8 +1,17 @@
 .sentinel-shell {
+  box-sizing: border-box;
+  width: 100%;
   max-width: 1120px;
   margin: 1.5rem auto 0;
   display: grid;
   gap: 1rem;
+  min-width: 0;
+}
+
+.sentinel-shell > * {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sentinel-shell-with-sidebar {
@@ -60,9 +69,11 @@ body.sentinel-resizing * {
 }
 
 .sentinel-shell-main {
+  box-sizing: border-box;
   display: grid;
   gap: 1rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .sentinel-shell-with-sidebar .sentinel-shell-main {
@@ -72,6 +83,9 @@ body.sentinel-resizing * {
 @media (max-width: 768px) {
   .sentinel-shell-with-sidebar {
     grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   .sentinel-sidebar-resizer {
     display: none;
@@ -211,11 +225,15 @@ body.sentinel-resizing * {
 }
 
 .sentinel-panel {
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid var(--hw-border);
   border-radius: var(--hw-radius-lg);
   box-shadow: var(--hw-shadow-md);
   padding: 1rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .sentinel-heading,
@@ -235,6 +253,7 @@ body.sentinel-resizing * {
 .sentinel-section-title h2 {
   margin: 0;
   color: var(--hw-forest);
+  overflow-wrap: anywhere;
 }
 
 .sentinel-heading p,
@@ -697,6 +716,14 @@ body.sentinel-resizing * {
   grid-template-columns: 2rem 1fr;
 }
 
+.sentinel-step > div {
+  min-width: 0;
+}
+
+.sentinel-step strong {
+  overflow-wrap: anywhere;
+}
+
 .sentinel-step > span {
   width: 2rem;
   height: 2rem;
@@ -723,6 +750,12 @@ body.sentinel-resizing * {
 
 .sentinel-screenshots {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+@media (max-width: 768px) {
+  .sentinel-screenshots {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .sentinel-screenshot-btn {

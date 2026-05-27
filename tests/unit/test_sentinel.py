@@ -704,6 +704,28 @@ def test_scroll_action_moves_page_and_waits():
     assert page.waits == [ConfigManager().sentinel.post_scroll_settle_ms]
 
 
+def test_click_action_reports_external_links_blocked_when_not_allowed():
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        pytest.skip("Playwright unavailable")
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content('<a data-sentinel-id="e1" href="https://jobs.example.org/apply">Apply now</a>')
+            action = parse_agent_action('{"action": "click", "element_id": "e1"}', {"e1"})
+            result = _apply_action(page, action, ValidatedTarget("https://example.com/", "example.com"))
+            browser.close()
+    except Exception as e:
+        pytest.skip(f"Playwright browser unavailable: {e}")
+
+    assert result["ok"] is False
+    assert result["error"] == "Navigation outside target host blocked"
+    assert result["blocked_url"] == "https://jobs.example.org/apply"
+
+
 def test_select_action_sets_option_and_waits():
     class DummyLocator:
         def __init__(self):
