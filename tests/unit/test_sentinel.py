@@ -505,7 +505,7 @@ def test_scroll_action_moves_page_and_waits():
 
     assert result == {"ok": True, "url": "https://example.com/"}
     assert page.mouse.calls == [(0, ConfigManager().sentinel.scroll_action_delta_px)]
-    assert page.waits == [ConfigManager().sentinel.wait_action_ms]
+    assert page.waits == [ConfigManager().sentinel.post_scroll_settle_ms]
 
 
 def test_select_action_sets_option_and_waits():
@@ -537,7 +537,7 @@ def test_select_action_sets_option_and_waits():
     assert result == {"ok": True, "url": "https://example.com/"}
     assert page.selector == '[data-sentinel-id="e2"]'
     assert page.locator_obj.calls == [{"label": "Price: Low - High"}]
-    assert page.waits == [ConfigManager().sentinel.wait_action_ms]
+    assert page.waits == [ConfigManager().sentinel.post_select_settle_ms]
 
 
 def test_observe_page_ignores_offscreen_hidden_and_covered_elements():

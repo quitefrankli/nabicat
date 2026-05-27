@@ -143,6 +143,16 @@ class SentinelConfig:
     browser_default_timeout_ms: int = 15000
     navigation_timeout_ms: int = 30000
     post_click_load_timeout_ms: int = 5000
+    # Settle delay after a click. Gives modals/menus/transitions a moment to
+    # finish before the next observation runs.
+    post_click_settle_ms: int = 600
+    # Settle delay after a fill. Mostly debounced JS validators / autocomplete.
+    post_fill_settle_ms: int = 200
+    # Settle delay after a select. Native dropdowns can re-render the page.
+    post_select_settle_ms: int = 1000
+    # Settle delay after a scroll. Lazy-loaded content / IntersectionObservers.
+    post_scroll_settle_ms: int = 1000
+    # Pause for the explicit "wait" action.
     wait_action_ms: int = 1000
     scroll_action_delta_px: int = 650
     observation_max_elements: int = 80

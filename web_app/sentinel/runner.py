@@ -1062,17 +1062,17 @@ def _agent_prompt(report: dict, observation: dict) -> str:
 
 
 def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_external: bool = False) -> dict:
+    cfg = ConfigManager().sentinel
     try:
         if action.action == "finish":
             return {"ok": True, "url": page.url}
         if action.action == "wait":
-            page.wait_for_timeout(ConfigManager().sentinel.wait_action_ms)
+            page.wait_for_timeout(cfg.wait_action_ms)
             return {"ok": True, "url": page.url}
         if action.action == "scroll":
-            cfg = ConfigManager().sentinel
             delta = -cfg.scroll_action_delta_px if (action.value or "").lower() == "up" else cfg.scroll_action_delta_px
             page.mouse.wheel(0, delta)
-            page.wait_for_timeout(cfg.wait_action_ms)
+            page.wait_for_timeout(cfg.post_scroll_settle_ms)
             return {"ok": True, "url": page.url}
         if action.action == "goto":
             next_url = urljoin(page.url, action.url or target.url)
@@ -1084,15 +1084,17 @@ def _apply_action(page, action: AgentAction, target: ValidatedTarget, allow_exte
             try:
                 page.wait_for_load_state(
                     "domcontentloaded",
-                    timeout=ConfigManager().sentinel.post_click_load_timeout_ms,
+                    timeout=cfg.post_click_load_timeout_ms,
                 )
             except Exception:
                 pass
+            page.wait_for_timeout(cfg.post_click_settle_ms)
         elif action.action == "fill":
             locator.fill(action.value or "test")
+            page.wait_for_timeout(cfg.post_fill_settle_ms)
         elif action.action == "select":
             locator.select_option(label=action.value or "")
-            page.wait_for_timeout(ConfigManager().sentinel.wait_action_ms)
+            page.wait_for_timeout(cfg.post_select_settle_ms)
         return {"ok": True, "url": page.url}
     except Exception as e:
         return {"ok": False, "error": str(e), "url": getattr(page, "url", "")}
