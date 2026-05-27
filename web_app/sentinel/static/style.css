@@ -342,6 +342,25 @@ body.sentinel-resizing * {
   align-items: end;
 }
 
+.sentinel-card-fields {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: rgba(135, 168, 120, 0.05);
+}
+
+.sentinel-card-fields[hidden] {
+  display: none;
+}
+
+.sentinel-card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 .sentinel-inline-fields > div {
   max-width: 12rem;
 }

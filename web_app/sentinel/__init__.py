@@ -32,6 +32,26 @@ def _detect_account_keyword(prompt: str, keywords) -> str:
     return ""
 
 
+def _validate_card_details(payload) -> dict:
+    raw_number = str(payload.get("card_number", ""))
+    raw_expiry = str(payload.get("card_expiry", "")).strip()
+    raw_cvv = str(payload.get("card_cvv", ""))
+    digits = "".join(ch for ch in raw_number if ch.isdigit())
+    if not 13 <= len(digits) <= 19:
+        raise ValueError("Card number must be 13-19 digits.")
+    if not re.fullmatch(r"\d{2}\s*/\s*\d{2}", raw_expiry):
+        raise ValueError("Expiry must be in MM/YY format.")
+    cvv_digits = "".join(ch for ch in raw_cvv if ch.isdigit())
+    if not 3 <= len(cvv_digits) <= 4:
+        raise ValueError("CVV must be 3 or 4 digits.")
+    mm, yy = [part.strip() for part in raw_expiry.split("/")]
+    return {
+        "card_number": digits,
+        "expiry": f"{mm}/{yy}",
+        "cvv": cvv_digits,
+    }
+
+
 sentinel_api = Blueprint(
     "sentinel",
     __name__,
@@ -227,6 +247,7 @@ def create_run():
     title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
     allow_accounts = _truthy(payload.get("allow_accounts"))
     allow_external = _truthy(payload.get("allow_external"))
+    allow_financial = _truthy(payload.get("allow_financial"))
     device = str(payload.get("device", "")).strip()
     demographic = str(payload.get("demographic", "")).strip()
     limit_s = _limit_from_request(payload.get("limit"))
@@ -246,6 +267,13 @@ def create_run():
                 )
             }), 400
 
+    card_details = None
+    if allow_financial:
+        try:
+            card_details = _validate_card_details(payload)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
     return (
         jsonify(start_run(
             target,
@@ -254,6 +282,8 @@ def create_run():
             title=title,
             allow_accounts=allow_accounts,
             allow_external=allow_external,
+            allow_financial=allow_financial,
+            card_details=card_details,
             device=device,
             demographic=demographic,
             owner=str(getattr(current_user, "id", "") or ""),

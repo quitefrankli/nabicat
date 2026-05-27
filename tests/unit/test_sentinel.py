@@ -346,6 +346,81 @@ def test_sentinel_routes_require_admin_and_start_run(client):
     mock_start.assert_called_once()
 
 
+def test_sentinel_card_details_validate_and_never_persist(client, tmp_path):
+    """allow_financial round-trips card details into start_run, validates them,
+    keeps them in memory only, and never writes them to disk."""
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+
+    captured = {}
+
+    def fake_start_run(target, prompt, limit_s, **kwargs):
+        captured.update(kwargs)
+        return {"run_id": "rfin", "status": "queued"}
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+            "web_app.sentinel.start_run", side_effect=fake_start_run
+        ):
+            mock_validate.return_value.url = "https://example.com"
+
+            res_bad = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "buy something",
+                    "allow_financial": True,
+                    "card_number": "12",
+                    "card_expiry": "13/99",
+                    "card_cvv": "1",
+                },
+            )
+            assert res_bad.status_code == 400
+
+            res_ok = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "buy something",
+                    "allow_financial": True,
+                    "card_number": "4242 4242 4242 4242",
+                    "card_expiry": "12/30",
+                    "card_cvv": "123",
+                },
+            )
+    assert res_ok.status_code == 202
+    assert captured["allow_financial"] is True
+    assert captured["card_details"] == {
+        "card_number": "4242424242424242",
+        "expiry": "12/30",
+        "cvv": "123",
+    }
+
+
+def test_save_strips_underscore_keys_before_disk_write():
+    """Runtime-only fields (like _card_details) must not reach the persisted report."""
+    from web_app.sentinel import runner
+
+    captured = {}
+
+    class FakeData:
+        def save_report(self, report):
+            captured["report"] = report
+
+    with patch.object(runner, "DataInterface", return_value=FakeData()):
+        runner._save({
+            "run_id": "r1",
+            "status": "running",
+            "_card_details": {"card_number": "4242", "expiry": "12/30", "cvv": "123"},
+        })
+
+    assert "_card_details" not in captured["report"]
+    assert captured["report"]["run_id"] == "r1"
+
+
 def test_sentinel_rejects_account_prompt_when_accounts_disallowed(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 

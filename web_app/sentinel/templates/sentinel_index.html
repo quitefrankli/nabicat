@@ -58,6 +58,33 @@
           <small class="text-muted d-block">Off by default. When off, off-host navigation is blocked at the network layer.</small>
         </label>
       </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="sentinel-allow-financial" name="allow_financial"
+               value="1">
+        <label class="form-check-label" for="sentinel-allow-financial">
+          Permit financial transactions
+          <small class="text-muted d-block">Off by default. When on, the agent may complete payment forms with the card details below. Card details are held in memory only for the duration of the run and are never written to disk.</small>
+        </label>
+      </div>
+      <div id="sentinel-card-fields" class="sentinel-card-fields" hidden>
+        <div>
+          <label class="form-label" for="sentinel-card-number">Card Number</label>
+          <input class="form-control" type="text" id="sentinel-card-number" name="card_number"
+                 inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242">
+        </div>
+        <div class="sentinel-card-row">
+          <div>
+            <label class="form-label" for="sentinel-card-expiry">Expiry</label>
+            <input class="form-control" type="text" id="sentinel-card-expiry" name="card_expiry"
+                   autocomplete="off" placeholder="MM/YY" maxlength="5">
+          </div>
+          <div>
+            <label class="form-label" for="sentinel-card-cvv">CVV</label>
+            <input class="form-control" type="text" id="sentinel-card-cvv" name="card_cvv"
+                   inputmode="numeric" autocomplete="off" placeholder="123" maxlength="4">
+          </div>
+        </div>
+      </div>
       <div class="sentinel-inline-fields">
         <div>
           <label class="form-label" for="sentinel-device">Device</label>

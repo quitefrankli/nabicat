@@ -130,11 +130,29 @@ _SYSTEM_EXTERNAL_ALLOWED = (
     "flow (for example, OAuth providers or partner checkout)."
 )
 
+_SYSTEM_FINANCIAL_FORBIDDEN = (
+    " Do not enter payment, credit card, or banking details. Skip checkout and payment flows."
+)
 
-def _system_prompt(allow_accounts: bool, demographic: str = "", allow_external: bool = False) -> str:
+
+def _system_prompt(
+    allow_accounts: bool,
+    demographic: str = "",
+    allow_external: bool = False,
+    card_details: dict | None = None,
+) -> str:
     persona = ConfigManager().sentinel.demographic_personas.get(demographic, "")
     base = _SYSTEM_BASE + (_SYSTEM_ACCOUNTS_ALLOWED if allow_accounts else _SYSTEM_ACCOUNTS_FORBIDDEN)
     base += _SYSTEM_EXTERNAL_ALLOWED if allow_external else _SYSTEM_EXTERNAL_FORBIDDEN
+    if card_details:
+        base += (
+            " You may complete payment and checkout flows using the following card details when "
+            f"asked for them: card number {card_details.get('card_number', '')}, expiry "
+            f"{card_details.get('expiry', '')}, CVV {card_details.get('cvv', '')}. Use these "
+            "values only on the target site's payment forms; do not echo them back in your reason."
+        )
+    else:
+        base += _SYSTEM_FINANCIAL_FORBIDDEN
     if persona:
         return f"{persona} {base}"
     return base
@@ -159,12 +177,24 @@ _REPORT_SYSTEM = (
 
 
 def _save(report: dict) -> None:
-    DataInterface().save_report(report)
+    sanitized = {k: v for k, v in report.items() if not k.startswith("_")}
+    DataInterface().save_report(sanitized)
     with _active_lock:
         _active_runs[report["run_id"]] = dict(report)
 
 
 def get_run(run_id: str) -> dict | None:
+    with _active_lock:
+        if run_id in _active_runs:
+            return {k: v for k, v in _active_runs[run_id].items() if not k.startswith("_")}
+    try:
+        return DataInterface().load_report(run_id)
+    except ValueError:
+        return None
+
+
+def _get_run_internal(run_id: str) -> dict | None:
+    """Like get_run but preserves underscore-prefixed runtime-only fields."""
     with _active_lock:
         if run_id in _active_runs:
             return dict(_active_runs[run_id])
@@ -196,6 +226,8 @@ def start_run(
     title: str = "",
     allow_accounts: bool = False,
     allow_external: bool = False,
+    allow_financial: bool = False,
+    card_details: dict | None = None,
     device: str = "",
     demographic: str = "",
     owner: str = "",
@@ -218,6 +250,7 @@ def start_run(
         "title": title,
         "allow_accounts": bool(allow_accounts),
         "allow_external": bool(allow_external),
+        "allow_financial": bool(allow_financial and card_details),
         "device": device,
         "demographic": demographic,
         "limit_s": limit_s,
@@ -233,6 +266,8 @@ def start_run(
         "final_report": "",
         "error": None,
     }
+    if allow_financial and card_details:
+        report["_card_details"] = dict(card_details)
     _save(report)
     with _active_lock:
         _cancel_events[run_id] = threading.Event()
@@ -270,6 +305,7 @@ def _run_background(report: dict) -> None:
         report["error"] = str(e)
     finally:
         report["finished_at"] = utc_now_iso()
+        report.pop("_card_details", None)
         _save(report)
         with _active_lock:
             _cancel_events.pop(report["run_id"], None)
@@ -338,6 +374,7 @@ class _LLMProvider:
         allow_accounts: bool = False,
         demographic: str = "",
         allow_external: bool = False,
+        card_details: dict | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -359,9 +396,10 @@ class _CodexProvider(_LLMProvider):
         allow_accounts: bool = False,
         demographic: str = "",
         allow_external: bool = False,
+        card_details: dict | None = None,
     ) -> str:
         return _codex_text(
-            system=_system_prompt(allow_accounts, demographic, allow_external),
+            system=_system_prompt(allow_accounts, demographic, allow_external, card_details),
             user_message=user_message,
             image_paths=image_paths,
             timeout_s=ConfigManager().sentinel.llm_step_timeout_s,
@@ -404,11 +442,12 @@ class _MeridianProvider(_LLMProvider):
         allow_accounts: bool = False,
         demographic: str = "",
         allow_external: bool = False,
+        card_details: dict | None = None,
     ) -> str:
         cfg = ConfigManager()
         return meridian_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts, demographic, allow_external),
+            system=_system_prompt(allow_accounts, demographic, allow_external, card_details),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -465,11 +504,12 @@ class _BedrockProvider(_LLMProvider):
         allow_accounts: bool = False,
         demographic: str = "",
         allow_external: bool = False,
+        card_details: dict | None = None,
     ) -> str:
         cfg = ConfigManager()
         return bedrock_text(
             user_message=user_message,
-            system=_system_prompt(allow_accounts, demographic, allow_external),
+            system=_system_prompt(allow_accounts, demographic, allow_external, card_details),
             model=self._model(),
             max_tokens=cfg.sentinel.llm_step_max_tokens,
             timeout_s=cfg.sentinel.llm_step_timeout_s,
@@ -607,6 +647,7 @@ def _execute_browser_run(report: dict) -> None:
                     allow_accounts=bool(report.get("allow_accounts")),
                     demographic=str(report.get("demographic") or ""),
                     allow_external=allow_external,
+                    card_details=report.get("_card_details"),
                 )
                 try:
                     action = parse_agent_action(agent_text, known_ids)
