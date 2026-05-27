@@ -143,6 +143,10 @@ class SentinelConfig:
     # without the page URL changing, surface a finding so the agent gets a
     # hint to try something else.
     click_loop_threshold: int = 3
+    # If the click-loop warning fires this many distinct times in a single run,
+    # treat the agent as stuck and end the run with a "stuck" finish. Stops the
+    # agent from burning the whole step budget on broken controls.
+    click_loop_max_warnings: int = 3
     max_retained_runs: int = 25
     prompt_max_chars: int = 4000
     browser_width_px: int = 1366

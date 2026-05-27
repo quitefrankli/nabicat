@@ -49,7 +49,10 @@ _VERDICT_SYSTEM = (
 _SYSTEM_BASE = (
     "You are controlling a browser as a practical human QA tester. "
     "Given the current observation and prior steps, choose exactly one next action. "
-    "Return ONLY JSON with one of these shapes: "
+    "Your entire response MUST be a single JSON object and nothing else. Do not think out loud. "
+    "Do not write commentary, reasoning, alternative options, or text before or after the JSON. "
+    "Do not emit multiple JSON candidates. Put any deliberation into the 'reason' field of the "
+    "single JSON object you return. Return ONLY JSON with one of these shapes: "
     "{\"action\":\"click\",\"element_id\":\"e1\",\"reason\":\"...\"}, "
     "{\"action\":\"fill\",\"element_id\":\"e2\",\"value\":\"...\",\"reason\":\"...\"}, "
     "{\"action\":\"select\",\"element_id\":\"e3\",\"value\":\"Option label\",\"reason\":\"...\"}, "

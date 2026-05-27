@@ -307,8 +307,18 @@ def _execute_browser_run(report: dict) -> None:
                 # surfaced in the final report so step number matches outcome.
                 _capture_screenshot(page, report, next_step_index)
                 _save(report)
-                _detect_click_loop(report)
+                stuck = _detect_click_loop(report)
                 if action.action == "finish":
+                    break
+                if stuck:
+                    _record_step(
+                        report,
+                        "finish",
+                        "stuck: agent looped on broken/self-referential controls and was force-stopped",
+                        {"ok": True, "url": result.get("url", "")},
+                    )
+                    _capture_screenshot(page, report, next_step_index + 1)
+                    _save(report)
                     break
 
             if time.monotonic() >= deadline:
@@ -788,7 +798,11 @@ def _observe_page(page) -> dict:
             const top = document.elementFromPoint(cx, cy);
             return Boolean(top && (el === top || el.contains(top)));
           };
-          const candidates = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role="button"]'));
+          const candidates = Array.from(document.querySelectorAll(
+            'a,button,input,textarea,select,'
+            + '[role="button"],[role="link"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],'
+            + '[onclick],[tabindex]:not([tabindex="-1"])'
+          ));
           const elements = [];
           for (const el of candidates) {
             if (elements.length >= maxElements) break;
@@ -961,29 +975,34 @@ def _detect_login_failure(report: dict) -> str:
     return ""
 
 
-def _detect_click_loop(report: dict) -> None:
+def _detect_click_loop(report: dict) -> bool:
     """Surface a finding when the agent clicks the same element_id repeatedly
     without the URL changing — usually a sign the target control is broken or
     leads back to the same page.
+
+    Returns True when the run should be stopped (warning count has exceeded
+    ``click_loop_max_warnings``).
     """
-    threshold = ConfigManager().sentinel.click_loop_threshold
+    cfg = ConfigManager().sentinel
+    threshold = cfg.click_loop_threshold
     if threshold <= 0:
-        return
+        return False
     steps = report.get("steps") or []
     if len(steps) < threshold:
-        return
+        return False
     tail = steps[-threshold:]
     if not all(s.get("action") == "click" for s in tail):
-        return
+        return False
     urls = {(s.get("result") or {}).get("url") for s in tail}
     if len(urls) != 1:
-        return
+        return False
     reasons = {s.get("reason", "")[:60] for s in tail}
-    # Suppress if we already flagged a loop ending at this same step count.
     last_step = tail[-1].get("index")
-    for finding in report.get("findings") or []:
+    findings = report.get("findings") or []
+    # Suppress if we already flagged a loop ending at this same step count.
+    for finding in findings:
         if finding.get("title") == "Repeated click with no navigation" and str(last_step) in finding.get("detail", ""):
-            return
+            return False
     _add_finding(
         report,
         "warning",
@@ -992,3 +1011,7 @@ def _detect_click_loop(report: dict) -> None:
         f"without the page changing. Reasons seen: {sorted(reasons)}. The control may be broken or self-referential; "
         "try a different element.",
     )
+    loop_warnings = sum(
+        1 for f in (report.get("findings") or []) if f.get("title") == "Repeated click with no navigation"
+    )
+    return cfg.click_loop_max_warnings > 0 and loop_warnings >= cfg.click_loop_max_warnings

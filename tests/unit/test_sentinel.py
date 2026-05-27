@@ -103,6 +103,31 @@ def test_parse_agent_action_allows_only_known_actions_and_elements():
         parse_agent_action('{"action": "scroll", "element_id": "e1"}', {"e1"})
 
 
+def test_parse_agent_action_picks_last_json_when_response_has_thinking_prose():
+    # Real failure mode from run 3b201325: model emits multiple JSON candidates
+    # separated by reasoning prose. We treat the last brace-balanced object as
+    # the model's final answer.
+    text = (
+        '{"action":"click","element_id":"e1","reason":"first try"}\n\n'
+        'Wait, e1 is wrong. Let me reconsider.\n\n'
+        '{"action":"click","element_id":"e2","reason":"second try"}\n\n'
+        'Actually:\n\n'
+        '{"action":"scroll","value":"down","reason":"final answer"}'
+    )
+    action = parse_agent_action(text, {"e1", "e2"})
+    assert action.action == "scroll"
+    assert action.value == "down"
+    assert action.reason == "final answer"
+
+
+def test_parse_agent_action_handles_braces_inside_string_values():
+    # { and } inside reason strings must not confuse the brace-depth tracker.
+    text = 'preamble {"action":"click","element_id":"e1","reason":"saw {placeholder} text"}'
+    action = parse_agent_action(text, {"e1"})
+    assert action.action == "click"
+    assert action.reason == "saw {placeholder} text"
+
+
 def test_runner_allows_only_exact_host_or_www_redirect_variant():
     assert _host_allowed("google.com", "google.com")
     assert _host_allowed("www.google.com", "google.com")
@@ -864,6 +889,35 @@ def test_detect_click_loop_flags_repeated_clicks_on_same_url():
     # Idempotent: a second call with no new steps must not duplicate the finding.
     _detect_click_loop(report)
     assert titles.count("Repeated click with no navigation") == 1
+
+
+def test_detect_click_loop_returns_true_after_max_warnings():
+    """When the loop detector has fired enough times, signal that the run
+    should be force-stopped instead of just adding another warning."""
+    report = {"findings": [], "steps": []}
+    cfg = ConfigManager().sentinel
+    threshold = cfg.click_loop_threshold
+    max_warnings = cfg.click_loop_max_warnings
+
+    # Build a series of distinct loop "events" — each must end on a different
+    # step index so the dedup-by-last-step check doesn't suppress the warning.
+    stuck = False
+    for warn_idx in range(max_warnings):
+        for k in range(threshold):
+            step_index = warn_idx * threshold + k + 1
+            report["steps"].append({
+                "index": step_index,
+                "action": "click",
+                "result": {"url": f"https://x.test/page{warn_idx}"},
+                "reason": "click",
+            })
+        stuck = _detect_click_loop(report)
+        if warn_idx + 1 < max_warnings:
+            assert stuck is False
+    assert stuck is True
+    assert sum(
+        1 for f in report["findings"] if f["title"] == "Repeated click with no navigation"
+    ) == max_warnings
 
 
 def test_detect_click_loop_no_flag_when_url_changes_or_action_differs():
