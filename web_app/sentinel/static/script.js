@@ -28,6 +28,16 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleAccountFields();
   }
 
+  const externalCheckbox = form.querySelector('#sentinel-allow-external');
+  const additionalDomainFields = document.getElementById('sentinel-additional-domain-fields');
+  if (externalCheckbox && additionalDomainFields) {
+    const toggleAdditionalDomainFields = () => {
+      additionalDomainFields.hidden = !externalCheckbox.checked;
+    };
+    externalCheckbox.addEventListener('change', toggleAdditionalDomainFields);
+    toggleAdditionalDomainFields();
+  }
+
   if (accountExtras) {
     const addButton = form.querySelector('.sentinel-account-add-field');
     const addRow = (key = '', value = '') => {

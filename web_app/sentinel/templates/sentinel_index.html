@@ -78,8 +78,15 @@
                value="1" {% if prefill_allow_external %}checked{% endif %}>
         <label class="form-check-label" for="sentinel-allow-external">
           Permit navigation to any external site
-          <small class="text-muted d-block">Off by default. When off, only the target site and additional domains are allowed.</small>
+          <small class="text-muted d-block">Off by default. Add domains below to permit only specific external destinations.</small>
         </label>
+      </div>
+      <div id="sentinel-additional-domain-fields" class="sentinel-card-fields" hidden>
+        <div>
+          <label class="form-label" for="sentinel-additional-domains">Additional domains</label>
+          <textarea class="form-control" id="sentinel-additional-domains" name="additional_domains" rows="3">{{ prefill_additional_domains or '' }}</textarea>
+          <small class="text-muted d-block">One domain or URL per line. Up to {{ additional_domains_max_count }} domains are allowed.</small>
+        </div>
       </div>
       <div class="form-check">
         <input class="form-check-input" type="checkbox" id="sentinel-allow-financial" name="allow_financial"
@@ -146,18 +153,12 @@
                  value="{{ prefill_limit if prefill_limit is defined else default_limit }}">
         </div>
       </div>
-      <details class="sentinel-advanced"{% if prefill_additional_domains %} open{% endif %}>
+      <details class="sentinel-advanced">
         <summary>
           <span>Advanced</span>
           <i class="bi bi-chevron-down"></i>
         </summary>
-        <div class="sentinel-advanced-body">
-          <div>
-            <label class="form-label" for="sentinel-additional-domains">Additional domains</label>
-            <textarea class="form-control" id="sentinel-additional-domains" name="additional_domains" rows="3">{{ prefill_additional_domains or '' }}</textarea>
-            <small class="text-muted d-block">One domain or URL per line. Up to {{ additional_domains_max_count }} domains are allowed when unrestricted external navigation is off.</small>
-          </div>
-        </div>
+        <div class="sentinel-advanced-body"></div>
       </details>
       <button class="btn btn-primary sentinel-submit" type="submit">
         <i class="bi bi-play-fill"></i>

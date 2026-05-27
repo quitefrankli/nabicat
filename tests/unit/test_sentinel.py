@@ -670,6 +670,8 @@ def test_sentinel_index_defaults_to_desktop_adult_australia(client):
     assert 'value="japan"' in body
     assert 'placeholder="nabicat.site"' in body
     assert "recruitment.macquarie.com" not in body
+    assert 'id="sentinel-additional-domain-fields" class="sentinel-card-fields" hidden' in body
+    assert '<div class="sentinel-advanced-body"></div>' in body
 
 
 def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
