@@ -7,27 +7,26 @@ from web_app.config import ConfigManager
 from web_app.helpers import limiter, register_all_blueprints
 from web_app.sentinel import _limit_from_request, _report_payload
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
+from web_app.sentinel.providers import (
+    _build_codex_cmd,
+    _codex_text,
+    _get_provider,
+    _system_prompt,
+)
 from web_app.sentinel.runner import (
     _add_finding,
     _agent_prompt,
     _annotate_screenshot,
     _apply_action,
-    _BedrockProvider,
-    _build_codex_cmd,
     _classify_run_verdict,
     _clean_title,
-    _codex_text,
-    _CodexProvider,
     _ensure_summary_heading,
     _fallback_title,
     _final_report_prompt,
     _generate_title,
-    _get_provider,
     _host_allowed,
-    _MeridianProvider,
     _observe_page,
     _parse_verdict_payload,
-    _system_prompt,
     ensure_screenshot_thumbnail,
 )
 from web_app.sentinel.target_policy import TargetValidationError, ValidatedTarget, validate_public_web_url
@@ -146,8 +145,8 @@ def test_codex_runs_from_project_dir_with_project_docs_disabled():
         def read(self):
             return "done"
 
-    with patch("web_app.sentinel.runner.tempfile.NamedTemporaryFile", return_value=DummyOutput()), patch(
-        "web_app.sentinel.runner.subprocess.run"
+    with patch("web_app.sentinel.providers.tempfile.NamedTemporaryFile", return_value=DummyOutput()), patch(
+        "web_app.sentinel.providers.subprocess.run"
     ) as mock_run:
         mock_run.return_value.returncode = 0
         mock_run.return_value.stderr = ""
@@ -164,11 +163,13 @@ def test_provider_switch_follows_global_llm_api_source():
     original = cfg.llm.api_source
     try:
         cfg.llm.api_source = "meridian"
-        assert isinstance(_get_provider(), _MeridianProvider)
+        assert _get_provider().name == "meridian"
         cfg.llm.api_source = "codex"
-        assert isinstance(_get_provider(), _CodexProvider)
+        assert _get_provider().name == "codex"
         cfg.llm.api_source = "bedrock"
-        assert isinstance(_get_provider(), _BedrockProvider)
+        assert _get_provider().name == "bedrock"
+        cfg.llm.api_source = "unknown-source"
+        assert _get_provider().name == "codex"
     finally:
         cfg.llm.api_source = original
 
@@ -177,8 +178,14 @@ def test_meridian_provider_calls_meridian_text_with_screenshots(tmp_path):
     image = tmp_path / "step.png"
     image.write_bytes(b"png-bytes")
 
-    with patch("web_app.sentinel.runner.meridian_text", return_value="agent reply") as mock_meridian:
-        result = _MeridianProvider().agent_text("user prompt", image_paths=[image])
+    cfg = ConfigManager()
+    original = cfg.llm.api_source
+    try:
+        cfg.llm.api_source = "meridian"
+        with patch("web_app.sentinel.providers.meridian_text", return_value="agent reply") as mock_meridian:
+            result = _get_provider().agent_text("user prompt", image_paths=[image])
+    finally:
+        cfg.llm.api_source = original
 
     assert result == "agent reply"
     kwargs = mock_meridian.call_args.kwargs
