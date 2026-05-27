@@ -134,8 +134,8 @@ class SentinelConfig:
     default_limit_mins: int = 5
     min_limit_mins: int = 1
     max_limit_mins: int = 10
-    max_steps: int = 20
-    max_screenshots: int = 10
+    max_steps: int = 50
+    max_screenshots: int = 50
     max_retained_runs: int = 25
     prompt_max_chars: int = 4000
     browser_width_px: int = 1366
