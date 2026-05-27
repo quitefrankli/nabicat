@@ -14,6 +14,7 @@ from web_app.sentinel.runner import (
     _apply_action,
     _BedrockProvider,
     _build_codex_cmd,
+    _classify_run_verdict,
     _clean_title,
     _codex_text,
     _CodexProvider,
@@ -25,6 +26,7 @@ from web_app.sentinel.runner import (
     _host_allowed,
     _MeridianProvider,
     _observe_page,
+    _parse_verdict_payload,
     _system_prompt,
     ensure_screenshot_thumbnail,
 )
@@ -344,6 +346,34 @@ def test_sentinel_routes_require_admin_and_start_run(client):
     mock_start.assert_called_once()
 
 
+def test_sentinel_rejects_account_prompt_when_accounts_disallowed(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+            "web_app.sentinel.start_run"
+        ) as mock_start:
+            mock_validate.return_value.url = "https://example.com"
+
+            res = client.post(
+                "/sentinel/api/runs",
+                json={
+                    "url": "https://example.com",
+                    "prompt": "check that an account can be created and a metric logged",
+                    "limit": 5,
+                    "allow_accounts": False,
+                },
+            )
+
+    assert res.status_code == 400
+    assert "account" in res.get_json()["error"].lower()
+    mock_start.assert_not_called()
+
+
 def test_sentinel_index_prefills_form_from_clone_query_params(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 
@@ -596,3 +626,43 @@ def test_sentinel_delete_run_removes_finished_runs_and_rejects_active_runs(clien
         assert res.status_code == 200
         assert res.get_json() == {"run_id": "r2", "deleted": True}
         mock_delete.assert_called_once_with("r2")
+
+
+def test_parse_verdict_payload_accepts_pass_fail_and_rejects_garbage():
+    assert _parse_verdict_payload('{"verdict":"pass","reason":"Looked good."}') == ("pass", "Looked good.")
+    assert _parse_verdict_payload('preamble {"verdict":"fail","reason":"Blocked."} trailing') == (
+        "fail",
+        "Blocked.",
+    )
+    assert _parse_verdict_payload("") is None
+    assert _parse_verdict_payload("not json at all") is None
+    assert _parse_verdict_payload('{"verdict":"maybe","reason":"x"}') is None
+
+
+def test_classify_run_verdict_downgrades_to_failed_and_records_reason():
+    report = {
+        "run_id": "r1",
+        "prompt": "create an account and log a metric",
+        "target_url": "https://example.com",
+        "steps": [{"action": "finish", "reason": "blocked", "result": {"ok": True}}],
+        "findings": [],
+        "final_report": "## Summary\n\nNothing tested.",
+    }
+    fake_provider = type("P", (), {"verdict_text": lambda self, _: '{"verdict":"fail","reason":"Agent self-aborted on step 1."}'})()
+    with patch("web_app.sentinel.runner._get_provider", return_value=fake_provider):
+        outcome = _classify_run_verdict(report)
+    assert outcome == "failed"
+    assert report["verdict_reason"] == "Agent self-aborted on step 1."
+    assert any(f["title"] == "Run did not fulfill prompt" for f in report["findings"])
+
+
+def test_classify_run_verdict_keeps_completed_on_pass_or_provider_failure():
+    report = {"run_id": "r2", "prompt": "click around", "steps": [], "findings": [], "final_report": ""}
+    pass_provider = type("P", (), {"verdict_text": lambda self, _: '{"verdict":"pass","reason":"Looked fine."}'})()
+    with patch("web_app.sentinel.runner._get_provider", return_value=pass_provider):
+        assert _classify_run_verdict(report) == "completed"
+    assert "verdict_reason" not in report
+
+    raising_provider = type("P", (), {"verdict_text": lambda self, _: (_ for _ in ()).throw(RuntimeError("x"))})()
+    with patch("web_app.sentinel.runner._get_provider", return_value=raising_provider):
+        assert _classify_run_verdict(report) == "completed"

@@ -67,6 +67,17 @@ _TITLE_SYSTEM = (
     "or 'QA'."
 )
 
+_VERDICT_SYSTEM = (
+    "You are evaluating whether a completed Sentinel QA run actually fulfilled the user's original "
+    "prompt. Given the prompt and a JSON dump of the run (steps, findings, final report), decide if "
+    "the run succeeded. Respond with ONLY a single JSON object of the shape "
+    "{\"verdict\":\"pass\"|\"fail\",\"reason\":\"...\"}. "
+    "Use \"fail\" if the agent self-aborted, was blocked, ran out of steps without exercising the "
+    "requested flow, or otherwise did not actually verify what the prompt asked for. "
+    "Use \"pass\" only if the run plausibly exercised the requested behavior end-to-end. "
+    "Be strict: a clean technical exit does not imply success. The reason must be one short sentence."
+)
+
 
 _SYSTEM_BASE = (
     "You are controlling a browser as a practical human QA tester. "
@@ -249,6 +260,9 @@ def _run_background(report: dict) -> None:
             report["status"] = "summarizing"
             _save(report)
             _add_final_report(report)
+            if outcome_status == "completed":
+                outcome_status = _classify_run_verdict(report)
+                report["run_outcome"] = outcome_status
             report["status"] = outcome_status
     except Exception as e:
         logging.exception("Sentinel run failed")
@@ -333,6 +347,9 @@ class _LLMProvider:
     def title_text(self, user_message: str) -> str:
         raise NotImplementedError
 
+    def verdict_text(self, user_message: str) -> str:
+        raise NotImplementedError
+
 
 class _CodexProvider(_LLMProvider):
     def agent_text(
@@ -364,6 +381,14 @@ class _CodexProvider(_LLMProvider):
             user_message=user_message,
             image_paths=None,
             timeout_s=ConfigManager().sentinel.llm_title_timeout_s,
+        )
+
+    def verdict_text(self, user_message: str) -> str:
+        return _codex_text(
+            system=_VERDICT_SYSTEM,
+            user_message=user_message,
+            image_paths=None,
+            timeout_s=ConfigManager().sentinel.llm_verdict_timeout_s,
         )
 
 
@@ -415,6 +440,18 @@ class _MeridianProvider(_LLMProvider):
             image_paths=None,
         )
 
+    def verdict_text(self, user_message: str) -> str:
+        cfg = ConfigManager()
+        return meridian_text(
+            user_message=user_message,
+            system=_VERDICT_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_verdict_max_tokens,
+            timeout_s=cfg.sentinel.llm_verdict_timeout_s,
+            agent="sentinel",
+            image_paths=None,
+        )
+
 
 class _BedrockProvider(_LLMProvider):
     def _model(self) -> str:
@@ -458,6 +495,17 @@ class _BedrockProvider(_LLMProvider):
             model=self._model(),
             max_tokens=cfg.sentinel.llm_title_max_tokens,
             timeout_s=cfg.sentinel.llm_title_timeout_s,
+            image_paths=None,
+        )
+
+    def verdict_text(self, user_message: str) -> str:
+        cfg = ConfigManager()
+        return bedrock_text(
+            user_message=user_message,
+            system=_VERDICT_SYSTEM,
+            model=self._model(),
+            max_tokens=cfg.sentinel.llm_verdict_max_tokens,
+            timeout_s=cfg.sentinel.llm_verdict_timeout_s,
             image_paths=None,
         )
 
@@ -631,6 +679,66 @@ def _add_finding(report: dict, severity: str, title: str, detail: str) -> None:
     if len(detail) > max_chars:
         detail = f"{detail[:max_chars].rstrip()}..."
     report["findings"].append({"severity": severity, "title": title, "detail": detail})
+
+
+_VERDICT_FAIL_REASON_MAX_CHARS = 300
+
+
+def _classify_run_verdict(report: dict) -> str:
+    """Ask the LLM whether the run actually fulfilled the user's prompt.
+
+    Returns the new run status: 'completed' on pass, 'failed' on fail. On any
+    error or unparseable response, falls back to 'completed' (the existing
+    behavior) so this never blocks a real success.
+    """
+    try:
+        raw = _get_provider().verdict_text(_verdict_prompt(report))
+        parsed = _parse_verdict_payload(raw)
+    except Exception as e:
+        logging.warning("Sentinel verdict classification failed: %s", e)
+        return "completed"
+    if not parsed:
+        return "completed"
+    verdict, reason = parsed
+    if verdict != "fail":
+        return "completed"
+    report["verdict_reason"] = reason[:_VERDICT_FAIL_REASON_MAX_CHARS]
+    _add_finding(report, "warning", "Run did not fulfill prompt", reason)
+    return "failed"
+
+
+def _verdict_prompt(report: dict) -> str:
+    payload = {
+        "original_prompt": report.get("prompt") or "",
+        "target_url": report.get("target_url"),
+        "allow_accounts": bool(report.get("allow_accounts")),
+        "allow_external": bool(report.get("allow_external")),
+        "steps": [
+            {"action": step.get("action"), "reason": step.get("reason"), "result": step.get("result")}
+            for step in report.get("steps", [])
+        ],
+        "findings": report.get("findings", []),
+        "final_report": report.get("final_report") or "",
+    }
+    return json.dumps(payload, indent=2)
+
+
+def _parse_verdict_payload(raw: str) -> tuple[str, str] | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    verdict = str(data.get("verdict", "")).strip().lower()
+    if verdict not in {"pass", "fail"}:
+        return None
+    reason = str(data.get("reason", "")).strip() or "No reason provided."
+    return verdict, reason
 
 
 def _add_final_report(report: dict) -> None:

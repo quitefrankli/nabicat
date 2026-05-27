@@ -24,6 +24,14 @@ from web_app.sentinel.target_policy import TargetValidationError, validate_publi
 _SCREENSHOT_FILENAME_RE = re.compile(r"^step-\d{2}(?:-annot)?\.png$")
 
 
+def _detect_account_keyword(prompt: str, keywords) -> str:
+    text = prompt.lower()
+    for kw in keywords:
+        if re.search(rf"(?<!\w){re.escape(kw.lower())}(?!\w)", text):
+            return kw
+    return ""
+
+
 sentinel_api = Blueprint(
     "sentinel",
     __name__,
@@ -227,6 +235,16 @@ def create_run():
         target = validate_public_web_url(raw_url)
     except TargetValidationError as e:
         return jsonify({"error": str(e)}), 400
+
+    if not allow_accounts:
+        hit = _detect_account_keyword(prompt, cfg.sentinel.account_keywords)
+        if hit:
+            return jsonify({
+                "error": (
+                    f"Prompt mentions \"{hit}\" but \"Permit account creation, login, "
+                    "and deletion\" is off. Enable it or rephrase the prompt."
+                )
+            }), 400
 
     return (
         jsonify(start_run(

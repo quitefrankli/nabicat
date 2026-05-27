@@ -155,6 +155,8 @@ class SentinelConfig:
     title_max_chars: int = 80
     llm_title_max_tokens: int = 80
     llm_title_timeout_s: float = 15.0
+    llm_verdict_max_tokens: int = 200
+    llm_verdict_timeout_s: float = 20.0
     annotation_box_width_px: int = 3
     annotation_label_font_px: int = 14
     annotation_label_pad_px: int = 4
@@ -200,6 +202,17 @@ class SentinelConfig:
         "techie": "Techie",
     })
     default_demographic: str = "adult"
+    # Keywords that imply the prompt depends on auth flows. If any appear in
+    # the prompt while allow_accounts=false, the run is rejected up-front so
+    # the agent doesn't immediately self-abort. Matched as whole words
+    # (case-insensitive) against the prompt.
+    account_keywords: tuple = (
+        "account", "accounts",
+        "sign up", "signup", "sign-up",
+        "sign in", "signin", "sign-in",
+        "log in", "login", "log-in",
+        "register", "registration",
+    )
     region_labels: dict = field(default_factory=lambda: {
         "australia": "Australia",
         "china":     "China",

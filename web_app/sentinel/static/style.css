@@ -300,6 +300,14 @@ body.sentinel-resizing * {
   color: var(--hw-text-secondary);
 }
 
+.sentinel-report-verdict {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--hw-coral);
+  background: rgba(224, 122, 95, 0.1);
+  border-radius: var(--hw-radius-sm);
+  color: var(--hw-text-primary);
+}
+
 @media (max-width: 768px) {
   .sentinel-report-fields {
     grid-template-columns: 1fr;

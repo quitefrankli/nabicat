@@ -62,6 +62,10 @@
           <dt>Prompt</dt>
           <dd class="sentinel-report-prompt">{{ report.prompt }}</dd>
         {% endif %}
+        {% if report.verdict_reason %}
+          <dt>Verdict</dt>
+          <dd class="sentinel-report-verdict">{{ report.verdict_reason }}</dd>
+        {% endif %}
       </dl>
     </div>
     <div class="sentinel-report-actions">
