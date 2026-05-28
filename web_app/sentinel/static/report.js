@@ -231,23 +231,62 @@ function setupScreenshotLoading(report) {
   }
 }
 
+let sentinelLightboxItems = [];
+let sentinelLightboxIndex = 0;
+let sentinelLightboxPrev;
+let sentinelLightboxNext;
+
+function showLightboxItem(index) {
+  if (!sentinelLightboxItems.length) return;
+  const len = sentinelLightboxItems.length;
+  sentinelLightboxIndex = ((index % len) + len) % len;
+  sentinelLightboxImage.src = sentinelLightboxItems[sentinelLightboxIndex];
+  const showNav = len > 1;
+  sentinelLightboxPrev.style.display = showNav ? '' : 'none';
+  sentinelLightboxNext.style.display = showNav ? '' : 'none';
+}
+
+function openLightbox(items, index) {
+  sentinelLightboxItems = items.filter(Boolean);
+  showLightboxItem(index);
+  sentinelLightbox.classList.add('open');
+}
+
 function ensureLightbox() {
   if (sentinelLightbox) return;
   sentinelLightbox = document.createElement('div');
   sentinelLightbox.className = 'sentinel-lightbox';
-  sentinelLightbox.innerHTML = '<button class="sentinel-lightbox-close" type="button" aria-label="Close">&times;</button><img alt="QA screenshot">';
+  sentinelLightbox.innerHTML =
+    '<button class="sentinel-lightbox-close" type="button" aria-label="Close">&times;</button>'
+    + '<button class="sentinel-lightbox-nav sentinel-lightbox-prev" type="button" aria-label="Previous screenshot">&#8249;</button>'
+    + '<img alt="QA screenshot">'
+    + '<button class="sentinel-lightbox-nav sentinel-lightbox-next" type="button" aria-label="Next screenshot">&#8250;</button>';
   document.body.appendChild(sentinelLightbox);
   sentinelLightboxImage = sentinelLightbox.querySelector('img');
+  sentinelLightboxPrev = sentinelLightbox.querySelector('.sentinel-lightbox-prev');
+  sentinelLightboxNext = sentinelLightbox.querySelector('.sentinel-lightbox-next');
   const close = function () {
     sentinelLightbox.classList.remove('open');
     sentinelLightboxImage.src = '';
+    sentinelLightboxItems = [];
   };
   sentinelLightbox.querySelector('.sentinel-lightbox-close').addEventListener('click', close);
+  sentinelLightboxPrev.addEventListener('click', function (event) {
+    event.stopPropagation();
+    showLightboxItem(sentinelLightboxIndex - 1);
+  });
+  sentinelLightboxNext.addEventListener('click', function (event) {
+    event.stopPropagation();
+    showLightboxItem(sentinelLightboxIndex + 1);
+  });
   sentinelLightbox.addEventListener('click', function (event) {
     if (event.target === sentinelLightbox) close();
   });
   document.addEventListener('keydown', function (event) {
+    if (!sentinelLightbox.classList.contains('open')) return;
     if (event.key === 'Escape') close();
+    else if (event.key === 'ArrowLeft') showLightboxItem(sentinelLightboxIndex - 1);
+    else if (event.key === 'ArrowRight') showLightboxItem(sentinelLightboxIndex + 1);
   });
 }
 
@@ -257,20 +296,26 @@ function bindScreenshotButtons() {
     if (button.dataset.boundLightbox) return;
     button.dataset.boundLightbox = 'true';
     button.addEventListener('click', function () {
-      sentinelLightboxImage.src = button.dataset.full;
-      sentinelLightbox.classList.add('open');
+      const group = button.parentElement
+        ? Array.from(button.parentElement.querySelectorAll('.sentinel-screenshot-btn'))
+        : [button];
+      const items = group.map(function (b) { return b.dataset.full; });
+      openLightbox(items, group.indexOf(button));
     });
   });
 }
 
 function bindFinalReportImages() {
   ensureLightbox();
-  document.querySelectorAll('#sentinel-final-report img.sentinel-final-report-img').forEach(function (img) {
+  const all = Array.from(document.querySelectorAll('#sentinel-final-report img.sentinel-final-report-img'));
+  all.forEach(function (img) {
     if (img.dataset.boundLightbox) return;
     img.dataset.boundLightbox = 'true';
     img.addEventListener('click', function () {
-      sentinelLightboxImage.src = img.dataset.full || img.src;
-      sentinelLightbox.classList.add('open');
+      // Re-collect on each click; the group can change between polls.
+      const group = Array.from(document.querySelectorAll('#sentinel-final-report img.sentinel-final-report-img'));
+      const items = group.map(function (i) { return i.dataset.full || i.src; });
+      openLightbox(items, group.indexOf(img));
     });
   });
 }

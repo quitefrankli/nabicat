@@ -170,6 +170,9 @@ def _resolve_screenshot_src(src: str, run_id: str, allowed_filenames: set[str], 
     return _screenshot_url(run_id, filename, thumbnail=thumbnail)
 
 
+_TRANSPARENT_GIF_DATA_URI = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+
+
 def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]) -> Markup:
     md = MarkdownIt("commonmark", {"html": False})
     allowed = {str(s).rsplit("/", 1)[-1] for s in screenshots or []}
@@ -181,7 +184,13 @@ def _render_final_report(markdown_text: str, run_id: str, screenshots: list[str]
         resolved = _resolve_screenshot_src(src, run_id, allowed, thumbnail=True)
         if resolved is None:
             return ""
-        token.attrSet("src", resolved)
+        # Route final-report screenshots through the same staggered/retrying
+        # loader the debug grid uses, so that on-demand thumbnail generation
+        # races and innerHTML re-renders during polling don't leave images
+        # permanently stuck. The actual src is set client-side once the
+        # loader picks the img up.
+        token.attrSet("src", _TRANSPARENT_GIF_DATA_URI)
+        token.attrSet("data-screenshot-src", resolved)
         token.attrSet("data-full", _resolve_screenshot_src(src, run_id, allowed) or "")
         token.attrSet("loading", "lazy")
         token.attrSet("decoding", "async")
