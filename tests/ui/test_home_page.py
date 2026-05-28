@@ -85,10 +85,9 @@ def test_admin_only_apps_disabled_for_non_admin(page, test_server):
     # Verify public/private apps are still available.
     expect(page.locator("text=Todoist")).to_be_visible()
     expect(page.locator("text=Crosswords")).to_be_visible()
-    expect(page.locator("a[href='/sentinel']:has-text('Sentinel')")).to_be_visible()
 
     # Verify admin-only apps are shown as disabled entries.
-    for app_name in ["JSwipe", "Proxy", "Dev"]:
+    for app_name in ["Sentinel", "JSwipe", "Proxy", "Dev"]:
         link = page.locator(f"a.app-disabled:has-text('{app_name}')")
         expect(link).to_be_visible()
         expect(link).to_have_attribute("href", "#")

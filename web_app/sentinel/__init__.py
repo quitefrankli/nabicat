@@ -4,7 +4,7 @@ import base64
 import re
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, send_from_directory
-from flask_login import current_user
+from flask_login import current_user, login_required
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 
@@ -90,6 +90,14 @@ sentinel_api = Blueprint(
     static_folder="static",
     url_prefix="/sentinel",
 )
+
+
+@sentinel_api.before_request
+@login_required
+def require_admin():
+    if not current_user.is_admin:
+        abort(403)
+
 
 @sentinel_api.context_processor
 def inject_app_name():
