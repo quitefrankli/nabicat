@@ -18,7 +18,7 @@ class AgentAction:
     url: str | None = None
 
 
-_ALLOWED_ACTIONS = {"click", "fill", "goto", "scroll", "select", "wait", "finish"}
+_ALLOWED_ACTIONS = {"click", "fill", "goto", "scroll", "select", "wait", "finish", "peek"}
 
 
 def _json_from_text(text: str) -> dict:
@@ -94,6 +94,9 @@ def parse_agent_action(text: str, known_element_ids: set[str]) -> AgentAction:
             raise ActionValidationError("Agent referenced an unknown element")
     elif element_id:
         raise ActionValidationError("Element id is only valid for click/fill/select")
+
+    if action == "peek" and (data.get("element_id") or data.get("value") or data.get("url")):
+        raise ActionValidationError("peek takes only a reason; no element_id, value, or url")
 
     value = data.get("value")
     url = data.get("url")

@@ -235,8 +235,13 @@ def _execute_browser_run(report: dict) -> None:
     deadline = time.monotonic() + int(report["limit_s"])
     cfg = ConfigManager()
 
+    from playwright_stealth import Stealth
+
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=list(cfg.sentinel.browser_launch_args),
+        )
         context = None
         try:
             device_key = str(report.get("device") or cfg.sentinel.default_device)
@@ -249,11 +254,17 @@ def _execute_browser_run(report: dict) -> None:
                     "width": cfg.sentinel.browser_width_px,
                     "height": cfg.sentinel.browser_height_px,
                 }
+                context_kwargs["user_agent"] = cfg.sentinel.browser_desktop_user_agent
             # Playwright's Chromium uses NSS / system trust stores, not
             # $SSL_CERT_FILE, so dev environments without a populated NSS
             # DB hit ERR_CERT_AUTHORITY_INVALID on perfectly valid public
             # sites. Bypass cert validation in debug mode only.
             context = browser.new_context(**context_kwargs)
+            # Patches navigator.webdriver, plugins, languages, WebGL vendor,
+            # chrome.runtime, and a few other headless-Chromium tells. Cuts
+            # through most basic Cloudflare/Akamai JS challenges. Doesn't
+            # require a real GPU — the WebGL spoof only patches JS getters.
+            Stealth().apply_stealth_sync(context)
             page = context.new_page()
             page.set_default_timeout(cfg.sentinel.browser_default_timeout_ms)
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
@@ -317,6 +328,9 @@ def _execute_browser_run(report: dict) -> None:
                     allow_external=allow_external,
                     additional_domains=additional_domains,
                 )
+                # Set/clear the peek-pending flag so _annotated_image_paths
+                # knows whether to attach the raw screenshot next iteration.
+                report["_peek_pending"] = (action.action == "peek")
                 _record_step(report, action.action, action.reason, result)
                 # step-N.png: state AFTER step N's action — this is what gets
                 # surfaced in the final report so step number matches outcome.
@@ -712,7 +726,14 @@ def _annotated_image_paths(report: dict, annotated: str | None, raw: str | None)
     if annotated:
         path = DataInterface().screenshots_dir(report["run_id"]) / Path(annotated).name
         if path.exists():
-            return [path]
+            paths = [path]
+            # If the prior step was 'peek', also attach the raw (un-annotated)
+            # screenshot so the model can see ui obscured by annotation boxes.
+            if report.get("_peek_pending") and raw:
+                raw_path = DataInterface().screenshots_dir(report["run_id"]) / Path(raw).name
+                if raw_path.exists():
+                    paths.append(raw_path)
+            return paths
     return _screenshot_image_paths(report, raw)
 
 
@@ -809,7 +830,42 @@ def _observe_page(page) -> dict:
             const r = el.getBoundingClientRect();
             return {x: r.x, y: r.y, w: r.width, h: r.height};
           };
-          document.querySelectorAll('[data-sentinel-id]').forEach(el => el.removeAttribute('data-sentinel-id'));
+          const SELECTOR = (
+            'a,button,input,textarea,select,'
+            + '[role="button"],[role="link"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],'
+            + '[onclick],[tabindex]:not([tabindex="-1"])'
+          );
+          // Walk a root (document or shadowRoot) and collect candidates that
+          // match SELECTOR, descending into any open shadow roots we find.
+          // Closed shadow roots are unreachable from JS and silently skipped.
+          const walk = (root, out, hosts) => {
+            for (const el of root.querySelectorAll(SELECTOR)) out.push(el);
+            for (const el of root.querySelectorAll('*')) {
+              if (el.shadowRoot) {
+                hosts.set(el.shadowRoot, el);
+                walk(el.shadowRoot, out, hosts);
+              }
+            }
+          };
+          // shadowRoot.elementFromPoint(x,y) descends one level; chain it so
+          // the topmost element returned is the deepest visible one.
+          const deepElementFromPoint = (x, y) => {
+            let el = document.elementFromPoint(x, y);
+            while (el && el.shadowRoot) {
+              const inner = el.shadowRoot.elementFromPoint(x, y);
+              if (!inner || inner === el) break;
+              el = inner;
+            }
+            return el;
+          };
+          // Clear ids set by previous observations, including those stamped
+          // inside open shadow roots.
+          const clearRoot = (root) => {
+            for (const el of root.querySelectorAll('[data-sentinel-id]')) el.removeAttribute('data-sentinel-id');
+            for (const el of root.querySelectorAll('*')) if (el.shadowRoot) clearRoot(el.shadowRoot);
+          };
+          clearRoot(document);
+
           const usable = (el) => {
             const r = el.getBoundingClientRect();
             const style = window.getComputedStyle(el);
@@ -819,14 +875,13 @@ def _observe_page(page) -> dict:
             if (el.disabled || el.getAttribute('aria-hidden') === 'true' || el.closest('[aria-hidden="true"],[inert]')) return false;
             const cx = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1);
             const cy = Math.min(Math.max(r.top + r.height / 2, 0), window.innerHeight - 1);
-            const top = document.elementFromPoint(cx, cy);
-            return Boolean(top && (el === top || el.contains(top)));
+            const top = deepElementFromPoint(cx, cy);
+            return Boolean(top && (el === top || el.contains(top) || (top.getRootNode && top.getRootNode().host && el.contains(top.getRootNode().host))));
           };
-          const candidates = Array.from(document.querySelectorAll(
-            'a,button,input,textarea,select,'
-            + '[role="button"],[role="link"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],'
-            + '[onclick],[tabindex]:not([tabindex="-1"])'
-          ));
+
+          const candidates = [];
+          const hosts = new Map();  // shadowRoot -> host element (currently unused but reserved)
+          walk(document, candidates, hosts);
           const elements = [];
           for (const el of candidates) {
             if (elements.length >= maxElements) break;
@@ -894,7 +949,10 @@ def _agent_prompt(report: dict, observation: dict) -> str:
             "labelled with a synthetic id (e.g. e1, e2). Use the screenshot as your primary input "
             "and choose elements visually. The 'elements' list is only a key for resolving labels "
             "to ids; do not rely on it for spatial layout. If additional_domains is non-empty, "
-            "external navigation is permitted only to those domains; other external domains are blocked."
+            "external navigation is permitted only to those domains; other external domains are blocked. "
+            "If the annotation boxes are obscuring text you need to read, or you think a clickable "
+            "element is missing from the elements list, use the peek action — the next step will "
+            "include a clean un-annotated copy of the same screenshot."
         ),
     }
     if hints:
@@ -912,6 +970,11 @@ def _apply_action(
     cfg = ConfigManager().sentinel
     try:
         if action.action == "finish":
+            return {"ok": True, "url": page.url}
+        if action.action == "peek":
+            # No-op on the page; the runner re-attaches the raw screenshot to
+            # the *next* agent call so the model can see ui obscured by the
+            # annotation overlay.
             return {"ok": True, "url": page.url}
         if action.action == "wait":
             page.wait_for_timeout(cfg.wait_action_ms)

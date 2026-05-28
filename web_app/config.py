@@ -154,6 +154,20 @@ class SentinelConfig:
     browser_width_px: int = 1366
     browser_height_px: int = 900
     browser_default_timeout_ms: int = 15000
+    # Desktop user-agent override: replaces Playwright's default
+    # "HeadlessChrome/..." UA, which is the most common bot-detection trigger.
+    # Mobile/tablet device profiles supply their own real-device UA and bypass
+    # this override.
+    browser_desktop_user_agent: str = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+    # Chromium launch flags applied to every Sentinel run. Disables the
+    # AutomationControlled blink feature so navigator.webdriver and related
+    # CDP fingerprints don't immediately trip Cloudflare/Akamai bot rules.
+    browser_launch_args: list = field(default_factory=lambda: [
+        "--disable-blink-features=AutomationControlled",
+    ])
     navigation_timeout_ms: int = 30000
     post_click_load_timeout_ms: int = 5000
     # Settle delay after a click. Gives modals/menus/transitions a moment to
