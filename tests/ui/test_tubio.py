@@ -122,6 +122,61 @@ def test_trackbar_volume_hover_path_stays_open(tubio_page):
     expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
 
 
+def test_mobile_trackbar_actions_align_with_track_info(page, test_server):
+    """Mobile volume and playlist buttons sit on the track info row."""
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.goto(f"{test_server}/tubio")
+    page.wait_for_load_state("networkidle")
+
+    positions = page.evaluate("""
+        () => {
+            const info = document.querySelector('.trackbar-info').getBoundingClientRect();
+            const volume = document.getElementById('trackbar-mute').getBoundingClientRect();
+            const playlist = document.querySelector('.trackbar-actions > button').getBoundingClientRect();
+            return {
+                infoCenterY: info.top + info.height / 2,
+                volumeCenterY: volume.top + volume.height / 2,
+                playlistCenterY: playlist.top + playlist.height / 2,
+                infoLeft: info.left,
+                playlistRight: playlist.right,
+                trackbarRight: document.getElementById('tubio-trackbar').getBoundingClientRect().right
+            };
+        }
+    """)
+
+    assert abs(positions["infoCenterY"] - positions["volumeCenterY"]) <= 4
+    assert abs(positions["infoCenterY"] - positions["playlistCenterY"]) <= 4
+    assert positions["infoLeft"] < positions["playlistRight"]
+    assert positions["trackbarRight"] - positions["playlistRight"] <= 16
+
+
+def test_trackbar_title_scrolls_when_overflowing(tubio_page):
+    """Long track titles get scrolling treatment in the compact trackbar."""
+    tubio_page.evaluate("""
+        () => {
+            const wrap = document.querySelector('.trackbar-title-wrap');
+            const title = document.getElementById('trackbar-title');
+            wrap.style.width = '96px';
+            title.textContent = 'A very long track title that cannot fit in the available mobile space';
+            updateTrackbarTitleOverflow();
+        }
+    """)
+
+    assert tubio_page.locator("#trackbar-title").evaluate(
+        "(el) => el.classList.contains('is-overflowing')"
+    )
+
+
+def test_playlist_expanded_card_actions_are_cleaned_up():
+    """Expanded playlist cards omit the label and use the bordered action style."""
+    from pathlib import Path
+
+    template = Path("web_app/tubio/templates/playlist.html").read_text()
+
+    assert "Full Title:" not in template
+    assert template.count("track-action-btn") == 4
+
+
 def test_trackbar_volume_applies_to_audio_elements(tubio_page):
     """Changing the volume slider updates audio elements and persists the value."""
     tubio_page.evaluate("""

@@ -240,6 +240,21 @@ function toggleTrackbarMute() {
     applyTrackbarVolumeToAll();
 }
 
+function updateTrackbarTitleOverflow() {
+    const titleEl = document.getElementById('trackbar-title');
+    const titleWrap = document.querySelector('.trackbar-title-wrap');
+    if (!titleEl || !titleWrap) return;
+
+    titleEl.classList.remove('is-overflowing');
+    titleEl.style.removeProperty('--trackbar-title-shift');
+
+    const overflowPx = titleEl.scrollWidth - titleWrap.clientWidth;
+    if (overflowPx <= 4) return;
+
+    titleEl.style.setProperty('--trackbar-title-shift', `${overflowPx}px`);
+    titleEl.classList.add('is-overflowing');
+}
+
 function switchTab(tabName) {
     // Remove active class from all navbar tabs
     document.querySelectorAll('#search-nav-tab, #playlists-nav-tab').forEach(tab => {
@@ -1254,6 +1269,7 @@ function updateTrackbar(crc) {
         if (thumb) { thumb.hidden = true; thumb.removeAttribute('src'); }
         if (placeholder) placeholder.hidden = false;
         updateTrackbarPlayPauseUI(false);
+        updateTrackbarTitleOverflow();
         return;
     }
 
@@ -1263,6 +1279,7 @@ function updateTrackbar(crc) {
     if (trackbar) trackbar.dataset.active = 'true';
     if (titleEl) titleEl.textContent = trackItem.dataset.title || 'Unknown Track';
     if (playlistEl) playlistEl.textContent = trackItem.dataset.playlist || '';
+    updateTrackbarTitleOverflow();
 
     if (trackItem.dataset.hasThumbnail === 'true' && thumb) {
         const url = `/tubio/thumbnail/${crc}`;
@@ -1451,6 +1468,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setTrackbarVolume(this.value);
         });
     }
+
+    window.addEventListener('resize', updateTrackbarTitleOverflow);
 });
 
 // Playlist management functions
