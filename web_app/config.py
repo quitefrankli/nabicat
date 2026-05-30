@@ -73,6 +73,12 @@ class TubioConfig:
     max_search_pages: int = 3
     max_video_length: timedelta = timedelta(minutes=10)
     test_video_id: str = "dQw4w9WgXcQ"
+    trackbar_volume_min_percent: int = 0
+    trackbar_volume_max_percent: int = 100
+    trackbar_volume_step_percent: int = 1
+    trackbar_default_volume_percent: int = 80
+    trackbar_volume_storage_key: str = "tubio.volume"
+    trackbar_muted_storage_key: str = "tubio.muted"
 
     @property
     def cookie_path(self) -> Path:

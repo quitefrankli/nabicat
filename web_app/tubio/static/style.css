@@ -732,11 +732,25 @@ audio::-webkit-media-controls-panel {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.trackbar-volume {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.trackbar-volume-range {
+  flex: 0 0 96px;
+  width: 96px;
+  min-width: 72px;
 }
 
 @media (max-width: 768px) {
   :root {
-    --tubio-trackbar-height: 110px;
+    --tubio-trackbar-height: 136px;
   }
   .tubio-trackbar {
     flex-direction: column;
@@ -758,8 +772,10 @@ audio::-webkit-media-controls-panel {
     max-width: 100%;
   }
   .trackbar-actions {
-    position: absolute;
-    top: 0.4rem;
-    right: 0.75rem;
+    justify-content: center;
+  }
+  .trackbar-volume-range {
+    flex-basis: 120px;
+    width: 120px;
   }
 }

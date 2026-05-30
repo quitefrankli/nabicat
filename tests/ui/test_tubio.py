@@ -64,3 +64,25 @@ def test_no_failed_requests_on_page_load(tubio_page):
     tubio_page.wait_for_load_state("networkidle")
 
     assert len(failed_requests) == 0, f"Failed audio requests on page load: {failed_requests}"
+
+
+def test_trackbar_volume_controls_present(tubio_page):
+    """Persistent player exposes volume controls."""
+    expect(tubio_page.locator("#trackbar-mute")).to_be_visible()
+    expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
+
+
+def test_trackbar_volume_applies_to_audio_elements(tubio_page):
+    """Changing the volume slider updates audio elements and persists the value."""
+    tubio_page.evaluate("""
+        const audio = document.createElement('audio');
+        audio.id = 'audio-volume-test';
+        document.body.appendChild(audio);
+        initializeAudioEventListeners();
+        initializeTrackbarVolume();
+    """)
+
+    tubio_page.locator("#trackbar-volume").evaluate("(el) => { el.value = '35'; el.dispatchEvent(new Event('input', { bubbles: true })); }")
+
+    assert tubio_page.evaluate("document.getElementById('audio-volume-test').volume") == pytest.approx(0.35)
+    assert tubio_page.evaluate("localStorage.getItem(document.getElementById('tubio-trackbar').dataset.volumeStorageKey)") == "35"

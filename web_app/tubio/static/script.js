@@ -39,6 +39,143 @@ function setPlayButtonState(playButton, isPlaying) {
     playButton.classList.toggle('btn-outline-primary', !isPlaying);
 }
 
+let trackbarVolumePercent = null;
+let trackbarMuted = false;
+
+function getTrackbarVolumeRange() {
+    return document.getElementById('trackbar-volume');
+}
+
+function clampTrackbarVolumePercent(value) {
+    const range = getTrackbarVolumeRange();
+    if (!range) return value;
+
+    const min = Number(range.min);
+    const max = Number(range.max);
+    const fallback = Number(range.value);
+    let volume = Number(value);
+
+    if (!Number.isFinite(volume)) {
+        volume = Number.isFinite(fallback) ? fallback : min;
+    }
+
+    return Math.min(max, Math.max(min, volume));
+}
+
+function getTrackbarVolumeConfig() {
+    const trackbar = document.getElementById('tubio-trackbar');
+    const range = getTrackbarVolumeRange();
+    return {
+        defaultVolume: clampTrackbarVolumePercent(trackbar ? trackbar.dataset.defaultVolume : range.value),
+        volumeStorageKey: trackbar ? trackbar.dataset.volumeStorageKey : '',
+        mutedStorageKey: trackbar ? trackbar.dataset.mutedStorageKey : ''
+    };
+}
+
+function normalizeTrackbarVolume(percent) {
+    const range = getTrackbarVolumeRange();
+    if (!range) return 1;
+
+    const min = Number(range.min);
+    const max = Number(range.max);
+    if (max <= min) return 0;
+
+    return (clampTrackbarVolumePercent(percent) - min) / (max - min);
+}
+
+function readStoredTrackbarVolume(config) {
+    try {
+        const stored = localStorage.getItem(config.volumeStorageKey);
+        return stored === null ? config.defaultVolume : clampTrackbarVolumePercent(stored);
+    } catch (e) {
+        return config.defaultVolume;
+    }
+}
+
+function readStoredTrackbarMuted(config) {
+    try {
+        return localStorage.getItem(config.mutedStorageKey) === '1';
+    } catch (e) {
+        return false;
+    }
+}
+
+function persistTrackbarVolume(config) {
+    try {
+        localStorage.setItem(config.volumeStorageKey, String(Math.round(trackbarVolumePercent)));
+        localStorage.setItem(config.mutedStorageKey, trackbarMuted ? '1' : '0');
+    } catch (e) {}
+}
+
+function applyTrackbarVolume(audio) {
+    if (!audio || trackbarVolumePercent === null) return;
+    audio.volume = normalizeTrackbarVolume(trackbarVolumePercent);
+    audio.muted = trackbarMuted;
+}
+
+function applyTrackbarVolumeToAll() {
+    document.querySelectorAll('audio').forEach(audio => applyTrackbarVolume(audio));
+}
+
+function updateTrackbarVolumeUI() {
+    const range = getTrackbarVolumeRange();
+    const button = document.getElementById('trackbar-mute');
+    if (!range || !button || trackbarVolumePercent === null) return;
+
+    const min = Number(range.min);
+    const max = Number(range.max);
+    const midpoint = min + ((max - min) / 2);
+    const icon = button.querySelector('i');
+
+    range.value = String(Math.round(trackbarVolumePercent));
+    range.setAttribute('aria-valuetext', `${Math.round(trackbarVolumePercent)}%`);
+    button.title = trackbarMuted ? 'Unmute' : 'Mute';
+    button.setAttribute('aria-label', button.title);
+
+    if (!icon) return;
+    if (trackbarMuted || trackbarVolumePercent <= min) {
+        icon.className = 'bi bi-volume-mute-fill';
+    } else if (trackbarVolumePercent <= midpoint) {
+        icon.className = 'bi bi-volume-down-fill';
+    } else {
+        icon.className = 'bi bi-volume-up-fill';
+    }
+}
+
+function initializeTrackbarVolume() {
+    const range = getTrackbarVolumeRange();
+    if (!range) return;
+
+    const config = getTrackbarVolumeConfig();
+    trackbarVolumePercent = readStoredTrackbarVolume(config);
+    trackbarMuted = readStoredTrackbarMuted(config);
+    updateTrackbarVolumeUI();
+    applyTrackbarVolumeToAll();
+}
+
+function setTrackbarVolume(value) {
+    const config = getTrackbarVolumeConfig();
+    const range = getTrackbarVolumeRange();
+    const min = range ? Number(range.min) : trackbarVolumePercent;
+
+    trackbarVolumePercent = clampTrackbarVolumePercent(value);
+    if (trackbarVolumePercent > min) {
+        trackbarMuted = false;
+    }
+
+    persistTrackbarVolume(config);
+    updateTrackbarVolumeUI();
+    applyTrackbarVolumeToAll();
+}
+
+function toggleTrackbarMute() {
+    const config = getTrackbarVolumeConfig();
+    trackbarMuted = !trackbarMuted;
+    persistTrackbarVolume(config);
+    updateTrackbarVolumeUI();
+    applyTrackbarVolumeToAll();
+}
+
 function switchTab(tabName) {
     // Remove active class from all navbar tabs
     document.querySelectorAll('#search-nav-tab, #playlists-nav-tab').forEach(tab => {
@@ -351,6 +488,7 @@ async function updateContent(data) {
                 initializeLazyThumbnails();
                 initializeTooltips();
                 initializeSidebar();
+                initializeTrackbarVolume();
                 updateTrackbar(null);
                 updateTrackbarScrubber();
             }
@@ -960,6 +1098,7 @@ function initializeAudioEventListeners() {
         audio.addEventListener('pause', audio._pauseHandler);
         audio.addEventListener('timeupdate', audio._timeHandler);
         audio.addEventListener('loadedmetadata', audio._metaHandler);
+        applyTrackbarVolume(audio);
     });
 }
 
@@ -1230,6 +1369,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeLazyThumbnails();
     initializeTooltips();
     initializeSidebar();
+    initializeTrackbarVolume();
     updateTrackbar(null);
     updateTrackbarScrubber();
 
@@ -1237,6 +1377,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (trackbarScrubber) {
         trackbarScrubber.addEventListener('input', function() {
             if (currentTrackCrc) seekTrack(currentTrackCrc, this.value);
+        });
+    }
+
+    const trackbarVolume = document.getElementById('trackbar-volume');
+    if (trackbarVolume) {
+        trackbarVolume.addEventListener('input', function() {
+            setTrackbarVolume(this.value);
         });
     }
 });

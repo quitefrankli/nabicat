@@ -33,7 +33,18 @@ def before_request():
 
 @tubio_api.context_processor
 def inject_app_name():
-    return dict(app_name='Tubio')
+    cfg = ConfigManager().tubio
+    return dict(
+        app_name='Tubio',
+        tubio_player=dict(
+            volume_min_percent=cfg.trackbar_volume_min_percent,
+            volume_max_percent=cfg.trackbar_volume_max_percent,
+            volume_step_percent=cfg.trackbar_volume_step_percent,
+            default_volume_percent=cfg.trackbar_default_volume_percent,
+            volume_storage_key=cfg.trackbar_volume_storage_key,
+            muted_storage_key=cfg.trackbar_muted_storage_key,
+        ),
+    )
 
 def get_cached_yt_vid_ids(user: User|None = None) -> Set[str]:
     metadata = DataInterface().get_metadata()

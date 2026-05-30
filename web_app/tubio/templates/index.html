@@ -115,7 +115,10 @@
 </div>
 
 <!-- Persistent bottom trackbar -->
-<div class="tubio-trackbar" id="tubio-trackbar" data-active="false">
+<div class="tubio-trackbar" id="tubio-trackbar" data-active="false"
+     data-default-volume="{{ tubio_player.default_volume_percent }}"
+     data-volume-storage-key="{{ tubio_player.volume_storage_key }}"
+     data-muted-storage-key="{{ tubio_player.muted_storage_key }}">
     <div class="trackbar-info">
         <div class="trackbar-thumb-wrap">
             <img class="trackbar-thumb" id="trackbar-thumb" alt="" hidden>
@@ -151,6 +154,18 @@
         </div>
     </div>
     <div class="trackbar-actions">
+        <div class="trackbar-volume">
+            <button class="trackbar-btn trackbar-btn-secondary" id="trackbar-mute" onclick="toggleTrackbarMute()" title="Mute" aria-label="Mute">
+                <i class="bi bi-volume-up-fill"></i>
+            </button>
+            <label class="visually-hidden" for="trackbar-volume">Volume</label>
+            <input type="range" class="trackbar-range trackbar-volume-range" id="trackbar-volume"
+                   min="{{ tubio_player.volume_min_percent }}"
+                   max="{{ tubio_player.volume_max_percent }}"
+                   value="{{ tubio_player.default_volume_percent }}"
+                   step="{{ tubio_player.volume_step_percent }}"
+                   aria-label="Volume">
+        </div>
         <button class="trackbar-btn trackbar-btn-secondary" onclick="toggleSidebar()" title="All Playlists">
             <i class="bi bi-collection-play"></i>
         </button>
