@@ -46,6 +46,23 @@ function getTrackbarVolumeRange() {
     return document.getElementById('trackbar-volume');
 }
 
+function getTrackbarVolumeControl() {
+    return document.querySelector('.trackbar-volume');
+}
+
+function setTrackbarVolumePopoverOpen(isOpen) {
+    const control = getTrackbarVolumeControl();
+    const button = document.getElementById('trackbar-mute');
+    if (!control || !button) return;
+
+    control.classList.toggle('is-open', isOpen);
+    button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function isTouchVolumePopover() {
+    return window.matchMedia('(hover: none), (pointer: coarse)').matches;
+}
+
 function clampTrackbarVolumePercent(value) {
     const range = getTrackbarVolumeRange();
     if (!range) return value;
@@ -151,6 +168,53 @@ function initializeTrackbarVolume() {
     trackbarMuted = readStoredTrackbarMuted(config);
     updateTrackbarVolumeUI();
     applyTrackbarVolumeToAll();
+}
+
+function initializeTrackbarVolumePopover() {
+    const control = getTrackbarVolumeControl();
+    const button = document.getElementById('trackbar-mute');
+    const range = getTrackbarVolumeRange();
+    if (!control || !button || !range) return;
+
+    button.addEventListener('click', function(event) {
+        if (isTouchVolumePopover() && !control.classList.contains('is-open')) {
+            event.preventDefault();
+            setTrackbarVolumePopoverOpen(true);
+            return;
+        }
+
+        toggleTrackbarMute();
+    });
+
+    control.addEventListener('mouseenter', () => {
+        button.setAttribute('aria-expanded', 'true');
+    });
+    control.addEventListener('mouseleave', () => {
+        if (!control.classList.contains('is-open') && !control.contains(document.activeElement)) {
+            button.setAttribute('aria-expanded', 'false');
+        }
+    });
+    control.addEventListener('focusin', () => {
+        button.setAttribute('aria-expanded', 'true');
+    });
+    control.addEventListener('focusout', (event) => {
+        if (!control.classList.contains('is-open') && !control.contains(event.relatedTarget)) {
+            button.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    document.addEventListener('click', function(event) {
+        if (!control.contains(event.target)) {
+            setTrackbarVolumePopoverOpen(false);
+        }
+    });
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            setTrackbarVolumePopoverOpen(false);
+            button.blur();
+        }
+    });
 }
 
 function setTrackbarVolume(value) {
@@ -1370,6 +1434,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeTooltips();
     initializeSidebar();
     initializeTrackbarVolume();
+    initializeTrackbarVolumePopover();
     updateTrackbar(null);
     updateTrackbarScrubber();
 

@@ -67,8 +67,58 @@ def test_no_failed_requests_on_page_load(tubio_page):
 
 
 def test_trackbar_volume_controls_present(tubio_page):
-    """Persistent player exposes volume controls."""
+    """Persistent player exposes volume controls in a compact popover."""
     expect(tubio_page.locator("#trackbar-mute")).to_be_visible()
+    expect(tubio_page.locator("#trackbar-volume")).not_to_be_visible()
+    tubio_page.locator("#trackbar-mute").focus()
+    expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
+
+
+def test_trackbar_actions_align_with_main_controls(tubio_page):
+    """Volume and playlist controls align with the main playback controls."""
+    positions = tubio_page.evaluate("""
+        () => {
+            const play = document.getElementById('trackbar-playpause').getBoundingClientRect();
+            const volume = document.getElementById('trackbar-mute').getBoundingClientRect();
+            const playlist = document.querySelector('.trackbar-actions > button').getBoundingClientRect();
+            const trackbar = document.getElementById('tubio-trackbar').getBoundingClientRect();
+            return {
+                playCenterY: play.top + play.height / 2,
+                volumeCenterY: volume.top + volume.height / 2,
+                playlistCenterY: playlist.top + playlist.height / 2,
+                playCenterX: play.left + play.width / 2,
+                trackbarCenterX: trackbar.left + trackbar.width / 2,
+                playlistRight: playlist.right,
+                trackbarRight: trackbar.right
+            };
+        }
+    """)
+
+    assert abs(positions["playCenterY"] - positions["volumeCenterY"]) <= 2
+    assert abs(positions["playCenterY"] - positions["playlistCenterY"]) <= 2
+    assert abs(positions["playCenterX"] - positions["trackbarCenterX"]) <= 24
+    assert positions["trackbarRight"] - positions["playlistRight"] <= 24
+
+
+def test_trackbar_volume_hover_path_stays_open(tubio_page):
+    """Desktop hover path from the volume icon to slider keeps the popover open."""
+    tubio_page.locator("#trackbar-mute").hover()
+    expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
+
+    positions = tubio_page.evaluate("""
+        () => {
+            const button = document.getElementById('trackbar-mute').getBoundingClientRect();
+            const popover = document.getElementById('trackbar-volume-popover').getBoundingClientRect();
+            return {
+                x: button.left + button.width / 2,
+                bridgeY: popover.bottom + ((button.top - popover.bottom) / 2),
+                sliderY: popover.top + popover.height / 2
+            };
+        }
+    """)
+    tubio_page.mouse.move(positions["x"], positions["bridgeY"])
+    expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
+    tubio_page.mouse.move(positions["x"], positions["sliderY"])
     expect(tubio_page.locator("#trackbar-volume")).to_be_visible()
 
 
