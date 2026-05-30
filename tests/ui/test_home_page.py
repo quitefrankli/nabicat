@@ -51,6 +51,13 @@ def test_version_badge_displayed(logged_in_page):
     expect(logged_in_page.locator("code")).to_be_visible()
 
 
+def test_cache_controls_display_after_service_worker_ready(logged_in_page):
+    """Test that cache usage and clear controls appear on the landing page."""
+    expect(logged_in_page.locator("#cacheInfoCard")).to_be_visible(timeout=10000)
+    expect(logged_in_page.locator("#cacheUsageText")).not_to_have_text("—")
+    expect(logged_in_page.locator("#clearCacheBtn")).to_be_visible()
+
+
 def test_navbar_present(logged_in_page):
     """Test that the navigation bar is present with key elements."""
     expect(logged_in_page.locator("nav")).to_be_visible()

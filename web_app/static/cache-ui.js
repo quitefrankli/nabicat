@@ -21,10 +21,9 @@ async function updateCacheInfo() {
         const info = await window.cacheManager.getCacheInfo();
         if (info.quota === 0) return;
 
-        const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
         cacheCard.style.display = 'block';
         document.getElementById('cacheUsageText').textContent =
-            `${formatFileSize(info.usage)} / ${formatFileSize(maxSize)}`;
+            `${formatFileSize(info.usage)} / ${formatFileSize(info.maxSize)}`;
     } catch (error) {
         console.error('Failed to get cache info:', error);
     }

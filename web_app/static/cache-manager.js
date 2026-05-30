@@ -7,7 +7,10 @@ class CacheManager {
     constructor() {
         this.swRegistration = null;
         this.isSupported = 'serviceWorker' in navigator && 'caches' in window;
-        this.MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024; // 10GB limit
+        const config = window.NABICAT_CACHE_CONFIG || {};
+        this.MAX_CACHE_SIZE = config.maxCacheSize || 0;
+        this.readyTimeoutMs = config.serviceWorkerReadyTimeoutMs || 5000;
+        this.messageTimeoutMs = config.serviceWorkerMessageTimeoutMs || 5000;
     }
 
     /**
@@ -26,28 +29,47 @@ class CacheManager {
 
             console.log('[Cache] Service Worker registered');
 
-            // Wait for activation
-            if (this.swRegistration.active) {
-                return true;
-            }
-
-            return new Promise((resolve) => {
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    console.log('[Cache] Service Worker activated');
-                    resolve(true);
-                });
-            });
+            await this.waitForReady();
+            return this.isAvailable();
         } catch (error) {
             console.error('[Cache] Service Worker registration failed:', error);
             return false;
         }
     }
 
+    async waitForReady() {
+        if (navigator.serviceWorker.controller || this.swRegistration.active) {
+            return true;
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                navigator.serviceWorker.removeEventListener('controllerchange', finish);
+                console.log('[Cache] Service Worker ready');
+                resolve(true);
+            };
+
+            const timeout = window.setTimeout(finish, this.readyTimeoutMs);
+            navigator.serviceWorker.ready.then((registration) => {
+                this.swRegistration = registration;
+                window.clearTimeout(timeout);
+                finish();
+            }).catch(() => finish());
+            navigator.serviceWorker.addEventListener('controllerchange', finish);
+        });
+    }
+
     /**
      * Check if caching is available
      */
     isAvailable() {
-        return this.isSupported && this.swRegistration !== null;
+        return this.isSupported && this.swRegistration !== null && (
+            navigator.serviceWorker.controller || this.swRegistration.active
+        );
     }
 
     /**
@@ -148,6 +170,7 @@ class CacheManager {
     sendMessage(message, channel) {
         return new Promise((resolve, reject) => {
             channel.port1.onmessage = (event) => {
+                window.clearTimeout(timeout);
                 if (event.data.error) {
                     reject(new Error(event.data.error));
                 } else {
@@ -155,9 +178,15 @@ class CacheManager {
                 }
             };
 
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage(message, [channel.port2]);
+            const worker = navigator.serviceWorker.controller || this.swRegistration?.active;
+            const timeout = window.setTimeout(() => {
+                reject(new Error('Service worker did not respond'));
+            }, this.messageTimeoutMs);
+
+            if (worker) {
+                worker.postMessage(message, [channel.port2]);
             } else {
+                window.clearTimeout(timeout);
                 reject(new Error('No service worker controller'));
             }
         });
@@ -185,6 +214,16 @@ function _initCacheManager() {
     window.cacheManager.init().then(() => {
         window.dispatchEvent(new Event('cacheManagerReady'));
     });
+
+    if (window.cacheManager.isSupported) {
+        navigator.serviceWorker.ready.then((registration) => {
+            window.cacheManager.swRegistration = registration;
+            window.dispatchEvent(new Event('cacheManagerReady'));
+        });
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.dispatchEvent(new Event('cacheManagerReady'));
+        });
+    }
 }
 
 if (document.readyState === 'loading') {

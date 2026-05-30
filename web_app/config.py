@@ -350,6 +350,9 @@ class ConfigManager:
             '/dev/terminal/output',
         }
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
+        self.cache_browser_max_size_bytes = 10 * 1024 * 1024 * 1024
+        self.cache_service_worker_ready_timeout_ms = 5000
+        self.cache_service_worker_message_timeout_ms = 5000
         self.smtp_port = 587
         self.project_dir = Path.cwd()
 

@@ -28,7 +28,13 @@ register_all_blueprints(app)
 
 @app.context_processor
 def inject_app_name():
-    return dict(app_name="NabiCat")
+    config = ConfigManager()
+    return dict(
+        app_name="NabiCat",
+        cache_browser_max_size_bytes=config.cache_browser_max_size_bytes,
+        cache_service_worker_ready_timeout_ms=config.cache_service_worker_ready_timeout_ms,
+        cache_service_worker_message_timeout_ms=config.cache_service_worker_message_timeout_ms,
+    )
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
