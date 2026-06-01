@@ -13,13 +13,15 @@ from packaging.version import Version
 from typing import * # type: ignore
 from pathlib import Path
 from email.mime.text import MIMEText
-from flask import abort, render_template, request, send_from_directory
+from flask import Response, abort, render_template, request, send_from_directory, url_for
 from flask_apscheduler import APScheduler
 from logging.handlers import RotatingFileHandler
+from xml.sax.saxutils import escape as xml_escape
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.helpers import get_ip, get_all_data_interfaces, register_all_blueprints
+from web_app.hammock.data_interface import DataInterface as HammockDataInterface
 from web_app.tubio.audio_downloader import AudioDownloader
 from web_app.app import app
 
@@ -217,6 +219,33 @@ def home():
 def service_worker():
     """Serve service worker from root for proper scope"""
     return send_from_directory('static', 'service-worker.js', mimetype='application/javascript')
+
+@app.route('/sitemap.xml')
+def sitemap():
+    cfg = ConfigManager()
+    base_url = cfg.site_url.rstrip("/")
+    urls = [
+        url_for('home'),
+        url_for('hammock.index'),
+        url_for('crosswords.index'),
+        url_for('simulations_api.index'),
+        url_for('simulations_api.game_of_life'),
+    ]
+    for project in HammockDataInterface().get_posts_by_project():
+        for post in project.posts:
+            urls.append(url_for('hammock.view_post', project=project.name, post=post))
+
+    locs = "\n".join(
+        f"  <url><loc>{xml_escape(base_url + path)}</loc></url>"
+        for path in dict.fromkeys(urls)
+    )
+    return Response(
+        f'<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f'{locs}\n'
+        f'</urlset>\n',
+        mimetype='application/xml',
+    )
 
 def configure_logging(debug: bool) -> None:
     config = ConfigManager()
