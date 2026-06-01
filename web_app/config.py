@@ -333,6 +333,7 @@ class ConfigManager:
         self._initialized = True
         self.use_offline_syncer = True
         self.debug_mode = False
+        self.site_url = getenv("SITE_URL") or "https://nabicat.site"
         self.backup_max_count = 8
         # Requests matching these prefixes are silently dropped (404, no log) — automated bots/scanners probing for common vulnerabilities
         self.known_bot_prefixes = {

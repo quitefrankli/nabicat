@@ -3,7 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ app_name }}</title>
+    <title>{% block page_title %}{{ app_name }}{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}NabiCat is a collection of small web apps, tools, posts, and experiments.{% endblock %}">
+    <link rel="canonical" href="{% block canonical_url %}{{ request.base_url }}{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}{{ self.page_title() | trim }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ self.meta_description() | trim }}{% endblock %}">
+    <meta property="og:url" content="{% block og_url %}{{ self.canonical_url() | trim }}{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
