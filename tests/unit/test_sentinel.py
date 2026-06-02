@@ -1308,10 +1308,36 @@ def test_credential_cache_round_trips_but_is_excluded_from_backup(tmp_path):
     assert loaded.card.card_number == "4242424242424242"
     assert data.credential_cache_file.exists()
 
+    # A real run on disk alongside the cache.
+    run_dir = data.runs_dir / ("a" * 32)
+    (run_dir / "screenshots").mkdir(parents=True)
+    (run_dir / "report.json").write_text('{"run_id": "%s"}' % ("a" * 32))
+    (run_dir / "screenshots" / "step-00.png").write_bytes(b"png")
+
     backup = tmp_path / "backup"
     backup.mkdir()
     data.backup_data(backup)
+    # Run data IS backed up (a no-op backup would wrongly pass the exclusion
+    # check below, so assert inclusion too)...
+    assert (backup / "sentinel" / "runs" / ("a" * 32) / "report.json").exists()
+    assert (backup / "sentinel" / "runs" / ("a" * 32) / "screenshots" / "step-00.png").exists()
+    # ...but the plaintext credential cache is NOT.
     assert not (backup / "sentinel" / "credential_cache.json").exists()
+
+
+def test_sentinel_backup_is_noop_when_no_data_dir(tmp_path):
+    """A missing sentinel dir must not raise (fresh install, no runs)."""
+    from web_app.sentinel.data_interface import DataInterface as SentinelData
+
+    data = SentinelData()
+    data.sentinel_dir = tmp_path / "sentinel"  # does not exist
+    data.runs_dir = data.sentinel_dir / "runs"
+    data.credential_cache_file = data.sentinel_dir / "credential_cache.json"
+
+    backup = tmp_path / "backup"
+    backup.mkdir()
+    data.backup_data(backup)  # must not raise
+    assert not (backup / "sentinel").exists()
 
 
 def test_create_batch_caches_credentials_only_when_opted_in(client, tmp_path):

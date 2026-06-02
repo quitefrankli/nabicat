@@ -472,3 +472,30 @@ class TestGalleryEditRoute:
         assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == [
             {"type": "image", "filename": "photo.webp"}
         ]
+
+
+class TestHammockBackup:
+    def test_backup_copies_meta_and_nested_posts(self, projects_dir, tmp_path):
+        """backup_data copies the whole content dir (meta.json + per-post files)
+        into a namespaced 'hammock/' subdir of the shared backup dir."""
+        di = DataInterface()
+        _make_post(projects_dir, "blog", "hello", date="2026-01-01")
+
+        backup_dir = tmp_path / "backup"
+        backup_dir.mkdir()
+        di.backup_data(backup_dir)
+
+        assert (backup_dir / "hammock" / "meta.json").exists()
+        assert (backup_dir / "hammock" / "projects" / "blog" / "hello" / "index.html").exists()
+        # The copied meta still describes the post.
+        copied_meta = json.loads((backup_dir / "hammock" / "meta.json").read_text())
+        assert "hello" in copied_meta["projects"]["blog"]["posts"]
+
+    def test_backup_is_noop_when_no_content_dir(self, projects_dir, tmp_path):
+        """A missing content dir must not raise (fresh install, nothing posted)."""
+        di = DataInterface()
+        shutil.rmtree(di._content_dir)
+        backup_dir = tmp_path / "backup"
+        backup_dir.mkdir()
+        di.backup_data(backup_dir)  # must not raise
+        assert not (backup_dir / "hammock").exists()
