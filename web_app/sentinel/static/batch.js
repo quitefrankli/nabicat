@@ -40,6 +40,9 @@ function initBatchBuilder() {
   }
 
   function wireItem(item) {
+    item.querySelector('.sentinel-batch-item-duplicate')?.addEventListener('click', () => {
+      duplicateItem(item);
+    });
     item.querySelector('.sentinel-batch-item-remove')?.addEventListener('click', () => {
       item.remove();
       updateAddState();
@@ -58,6 +61,16 @@ function initBatchBuilder() {
     const node = template.content.firstElementChild.cloneNode(true);
     itemsContainer.appendChild(node);
     wireItem(node);
+    updateAddState();
+    return node;
+  }
+
+  function duplicateItem(item) {
+    if (itemsContainer.children.length >= maxItems) return null;
+    const node = addItem();
+    if (!node) return null;
+    populateItem(node, serializeItem(item));
+    item.after(node);
     updateAddState();
     return node;
   }
@@ -85,10 +98,28 @@ function initBatchBuilder() {
     check('allow_accounts', data.allow_accounts);
     check('allow_external', data.allow_external);
     check('allow_financial', data.allow_financial);
+    if (data.account_credentials) {
+      set('account_username', data.account_credentials.username || '');
+      set('account_password', data.account_credentials.password || '');
+      const extras = node.querySelector('.sentinel-account-extra-fields');
+      if (extras) {
+        extras.textContent = '';
+        Object.entries(data.account_credentials.extras || {}).forEach(([key, value]) => {
+          addExtraRow(extras, key, value);
+        });
+      }
+    }
+    if (data.card_number) set('card_number', data.card_number);
+    if (data.card_expiry) set('card_expiry', data.card_expiry);
+    if (data.card_cvv) set('card_cvv', data.card_cvv);
   }
 
   function updateAddState() {
-    addButton.disabled = itemsContainer.children.length >= maxItems;
+    const full = itemsContainer.children.length >= maxItems;
+    addButton.disabled = full;
+    itemsContainer.querySelectorAll('.sentinel-batch-item-duplicate').forEach((button) => {
+      button.disabled = full;
+    });
   }
 
   function serializeItem(item) {

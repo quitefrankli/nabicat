@@ -958,6 +958,7 @@ body.sentinel-resizing * {
 
 .sentinel-sidebar-actions {
   display: flex;
+  justify-content: center;
   gap: 0;
 }
 
@@ -1091,7 +1092,8 @@ body.sentinel-resizing * {
 .sentinel-batch-item-head {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .sentinel-batch-list,
