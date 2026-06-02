@@ -4,7 +4,7 @@ import base64
 import re
 import uuid
 
-from flask import Blueprint, Response, abort, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
 from flask_login import current_user, login_required
 from markdown_it import MarkdownIt
 from markupsafe import Markup
@@ -367,8 +367,7 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
     )
 
 
-@sentinel_api.route("/")
-def index():
+def _run_form_context() -> dict:
     cfg = ConfigManager()
     prefill_url = str(request.args.get("url", "")).strip()
     prefill_prompt = str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars]
@@ -394,8 +393,7 @@ def index():
     raw_region = str(request.args.get("region", "")).strip()
     prefill_region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
 
-    return render_template(
-        "sentinel_index.html",
+    return dict(
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
         prefill_url=prefill_url,
         prefill_prompt=prefill_prompt,
@@ -409,6 +407,29 @@ def index():
         prefill_region=prefill_region,
         **_run_form_options(),
     )
+
+
+@sentinel_api.route("/")
+def index():
+    if request.args:
+        return redirect(url_for("sentinel.new_run", **request.args))
+    cfg = ConfigManager()
+    reports = DataInterface().list_reports()[: cfg.sentinel.max_retained_runs]
+    batches = _derive_batches(reports, cfg.sentinel.max_retained_batches)
+    active_statuses = {"queued", "running", "summarizing"}
+    completed_statuses = {"completed", "timed_out", "cancelled", "failed"}
+    stats = {
+        "total_runs": len(reports),
+        "active_runs": sum(1 for run in reports if run.get("status") in active_statuses),
+        "completed_runs": sum(1 for run in reports if run.get("status") in completed_statuses),
+        "batches": len(batches),
+    }
+    return render_template("sentinel_index.html", recent_runs=reports[:3], landing_stats=stats)
+
+
+@sentinel_api.route("/run")
+def new_run():
+    return render_template("sentinel_run.html", **_run_form_context())
 
 
 @sentinel_api.route("/api/runs", methods=["POST"])

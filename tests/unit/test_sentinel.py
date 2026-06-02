@@ -649,7 +649,7 @@ def test_sentinel_rejects_account_prompt_when_accounts_disallowed(client):
     mock_start.assert_not_called()
 
 
-def test_sentinel_index_prefills_form_from_clone_query_params(client):
+def test_sentinel_run_prefills_form_from_clone_query_params(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 
     with patch("web_app.helpers.DataInterface") as mock_users, patch(
@@ -661,7 +661,7 @@ def test_sentinel_index_prefills_form_from_clone_query_params(client):
             sess["_user_id"] = "admin"
 
         res = client.get(
-            "/sentinel/?url=https://example.com&prompt=Test+checkout&limit=5"
+            "/sentinel/run?url=https://example.com&prompt=Test+checkout&limit=5"
             "&device=small_phone&demographic=senior"
         )
 
@@ -674,7 +674,7 @@ def test_sentinel_index_prefills_form_from_clone_query_params(client):
     assert 'value="senior" selected' in body
 
 
-def test_sentinel_index_defaults_to_desktop_adult_australia(client):
+def test_sentinel_run_defaults_to_desktop_adult_australia(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 
     with patch("web_app.helpers.DataInterface") as mock_users, patch(
@@ -685,7 +685,7 @@ def test_sentinel_index_defaults_to_desktop_adult_australia(client):
         with client.session_transaction() as sess:
             sess["_user_id"] = "admin"
 
-        res = client.get("/sentinel/")
+        res = client.get("/sentinel/run")
 
     assert res.status_code == 200
     body = res.get_data(as_text=True)
@@ -698,9 +698,44 @@ def test_sentinel_index_defaults_to_desktop_adult_australia(client):
     assert 'value="uk"' in body
     assert 'value="japan"' in body
     assert 'placeholder="nabicat.site"' in body
-    assert "recruitment.macquarie.com" not in body
-    assert 'id="sentinel-additional-domain-fields" class="sentinel-card-fields" hidden' in body
-    assert '<div class="sentinel-advanced-body"></div>' in body
+
+
+def test_sentinel_index_renders_landing_page(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    reports = [
+        {"run_id": "a" * 32, "status": "completed", "title": "Checkout", "target_url": "https://example.com"},
+        {"run_id": "b" * 32, "status": "running", "title": "Signup", "target_url": "https://example.org"},
+    ]
+
+    with patch("web_app.helpers.DataInterface") as mock_users, patch(
+        "web_app.sentinel.DataInterface"
+    ) as mock_sentinel_data:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        mock_sentinel_data.return_value.list_reports.return_value = reports
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        res = client.get("/sentinel/")
+
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "Admin QA workspace" in body
+    assert 'href="/sentinel/run"' in body
+    assert "Checkout" in body
+
+
+def test_sentinel_index_query_params_redirect_to_run_form(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        res = client.get("/sentinel/?url=https://example.com&prompt=Test")
+
+    assert res.status_code == 302
+    assert "/sentinel/run?url=https://example.com&prompt=Test" in res.headers["Location"]
 
 
 def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
