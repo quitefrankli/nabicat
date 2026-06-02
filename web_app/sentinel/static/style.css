@@ -958,16 +958,18 @@ body.sentinel-resizing * {
 
 .sentinel-sidebar-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0;
 }
 
 .sentinel-sidebar-actions .sentinel-sidebar-new-run,
-.sentinel-sidebar-new-batch {
+.sentinel-sidebar-actions .sentinel-sidebar-new-batch {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  flex: 1;
+  flex: 0 0 50%;
+  width: 50%;
+  min-width: 0;
   /* Slightly smaller than the slider above (slider uses 0.625rem 0.95rem). */
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
@@ -1089,14 +1091,7 @@ body.sentinel-resizing * {
 .sentinel-batch-item-head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.sentinel-batch-item-head .sentinel-batch-item-heading {
-  flex: 1;
-  font-weight: 700;
-  font-family: 'Playfair Display', Georgia, serif;
-  color: var(--hw-forest);
+  justify-content: flex-end;
 }
 
 .sentinel-batch-list,

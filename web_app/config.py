@@ -235,6 +235,7 @@ class SentinelConfig:
     max_batch_items: int = 8          # max runs queued in one batch submit
     max_retained_batches: int = 25    # max derived batch groups shown in sidebar
     batch_name_max_chars: int = 80    # caps the batch label stored on each run
+    batch_name_fallback: str = "Sentinel batch"
     # Provider-agnostic capability tier; LLMConfig.model_for() resolves it
     # to a concrete model for the active api_source.
     llm_tier: str = "strong"  # weak | medium | strong

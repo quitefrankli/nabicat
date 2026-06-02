@@ -15,6 +15,7 @@ from web_app.sentinel.runner import (
     delete_run,
     ensure_screenshot_thumbnail,
     get_run,
+    _generate_title,
     render_report_pdf,
     request_cancel,
     start_run,
@@ -470,13 +471,16 @@ def _sanitize_batch_item(raw: dict) -> dict:
         raise ValueError("Each batch item must be an object.")
     cfg = ConfigManager()
     # _validate_run_params raises on any invalid url/domain/prompt-keyword.
-    _validate_run_params(raw, with_credentials=False)
+    validated = _validate_run_params(raw, with_credentials=False)
+    target = validated["target"]
     label = str(raw.get("label", "")).strip()[: cfg.sentinel.title_max_chars]
     raw_region = str(raw.get("region", "")).strip()
     region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
     return {
         "label": label,
         "url": str(raw.get("url", "")).strip(),
+        "_target_url": target.url,
+        "_target_hostname": target.hostname,
         "prompt": str(raw.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars],
         "title": str(raw.get("title", "")).strip()[: cfg.sentinel.title_max_chars],
         "device": str(raw.get("device", "")).strip(),
@@ -493,18 +497,29 @@ def _sanitize_batch_item(raw: dict) -> dict:
     }
 
 
+def _generate_batch_name(items: list[dict]) -> str:
+    cfg = ConfigManager()
+    first = items[0] if items else {}
+    name = _generate_title({
+        "target_url": first.get("_target_url") or first.get("url", ""),
+        "target_hostname": first.get("_target_hostname", ""),
+        "prompt": first.get("prompt", ""),
+    })
+    return str(name).strip()[: cfg.sentinel.batch_name_max_chars] or cfg.sentinel.batch_name_fallback
+
+
 def _parse_batch_payload(payload) -> tuple[str, list[dict]]:
     """Returns (name, sanitized_items) or raises ValueError."""
     cfg = ConfigManager()
     name = str(payload.get("name", "")).strip()[: cfg.sentinel.batch_name_max_chars]
-    if not name:
-        raise ValueError("Batch name is required.")
     raw_items = payload.get("items")
     if not isinstance(raw_items, list) or not raw_items:
         raise ValueError("A batch must contain at least one run.")
     if len(raw_items) > cfg.sentinel.max_batch_items:
         raise ValueError(f"A batch is limited to {cfg.sentinel.max_batch_items} runs.")
     items = [_sanitize_batch_item(item) for item in raw_items]
+    if not name:
+        name = _generate_batch_name(items)
     return name, items
 
 

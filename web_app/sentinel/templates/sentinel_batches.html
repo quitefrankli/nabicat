@@ -31,7 +31,7 @@
         <div>
           <label class="form-label" for="sentinel-batch-name">Batch name</label>
           <input class="form-control form-control-lg" type="text" id="sentinel-batch-name" name="name"
-                 maxlength="{{ batch_name_max_chars }}" placeholder="e.g. Device coverage sweep" required>
+                 maxlength="{{ batch_name_max_chars }}" placeholder="Auto-generated if blank">
         </div>
 
         <div id="sentinel-batch-items" class="sentinel-batch-items"></div>
@@ -55,7 +55,6 @@
 <template id="sentinel-batch-item-template">
   <div class="sentinel-batch-item">
     <div class="sentinel-batch-item-head">
-      <span class="sentinel-batch-item-heading">Run</span>
       <button type="button" class="btn btn-sm btn-outline-secondary sentinel-batch-item-remove"
               aria-label="Remove run">
         <i class="bi bi-x-lg"></i>

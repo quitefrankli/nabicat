@@ -5,7 +5,7 @@ import pytest
 from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, register_all_blueprints
-from web_app.sentinel import _limit_from_request, _report_payload, _validate_additional_domains
+from web_app.sentinel import _limit_from_request, _parse_batch_payload, _report_payload, _validate_additional_domains
 from web_app.sentinel.actions import ActionValidationError, parse_agent_action
 from web_app.sentinel.providers import (
     _build_codex_cmd,
@@ -1140,6 +1140,19 @@ def _login_admin(client, mock_users):
     mock_users.return_value.load_users.return_value = {"admin": admin}
     with client.session_transaction() as sess:
         sess["_user_id"] = "admin"
+
+
+def test_parse_batch_payload_generates_name_when_blank():
+    payload = {"name": " ", "items": [{"url": "https://example.com", "prompt": "check checkout"}]}
+
+    with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+        "web_app.sentinel._generate_title", return_value="Checkout smoke test"
+    ):
+        mock_validate.return_value = ValidatedTarget("https://example.com/", "example.com")
+        name, items = _parse_batch_payload(payload)
+
+    assert name == "Checkout smoke test"
+    assert items[0]["url"] == "https://example.com"
 
 
 def test_create_batch_queues_runs_inline_without_persisting_a_batch(client, tmp_path):
