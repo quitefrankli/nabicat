@@ -11,6 +11,7 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface, utc_now_iso
+from web_app.sentinel.models import Report
 from web_app.sentinel.runner import (
     delete_run,
     ensure_screenshot_thumbnail,
@@ -101,7 +102,7 @@ def require_elevated():
         abort(403)
 
 
-def _derive_batches(reports: list[dict], max_n: int | None = None) -> list[dict]:
+def _derive_batches(reports: list[Report], max_n: int | None = None) -> list[dict]:
     """Group runs by batch_id into batch summaries, newest-first.
 
     A batch is no longer a saved entity — it is just the set of runs that share
@@ -110,23 +111,23 @@ def _derive_batches(reports: list[dict], max_n: int | None = None) -> list[dict]
     """
     groups: dict[str, dict] = {}
     for run in reports:
-        bid = run.get("batch_id")
+        bid = run.batch_id
         if not bid:
             continue
         group = groups.get(bid)
         if group is None:
             groups[bid] = {
                 "batch_id": bid,
-                "name": run.get("batch_label") or bid,
-                "owner": run.get("owner", ""),
-                "created_at": run.get("created_at", ""),
+                "name": run.batch_label or bid,
+                "owner": run.owner,
+                "created_at": run.created_at,
                 "items": [run],
             }
         else:
             group["items"].append(run)
             # Earliest run in the group is the batch's creation time.
-            if run.get("created_at", "") and run["created_at"] < group["created_at"]:
-                group["created_at"] = run["created_at"]
+            if run.created_at and run.created_at < group["created_at"]:
+                group["created_at"] = run.created_at
     derived = list(groups.values())
     return derived[:max_n] if max_n is not None else derived
 
@@ -271,23 +272,17 @@ def _render_final_report_for_pdf(markdown_text: str, run_id: str, screenshots: l
     return Markup(md.render(markdown_text or ""))
 
 
-def _report_payload(report: dict) -> dict:
+def _report_payload(report: Report) -> dict:
     cfg = ConfigManager()
-    payload = dict(report)
+    payload = report.model_dump()
     payload["final_report_html"] = str(
-        _render_final_report(
-            str(report.get("final_report", "")),
-            str(report.get("run_id", "")),
-            list(report.get("screenshots", []) or []),
-        )
+        _render_final_report(report.final_report, report.run_id, list(report.screenshots or []))
     )
     payload["screenshot_load_stagger_ms"] = cfg.sentinel.screenshot_load_stagger_ms
     payload["screenshot_load_max_retries"] = cfg.sentinel.screenshot_load_max_retries
     payload["screenshot_load_retry_delay_ms"] = cfg.sentinel.screenshot_load_retry_delay_ms
-    device_key = str(report.get("device") or "")
-    demographic_key = str(report.get("demographic") or "")
-    payload["device_label"] = cfg.sentinel.device_labels.get(device_key, "")
-    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(demographic_key, "")
+    payload["device_label"] = cfg.sentinel.device_labels.get(report.device, "")
+    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(report.demographic, "")
     return payload
 
 
@@ -420,8 +415,8 @@ def index():
     completed_statuses = {"completed", "timed_out", "cancelled", "failed"}
     stats = {
         "total_runs": len(reports),
-        "active_runs": sum(1 for run in reports if run.get("status") in active_statuses),
-        "completed_runs": sum(1 for run in reports if run.get("status") in completed_statuses),
+        "active_runs": sum(1 for run in reports if run.status in active_statuses),
+        "completed_runs": sum(1 for run in reports if run.status in completed_statuses),
         "batches": len(batches),
     }
     return render_template("sentinel_index.html", recent_runs=reports[:3], landing_stats=stats)
@@ -464,8 +459,8 @@ def cancel(run_id: str):
     report = get_run(run_id)
     if report is None:
         abort(404)
-    if report.get("status") not in {"queued", "running", "summarizing"}:
-        return jsonify({"run_id": run_id, "status": report.get("status"), "cancelled": False})
+    if report.status not in {"queued", "running", "summarizing"}:
+        return jsonify({"run_id": run_id, "status": report.status, "cancelled": False})
     cancelled = request_cancel(run_id)
     return jsonify({"run_id": run_id, "cancelled": cancelled})
 
@@ -475,7 +470,7 @@ def delete(run_id: str):
     report = get_run(run_id)
     if report is None:
         abort(404)
-    if report.get("status") in {"queued", "running", "summarizing"}:
+    if report.status in {"queued", "running", "summarizing"}:
         return jsonify({"error": "Run is still active"}), 409
     if not delete_run(run_id):
         abort(404)
@@ -548,15 +543,15 @@ def _batch_child_runs_by_id(batch_id: str) -> list[dict]:
     """All runs sharing this batch_id, as slim status dicts (newest-first)."""
     children = []
     for run in DataInterface().list_reports():
-        if run.get("batch_id") != batch_id:
+        if run.batch_id != batch_id:
             continue
         children.append({
-            "run_id": run.get("run_id"),
-            "status": run.get("status"),
-            "run_outcome": run.get("run_outcome"),
-            "title": run.get("title") or run.get("target_url"),
-            "batch_label": run.get("batch_label", ""),
-            "target_url": run.get("target_url", ""),
+            "run_id": run.run_id,
+            "status": run.status,
+            "run_outcome": run.run_outcome,
+            "title": run.title or run.target_url,
+            "batch_label": run.batch_label,
+            "target_url": run.target_url,
         })
     return children
 
@@ -583,19 +578,18 @@ def _batch_prefill(batch_id: str) -> dict | None:
     for run in reversed(summary["items"]):
         items.append({
             "label": "",
-            "url": run.get("target_url", ""),
-            "title": run.get("title", ""),
-            "prompt": run.get("prompt", ""),
-            "device": run.get("device", ""),
-            "demographic": run.get("demographic", ""),
-            "limit": (run.get("limit_s") or 0) // 60 or None,
-            "allow_accounts": bool(run.get("allow_accounts")),
-            "allow_external": bool(run.get("allow_external")),
-            "allow_financial": bool(run.get("allow_financial")),
-            "additional_domains": "\n".join(run.get("additional_domains") or []),
+            "url": run.target_url,
+            "title": run.title,
+            "prompt": run.prompt,
+            "device": run.device,
+            "demographic": run.demographic,
+            "limit": (run.limit_s or 0) // 60 or None,
+            "allow_accounts": bool(run.allow_accounts),
+            "allow_external": bool(run.allow_external),
+            "allow_financial": bool(run.allow_financial),
+            "additional_domains": "\n".join(run.additional_domains or []),
         })
     return {"name": summary["name"], "items": items}
-    return None
 
 
 @sentinel_api.route("/batches")
@@ -710,22 +704,18 @@ def report_pdf(run_id: str):
     report_data = get_run(run_id)
     if report_data is None:
         abort(404)
-    if report_data.get("status") not in {"completed", "timed_out", "cancelled", "failed"}:
+    if report_data.status not in {"completed", "timed_out", "cancelled", "failed"}:
         return jsonify({"error": "Run is still in progress"}), 409
 
-    payload = dict(report_data)
+    payload = report_data.model_dump()
     payload["final_report_html"] = str(
         _render_final_report_for_pdf(
-            str(report_data.get("final_report", "")),
-            str(report_data.get("run_id", "")),
-            list(report_data.get("screenshots", []) or []),
+            report_data.final_report, report_data.run_id, list(report_data.screenshots or [])
         )
     )
     cfg = ConfigManager()
-    device_key = str(report_data.get("device") or "")
-    demographic_key = str(report_data.get("demographic") or "")
-    payload["device_label"] = cfg.sentinel.device_labels.get(device_key, "")
-    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(demographic_key, "")
+    payload["device_label"] = cfg.sentinel.device_labels.get(report_data.device, "")
+    payload["demographic_label"] = cfg.sentinel.demographic_labels.get(report_data.demographic, "")
 
     html = render_template("sentinel_report_pdf.html", report=payload)
     try:
@@ -733,7 +723,7 @@ def report_pdf(run_id: str):
     except Exception as e:
         return jsonify({"error": f"PDF generation failed: {e}"}), 500
 
-    safe_title = re.sub(r"[^A-Za-z0-9._-]+", "-", str(report_data.get("title") or run_id)).strip("-")[:80] or run_id
+    safe_title = re.sub(r"[^A-Za-z0-9._-]+", "-", str(report_data.title or run_id)).strip("-")[:80] or run_id
     return Response(
         pdf_bytes,
         mimetype="application/pdf",

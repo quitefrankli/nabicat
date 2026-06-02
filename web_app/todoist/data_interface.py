@@ -1,11 +1,10 @@
-import json
 import shutil
 
 from pathlib import Path
 from datetime import datetime
 from typing import * # type: ignore
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from web_app.users import User
 from web_app.data_interface import DataInterface as BaseDataInterface
@@ -24,10 +23,10 @@ class Goal(BaseModel):
     name: str
     state: GoalState
     description: str = ""
-    creation_date: datetime = datetime.now()
+    creation_date: datetime = Field(default_factory=lambda: datetime.now())
     completion_date: Optional[datetime] = None
     planned_completion_date: Optional[datetime] = None
-    last_modified: datetime = datetime.now()
+    last_modified: datetime = Field(default_factory=lambda: datetime.now())
     parent: Optional[int] = None
     children: List[int] = []
 
@@ -42,8 +41,8 @@ class Entry(BaseModel):
     body: str = ""
     mood_rating: float = 0.0
     tags: List[str] = []
-    creation_date: datetime = datetime.now()
-    last_modified: datetime = datetime.now()
+    creation_date: datetime = Field(default_factory=lambda: datetime.now())
+    last_modified: datetime = Field(default_factory=lambda: datetime.now())
 
 
 class Entries(BaseModel):
@@ -56,40 +55,20 @@ class DataInterface(BaseDataInterface):
         self.todoist_data_directory = ConfigManager().save_data_path / "todoist"
 
     def load_goals(self, user: User) -> Goals:
-        data_path = self._get_goals_file(user)
-        self.data_syncer.download_file(data_path)
-        if not data_path.exists():
-            return Goals(goals={})
-
-        with open(data_path, 'r') as file:
-            data = json.load(file)
-
-        return Goals(**data)
+        return self.load_model(self._get_goals_file(user), Goals) or Goals(goals={})
 
     def save_goals(self, data: Goals, user: User) -> None:
-        data_file = self._get_goals_file(user)
-        self.atomic_write(data_file,
-                          data=data.model_dump_json(indent=4, exclude_none=True),
-                          mode="w",
-                          encoding='utf-8')
+        # Whole-blob read-modify-write: concurrent saves for the same user can
+        # clobber each other (last write wins). Atomic write keeps the file
+        # valid but does not serialize overlapping requests.
+        self.save_model(self._get_goals_file(user), data, exclude_none=True)
 
     def load_diary(self, user: User) -> Entries:
-        data_path = self._get_diary_file(user)
-        self.data_syncer.download_file(data_path)
-        if not data_path.exists():
-            return Entries(entries={})
-
-        with open(data_path, 'r') as file:
-            data = json.load(file)
-
-        return Entries(**data)
+        return self.load_model(self._get_diary_file(user), Entries) or Entries(entries={})
 
     def save_diary(self, data: Entries, user: User) -> None:
-        data_file = self._get_diary_file(user)
-        self.atomic_write(data_file,
-                          data=data.model_dump_json(indent=4),
-                          mode="w",
-                          encoding='utf-8')
+        # See save_goals: whole-blob write, last-writer-wins under concurrency.
+        self.save_model(self._get_diary_file(user), data)
 
     def backup_data(self, backup_dir: Path) -> None:
         shutil.copytree(self.todoist_data_directory, backup_dir / "todoist")

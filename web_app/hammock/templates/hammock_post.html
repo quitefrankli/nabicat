@@ -1,7 +1,7 @@
 {% extends "hammock_base.html" %}
 
-{% block page_title %}{{ meta.get('title') or post_name }} - Hammock - NabiCat{% endblock %}
-{% block meta_description %}{{ (meta.get('template-data', {}).get('description') or 'A public Hammock post on NabiCat.') | truncate(155, True, '') }}{% endblock %}
+{% block page_title %}{{ meta.title or post_name }} - Hammock - NabiCat{% endblock %}
+{% block meta_description %}{{ ((meta.template_data.description if meta.template_data else '') or 'A public Hammock post on NabiCat.') | truncate(155, True, '') }}{% endblock %}
 
 {% block page_content %}
 <div class="container-fluid">

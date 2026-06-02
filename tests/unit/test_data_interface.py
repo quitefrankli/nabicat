@@ -363,6 +363,27 @@ class TestDataInterface:
         # File should be cleaned up even after exception
         assert not temp_path.exists()
 
+    def test_save_model_load_model_round_trip(self, mock_config, mock_data_syncer, temp_dir):
+        """save_model then load_model returns an equal model; missing path → None."""
+        from pydantic import BaseModel
+
+        class Sample(BaseModel):
+            name: str
+            count: int = 0
+            tags: list[str] = []
+
+        mock_config.save_data_path = temp_dir / "data"
+        interface = DataInterface()
+        path = temp_dir / "sample.json"
+
+        # Missing file returns None (sync=False so we don't hit the syncer).
+        assert interface.load_model(path, Sample, sync=False) is None
+
+        original = Sample(name="widget", count=3, tags=["a", "b"])
+        interface.save_model(path, original)
+        loaded = interface.load_model(path, Sample, sync=False)
+        assert loaded == original
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

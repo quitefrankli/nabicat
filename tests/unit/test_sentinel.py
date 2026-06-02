@@ -36,8 +36,16 @@ from web_app.sentinel.runner import (
     _screenshot_manifest,
     ensure_screenshot_thumbnail,
 )
+from web_app.sentinel.models import Report, Step
 from web_app.sentinel.target_policy import TargetValidationError, ValidatedTarget, validate_public_web_url
 from web_app.users import User
+
+
+def _mk_report(**kwargs) -> Report:
+    """Build a Report for runner-function tests. run_id defaults to a valid
+    32-hex id; steps/findings/results are coerced by the model from plain dicts."""
+    kwargs.setdefault("run_id", "a" * 32)
+    return Report.model_validate(kwargs)
 
 
 @pytest.fixture
@@ -282,11 +290,32 @@ def test_time_limit_input_is_minutes_capped_at_ten():
     assert _limit_from_request("99") == 600
 
 
+def test_report_loads_legacy_json_and_excludes_private_fields():
+    """A report.json written before the typed schema (with an unknown key) must
+    still load, and runtime-only secrets must never appear in the dump."""
+    legacy = {
+        "run_id": "f" * 32,
+        "status": "completed",
+        "steps": [{"index": 1, "action": "click", "reason": "go", "result": {"ok": True, "url": "u"}}],
+        "findings": [{"severity": "info", "title": "t", "detail": "d"}],
+        "obsolete_legacy_key": "ignored-but-kept",
+    }
+    report = Report.model_validate(legacy)
+    assert report.status == "completed"
+    assert report.steps[0].action == "click"
+
+    report._card_details = {"card_number": "4242"}
+    report._account_credentials = None
+    dumped = report.model_dump_json()
+    assert "_card_details" not in dumped
+    assert "4242" not in dumped
+
+
 def test_finding_details_are_truncated_and_single_line():
-    report = {"findings": []}
+    report = _mk_report()
     _add_finding(report, "info", "Console", "x" * 1000 + "\n" + "y" * 1000)
 
-    detail = report["findings"][0]["detail"]
+    detail = report.findings[0].detail
     assert "\n" not in detail
     assert len(detail) <= 503
     assert detail.endswith("...")
@@ -294,14 +323,14 @@ def test_finding_details_are_truncated_and_single_line():
 
 def test_final_report_prompt_directly_includes_original_prompt():
     prompt = _final_report_prompt(
-        {
-            "prompt": "Does checkout work?",
-            "target_url": "https://example.com",
-            "status": "completed",
-            "steps": [{"action": "click", "reason": "Open cart", "result": {"ok": True}}],
-            "findings": [{"severity": "error", "title": "Broken", "detail": "Button failed"}],
-            "screenshots": ["screenshots/step-01.png"],
-        }
+        _mk_report(
+            prompt="Does checkout work?",
+            target_url="https://example.com",
+            status="completed",
+            steps=[{"index": 1, "action": "click", "reason": "Open cart", "result": {"ok": True}}],
+            findings=[{"severity": "error", "title": "Broken", "detail": "Button failed"}],
+            screenshots=["screenshots/step-01.png"],
+        )
     )
 
     assert "Does checkout work?" in prompt
@@ -310,11 +339,11 @@ def test_final_report_prompt_directly_includes_original_prompt():
 
 def test_report_payload_renders_final_report_markdown_without_html():
     payload = _report_payload(
-        {
-            "run_id": "a" * 32,
-            "screenshots": [],
-            "final_report": "## Summary\n\n- **Works**\n<script>alert(1)</script>",
-        }
+        _mk_report(
+            run_id="a" * 32,
+            screenshots=[],
+            final_report="## Summary\n\n- **Works**\n<script>alert(1)</script>",
+        )
     )
 
     assert "<h2>Summary</h2>" in payload["final_report_html"]
@@ -364,15 +393,15 @@ def test_ensure_summary_heading_prepends_when_missing_and_keeps_when_present():
 def test_final_report_inlines_allowlisted_screenshots_and_drops_other_images():
     run_id = "b" * 32
     payload = _report_payload(
-        {
-            "run_id": run_id,
-            "screenshots": ["screenshots/step-01.png", "screenshots/step-02.png"],
-            "final_report": (
+        _mk_report(
+            run_id=run_id,
+            screenshots=["screenshots/step-01.png", "screenshots/step-02.png"],
+            final_report=(
                 "Login worked: ![login screen](step-01.png)\n\n"
                 "Bad: ![evil](https://evil.example.com/x.png)\n\n"
                 "Missing: ![missing](step-99.png)"
             ),
-        }
+        )
     )
 
     html = payload["final_report_html"]
@@ -516,17 +545,20 @@ def test_save_strips_underscore_keys_before_disk_write():
 
     class FakeData:
         def save_report(self, report):
+            # Serialize like the real save_report would, to confirm secrets are
+            # excluded from what reaches disk.
+            captured["json"] = report.model_dump_json()
             captured["report"] = report
 
-    with patch.object(runner, "DataInterface", return_value=FakeData()):
-        runner._save({
-            "run_id": "r1",
-            "status": "running",
-            "_card_details": {"card_number": "4242", "expiry": "12/30", "cvv": "123"},
-        })
+    report = _mk_report(run_id="r1", status="running")
+    report._card_details = {"card_number": "4242", "expiry": "12/30", "cvv": "123"}
 
-    assert "_card_details" not in captured["report"]
-    assert captured["report"]["run_id"] == "r1"
+    with patch.object(runner, "DataInterface", return_value=FakeData()):
+        runner._save(report)
+
+    assert "_card_details" not in captured["json"]
+    assert "4242" not in captured["json"]
+    assert captured["report"].run_id == "r1"
 
 
 def test_sentinel_account_credentials_round_trip_and_invalid_field_name(client):
@@ -602,22 +634,22 @@ def test_system_prompt_injects_account_credentials_and_login_fail_directive():
 
 def test_detect_login_failure_marks_run_failed_only_for_login_finish_reason():
     base_steps = [{"index": 1, "action": "click", "reason": "", "result": {"url": "https://x/"}}]
-    fail_report = {
-        "allow_accounts": True,
-        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "login failed: invalid password"}],
-    }
+    fail_report = _mk_report(
+        allow_accounts=True,
+        steps=base_steps + [{"index": 2, "action": "finish", "reason": "login failed: invalid password"}],
+    )
     assert _detect_login_failure(fail_report) == "login failed: invalid password"
 
-    other_finish = {
-        "allow_accounts": True,
-        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "All checks passed."}],
-    }
+    other_finish = _mk_report(
+        allow_accounts=True,
+        steps=base_steps + [{"index": 2, "action": "finish", "reason": "All checks passed."}],
+    )
     assert _detect_login_failure(other_finish) == ""
 
-    accounts_off = {
-        "allow_accounts": False,
-        "steps": base_steps + [{"index": 2, "action": "finish", "reason": "login failed: x"}],
-    }
+    accounts_off = _mk_report(
+        allow_accounts=False,
+        steps=base_steps + [{"index": 2, "action": "finish", "reason": "login failed: x"}],
+    )
     assert _detect_login_failure(accounts_off) == ""
 
 
@@ -703,8 +735,8 @@ def test_sentinel_run_defaults_to_desktop_adult_australia(client):
 def test_sentinel_index_renders_landing_page(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
     reports = [
-        {"run_id": "a" * 32, "status": "completed", "title": "Checkout", "target_url": "https://example.com"},
-        {"run_id": "b" * 32, "status": "running", "title": "Signup", "target_url": "https://example.org"},
+        _mk_report(run_id="a" * 32, status="completed", title="Checkout", target_url="https://example.com"),
+        _mk_report(run_id="b" * 32, status="running", title="Signup", target_url="https://example.org"),
     ]
 
     with patch("web_app.helpers.DataInterface") as mock_users, patch(
@@ -759,12 +791,12 @@ def test_annotate_screenshot_draws_boxes_and_writes_png(tmp_path):
 
 
 def test_agent_prompt_omits_body_text_and_rects():
-    report = {
-        "run_id": "a" * 32,
-        "target_url": "https://example.com",
-        "prompt": "test it",
-        "steps": [],
-    }
+    report = _mk_report(
+        run_id="a" * 32,
+        target_url="https://example.com",
+        prompt="test it",
+        steps=[],
+    )
     observation = {
         "url": "https://example.com",
         "title": "Example",
@@ -913,8 +945,8 @@ def test_observe_page_ignores_offscreen_hidden_and_covered_elements():
 
 def test_sentinel_cancel_signals_active_run(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
-    active_report = {"run_id": "r1", "status": "running"}
-    finished_report = {"run_id": "r2", "status": "completed"}
+    active_report = _mk_report(run_id="r1", status="running")
+    finished_report = _mk_report(run_id="r2", status="completed")
 
     with patch("web_app.helpers.DataInterface") as mock_users:
         mock_users.return_value.load_users.return_value = {"admin": admin}
@@ -940,8 +972,8 @@ def test_sentinel_cancel_signals_active_run(client):
 
 def test_sentinel_delete_run_removes_finished_runs_and_rejects_active_runs(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
-    active_report = {"run_id": "r1", "status": "running"}
-    finished_report = {"run_id": "r2", "status": "completed"}
+    active_report = _mk_report(run_id="r1", status="running")
+    finished_report = _mk_report(run_id="r2", status="completed")
 
     with patch("web_app.helpers.DataInterface") as mock_users:
         mock_users.return_value.load_users.return_value = {"admin": admin}
@@ -976,28 +1008,27 @@ def test_parse_verdict_payload_accepts_pass_fail_and_rejects_garbage():
 
 
 def test_classify_run_verdict_downgrades_to_failed_and_records_reason():
-    report = {
-        "run_id": "r1",
-        "prompt": "create an account and log a metric",
-        "target_url": "https://example.com",
-        "steps": [{"action": "finish", "reason": "blocked", "result": {"ok": True}}],
-        "findings": [],
-        "final_report": "## Summary\n\nNothing tested.",
-    }
+    report = _mk_report(
+        prompt="create an account and log a metric",
+        target_url="https://example.com",
+        steps=[{"index": 1, "action": "finish", "reason": "blocked", "result": {"ok": True}}],
+        findings=[],
+        final_report="## Summary\n\nNothing tested.",
+    )
     fake_provider = type("P", (), {"verdict_text": lambda self, _: '{"verdict":"fail","reason":"Agent self-aborted on step 1."}'})()
     with patch("web_app.sentinel.runner._get_provider", return_value=fake_provider):
         outcome = _classify_run_verdict(report)
     assert outcome == "failed"
-    assert report["verdict_reason"] == "Agent self-aborted on step 1."
-    assert any(f["title"] == "Run did not fulfill prompt" for f in report["findings"])
+    assert report.verdict_reason == "Agent self-aborted on step 1."
+    assert any(f.title == "Run did not fulfill prompt" for f in report.findings)
 
 
 def test_classify_run_verdict_keeps_completed_on_pass_or_provider_failure():
-    report = {"run_id": "r2", "prompt": "click around", "steps": [], "findings": [], "final_report": ""}
+    report = _mk_report(prompt="click around", steps=[], findings=[], final_report="")
     pass_provider = type("P", (), {"verdict_text": lambda self, _: '{"verdict":"pass","reason":"Looked fine."}'})()
     with patch("web_app.sentinel.runner._get_provider", return_value=pass_provider):
         assert _classify_run_verdict(report) == "completed"
-    assert "verdict_reason" not in report
+    assert report.verdict_reason is None
 
     raising_provider = type("P", (), {"verdict_text": lambda self, _: (_ for _ in ()).throw(RuntimeError("x"))})()
     with patch("web_app.sentinel.runner._get_provider", return_value=raising_provider):
@@ -1005,27 +1036,27 @@ def test_classify_run_verdict_keeps_completed_on_pass_or_provider_failure():
 
 
 def test_detect_click_loop_flags_repeated_clicks_on_same_url():
-    report = {
-        "steps": [
+    report = _mk_report(
+        steps=[
             {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "go"},
             {"index": 2, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "again"},
             {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": "still"},
         ],
-        "findings": [],
-    }
+        findings=[],
+    )
     _detect_click_loop(report)
-    titles = [f["title"] for f in report["findings"]]
+    titles = [f.title for f in report.findings]
     assert "Repeated click with no navigation" in titles
 
     # Idempotent: a second call with no new steps must not duplicate the finding.
     _detect_click_loop(report)
-    assert titles.count("Repeated click with no navigation") == 1
+    assert [f.title for f in report.findings].count("Repeated click with no navigation") == 1
 
 
 def test_detect_click_loop_returns_true_after_max_warnings():
     """When the loop detector has fired enough times, signal that the run
     should be force-stopped instead of just adding another warning."""
-    report = {"findings": [], "steps": []}
+    report = _mk_report(findings=[], steps=[])
     cfg = ConfigManager().sentinel
     threshold = cfg.click_loop_threshold
     max_warnings = cfg.click_loop_max_warnings
@@ -1036,55 +1067,55 @@ def test_detect_click_loop_returns_true_after_max_warnings():
     for warn_idx in range(max_warnings):
         for k in range(threshold):
             step_index = warn_idx * threshold + k + 1
-            report["steps"].append({
+            report.steps.append(Step.model_validate({
                 "index": step_index,
                 "action": "click",
                 "result": {"url": f"https://x.test/page{warn_idx}"},
                 "reason": "click",
-            })
+            }))
         stuck = _detect_click_loop(report)
         if warn_idx + 1 < max_warnings:
             assert stuck is False
     assert stuck is True
     assert sum(
-        1 for f in report["findings"] if f["title"] == "Repeated click with no navigation"
+        1 for f in report.findings if f.title == "Repeated click with no navigation"
     ) == max_warnings
 
 
 def test_detect_click_loop_no_flag_when_url_changes_or_action_differs():
-    moved = {
-        "steps": [
+    moved = _mk_report(
+        steps=[
             {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
             {"index": 2, "action": "click", "result": {"url": "https://x.test/b"}, "reason": ""},
             {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
         ],
-        "findings": [],
-    }
+        findings=[],
+    )
     _detect_click_loop(moved)
-    assert moved["findings"] == []
+    assert moved.findings == []
 
-    mixed = {
-        "steps": [
+    mixed = _mk_report(
+        steps=[
             {"index": 1, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
             {"index": 2, "action": "fill", "result": {"url": "https://x.test/a"}, "reason": ""},
             {"index": 3, "action": "click", "result": {"url": "https://x.test/a"}, "reason": ""},
         ],
-        "findings": [],
-    }
+        findings=[],
+    )
     _detect_click_loop(mixed)
-    assert mixed["findings"] == []
+    assert mixed.findings == []
 
 
 def test_request_agent_action_retries_once_on_parse_failure():
     """First call returns garbage, second returns valid JSON — should succeed."""
-    report = {
-        "target_url": "https://x.test/",
-        "prompt": "go",
-        "steps": [],
-        "findings": [],
-        "allow_accounts": False,
-        "demographic": "",
-    }
+    report = _mk_report(
+        target_url="https://x.test/",
+        prompt="go",
+        steps=[],
+        findings=[],
+        allow_accounts=False,
+        demographic="",
+    )
     observation = {"url": "https://x.test/", "title": "X", "elements": [{"id": "e1", "text": "Go"}]}
 
     responses = iter(["not json", '{"action":"click","element_id":"e1","reason":"go"}'])
@@ -1095,18 +1126,18 @@ def test_request_agent_action_retries_once_on_parse_failure():
 
     assert action is not None
     assert action.action == "click"
-    assert report["findings"] == []  # success on retry, no warning
+    assert report.findings == []  # success on retry, no warning
 
 
 def test_request_agent_action_records_invalid_step_when_retry_also_fails():
-    report = {
-        "target_url": "https://x.test/",
-        "prompt": "go",
-        "steps": [],
-        "findings": [],
-        "allow_accounts": False,
-        "demographic": "",
-    }
+    report = _mk_report(
+        target_url="https://x.test/",
+        prompt="go",
+        steps=[],
+        findings=[],
+        allow_accounts=False,
+        demographic="",
+    )
     observation = {"url": "https://x.test/", "title": "X", "elements": []}
     fake_provider = type("P", (), {"agent_text": lambda self, *a, **kw: "still not json"})()
 
@@ -1114,19 +1145,19 @@ def test_request_agent_action_records_invalid_step_when_retry_also_fails():
         action = _request_agent_action(report, observation, [], False, set())
 
     assert action is None
-    assert report["steps"] and report["steps"][0]["action"] == "invalid"
-    assert any(f["title"] == "Agent response unparseable" for f in report["findings"])
+    assert report.steps and report.steps[0].action == "invalid"
+    assert any(f.title == "Agent response unparseable" for f in report.findings)
 
 
 def test_screenshot_manifest_pairs_step_filename_with_action():
-    report = {
-        "target_url": "https://x.test/",
-        "screenshots": ["screenshots/step-00.png", "screenshots/step-01.png", "screenshots/step-02.png"],
-        "steps": [
+    report = _mk_report(
+        target_url="https://x.test/",
+        screenshots=["screenshots/step-00.png", "screenshots/step-01.png", "screenshots/step-02.png"],
+        steps=[
             {"index": 1, "action": "click", "reason": "View Chart", "result": {"url": "https://x.test/c"}},
             {"index": 2, "action": "finish", "reason": "done", "result": {"url": "https://x.test/c"}},
         ],
-    }
+    )
     manifest = _screenshot_manifest(report)
     assert manifest[0] == {"filename": "step-00.png", "produced_by": "initial", "url": "https://x.test/"}
     assert manifest[1]["filename"] == "step-01.png"
@@ -1135,14 +1166,14 @@ def test_screenshot_manifest_pairs_step_filename_with_action():
 
 
 def test_pick_final_report_screenshots_uses_picker_then_falls_back():
-    report = {
-        "run_id": "r",
-        "prompt": "verify chart shows",
-        "target_url": "https://x.test/",
-        "screenshots": [f"screenshots/step-{i:02d}.png" for i in range(0, 5)],
-        "steps": [{"index": i, "action": "click", "reason": "x", "result": {"url": ""}} for i in range(1, 5)],
-        "findings": [],
-    }
+    report = _mk_report(
+        run_id="r" * 32,
+        prompt="verify chart shows",
+        target_url="https://x.test/",
+        screenshots=[f"screenshots/step-{i:02d}.png" for i in range(0, 5)],
+        steps=[{"index": i, "action": "click", "reason": "x", "result": {"url": ""}} for i in range(1, 5)],
+        findings=[],
+    )
 
     picker_provider = type("P", (), {
         "screenshot_picker_text": lambda self, _: '{"screenshots":["step-04.png","step-02.png"],"reason":"chart and form"}'
@@ -1249,12 +1280,12 @@ def test_create_batch_queues_runs_inline_without_persisting_a_batch(client, tmp_
 def test_batch_status_groups_runs_by_batch_id(client):
     """GET /api/batch/<id> returns the runs sharing that batch_id; 404 when none."""
     runs = [
-        {"run_id": "a" * 32, "batch_id": "bid1", "batch_label": "B1", "status": "running",
-         "title": "Run A", "target_url": "https://example.com", "run_outcome": None},
-        {"run_id": "b" * 32, "batch_id": "bid1", "batch_label": "B1", "status": "completed",
-         "title": "Run B", "target_url": "https://example.com", "run_outcome": "completed"},
-        {"run_id": "c" * 32, "batch_id": "", "status": "completed", "title": "Solo",
-         "target_url": "https://example.com", "run_outcome": "completed"},
+        _mk_report(run_id="a" * 32, batch_id="bid1", batch_label="B1", status="running",
+                   title="Run A", target_url="https://example.com", run_outcome=None),
+        _mk_report(run_id="b" * 32, batch_id="bid1", batch_label="B1", status="completed",
+                   title="Run B", target_url="https://example.com", run_outcome="completed"),
+        _mk_report(run_id="c" * 32, batch_id="", status="completed", title="Solo",
+                   target_url="https://example.com", run_outcome="completed"),
     ]
     with patch("web_app.helpers.DataInterface") as mock_users:
         _login_admin(client, mock_users)
@@ -1271,12 +1302,12 @@ def test_batch_status_groups_runs_by_batch_id(client):
 
 def test_delete_batch_removes_child_runs_and_rejects_active_children(client):
     active_runs = [
-        {"run_id": "a" * 32, "batch_id": "bid1", "status": "completed", "batch_label": "B1"},
-        {"run_id": "b" * 32, "batch_id": "bid1", "status": "running", "batch_label": "B1"},
+        _mk_report(run_id="a" * 32, batch_id="bid1", status="completed", batch_label="B1"),
+        _mk_report(run_id="b" * 32, batch_id="bid1", status="running", batch_label="B1"),
     ]
     finished_runs = [
-        {"run_id": "a" * 32, "batch_id": "bid1", "status": "completed", "batch_label": "B1"},
-        {"run_id": "b" * 32, "batch_id": "bid1", "status": "cancelled", "batch_label": "B1"},
+        _mk_report(run_id="a" * 32, batch_id="bid1", status="completed", batch_label="B1"),
+        _mk_report(run_id="b" * 32, batch_id="bid1", status="cancelled", batch_label="B1"),
     ]
     with patch("web_app.helpers.DataInterface") as mock_users:
         _login_admin(client, mock_users)

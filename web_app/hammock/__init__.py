@@ -144,7 +144,7 @@ def view_post(project: str, post: str):
 def edit_post(project: str, post: str):
     di = DataInterface()
     meta = di.get_post_meta(project, post)
-    template = meta.get("type")
+    template = meta.type.value
     wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     if request.method == 'POST':
@@ -244,8 +244,8 @@ def delete_post(project: str, post: str):
     meta = di.get_post_meta(project, post)
     di.delete_post(project, post)
     logging.info(
-        f"Hammock post deleted: {project}/{post} owner={meta.get('owner', '<legacy>')} "
-        f"template={meta.get('type', '?')} by={cur_user().id} from={get_ip()}"
+        f"Hammock post deleted: {project}/{post} owner={meta.owner or '<legacy>'} "
+        f"template={meta.type.value} by={cur_user().id} from={get_ip()}"
     )
     flash("Post deleted.", "success")
     return redirect(url_for('.index'))

@@ -6,14 +6,15 @@ import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image, ImageOps
 from markdown_it import MarkdownIt
+from pydantic import BaseModel, ConfigDict, Field
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
@@ -28,14 +29,56 @@ _ALLOWED_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".3gp", ".3gpp"}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-@dataclass
-class Project:
+class PostType(str, Enum):
+    RAW = "raw"
+    MARKDOWN = "markdown"
+    GALLERY = "gallery"
+
+
+class Project(BaseModel):
     name: str
     posts: list[str]
 
 
-@dataclass
-class PreparedGalleryUpload:
+class GalleryItem(BaseModel):
+    type: str = "image"
+    filename: str
+
+
+class GalleryTemplateData(BaseModel):
+    description: str = ""
+    items: list[GalleryItem] = Field(default_factory=list)
+
+
+class Gallery(BaseModel):
+    """View object returned by get_gallery — flattens title in alongside the
+    gallery's description and items for templates/renderers."""
+
+    title: str = ""
+    description: str = ""
+    items: list[GalleryItem] = Field(default_factory=list)
+
+
+class PostMeta(BaseModel):
+    """The persisted shape of a single post's metadata in meta.json.
+
+    `template_data` round-trips to/from the on-disk "template-data" key via its
+    alias; gallery posts populate it, other types leave it None.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: PostType
+    title: str = ""
+    date: str = ""
+    owner: str = ""
+    template_data: Optional[GalleryTemplateData] = Field(default=None, alias="template-data")
+
+    def to_dict(self) -> dict:
+        return self.model_dump(by_alias=True, exclude_none=True)
+
+
+class PreparedGalleryUpload(BaseModel):
     media_type: str
     name: str
     data: bytes
@@ -43,64 +86,22 @@ class PreparedGalleryUpload:
     upload_suffix: str
 
 
-@dataclass
-class RawPost:
-    project: str
-    slug: str
-    title: str
-    date: str
-    owner: str
-    type: str = "raw"
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.type,
-            "title": self.title,
-            "date": self.date,
-            "owner": self.owner,
-        }
+def make_raw_post(title: str, date: str, owner: str) -> PostMeta:
+    return PostMeta(type=PostType.RAW, title=title, date=date, owner=owner)
 
 
-@dataclass
-class MarkdownPost:
-    project: str
-    slug: str
-    title: str
-    date: str
-    owner: str
-    type: str = "markdown"
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.type,
-            "title": self.title,
-            "date": self.date,
-            "owner": self.owner,
-        }
+def make_markdown_post(title: str, date: str, owner: str) -> PostMeta:
+    return PostMeta(type=PostType.MARKDOWN, title=title, date=date, owner=owner)
 
 
-@dataclass
-class GalleryPost:
-    project: str
-    slug: str
-    title: str
-    date: str
-    owner: str
-    description: str = ""
-    items: list[dict] = field(default_factory=list)
-    type: str = "gallery"
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.type,
-            "title": self.title,
-            "date": self.date,
-            "owner": self.owner,
-            "template-data": {
-                "description": self.description,
-                "items": self.items,
-            },
-        }
+def make_gallery_post(title: str, date: str, owner: str, description: str = "") -> PostMeta:
+    return PostMeta(
+        type=PostType.GALLERY,
+        title=title,
+        date=date,
+        owner=owner,
+        template_data=GalleryTemplateData(description=description),
+    )
 
 
 def slugify(s: str) -> str:
@@ -121,7 +122,7 @@ class DataInterface(BaseDataInterface):
 
     def _post_sort_key(self, post_dir: Path) -> tuple:
         meta = self.get_post_meta(post_dir.parent.name, post_dir.name)
-        return (meta.get("date", ""), post_dir.name)
+        return (meta.date, post_dir.name)
 
     def get_posts_by_project(self) -> list[Project]:
         projects: list[Project] = []
@@ -136,12 +137,11 @@ class DataInterface(BaseDataInterface):
     def get_post_content(self, project: str, post: str) -> str:
         post_dir = self._post_dir(project, post)
         meta = self.get_post_meta(project, post)
-        template = meta.get("type")
-        if template == "markdown":
+        if meta.type == PostType.MARKDOWN:
             src = post_dir / "source.md"
             if src.exists():
                 return self._render_markdown_index(meta, src.read_text(encoding="utf-8"))
-        elif template == "gallery":
+        elif meta.type == PostType.GALLERY:
             return self._render_gallery_index(meta, self.get_gallery(project, post))
         content_file = post_dir / "index.html"
         if not content_file.exists():
@@ -183,37 +183,37 @@ class DataInterface(BaseDataInterface):
         return store
 
     def _write_meta_store(self, store: dict) -> None:
+        # Whole-file read-modify-write of the single global meta.json: concurrent
+        # writers (any user, any post) can clobber each other (last write wins).
+        # Atomic write keeps the file valid but does not serialize requests.
         self._content_dir.mkdir(parents=True, exist_ok=True)
         self.atomic_write(self.meta_file, data=json.dumps(store, indent=2), mode="w", encoding="utf-8")
 
-    def _post_entry(self, project: str, post: str) -> dict:
+    def _post_entry(self, project: str, post: str) -> Optional[PostMeta]:
         store = self._read_meta_store()
-        entry = store.get("projects", {}).get(project, {}).get("posts", {}).get(post, {})
-        return entry if isinstance(entry, dict) else {}
+        entry = store.get("projects", {}).get(project, {}).get("posts", {}).get(post)
+        if not isinstance(entry, dict) or not entry.get("type"):
+            return None
+        return PostMeta.model_validate(entry)
 
-    def _post_meta_for_template(self, entry: dict) -> dict:
-        meta = dict(entry)
-        if "type" in meta:
-            meta["template"] = meta["type"]
-        return meta
+    def get_post_meta(self, project: str, post: str) -> PostMeta:
+        # Missing or type-less entries (e.g. a post dir with only index.html and
+        # no meta record) fall back to a raw post so the index.html renderer is used.
+        return self._post_entry(project, post) or PostMeta(type=PostType.RAW)
 
-    def get_post_meta(self, project: str, post: str) -> dict:
-        return self._post_meta_for_template(self._post_entry(project, post))
-
-    def write_post_meta(self, project: str, post: str, meta: dict) -> None:
+    def write_post_meta(self, project: str, post: str, meta: PostMeta) -> None:
         store = self._read_meta_store()
         project_store = store.setdefault("projects", {}).setdefault(project, {"posts": {}})
-        project_store.setdefault("posts", {})[post] = dict(meta)
+        project_store.setdefault("posts", {})[post] = meta.to_dict()
         self._write_meta_store(store)
 
     def register_raw_post(self, project: str, post: str, title: str, owner: str, date: str) -> None:
-        self.write_post_meta(project, post, RawPost(project, post, title, date, owner).to_dict())
+        self.write_post_meta(project, post, make_raw_post(title, date, owner))
 
     def user_can_edit(self, user: Optional[User], project: str, post: str) -> bool:
         if user is None or not getattr(user, "is_authenticated", False):
             return False
-        meta = self.get_post_meta(project, post)
-        owner = meta.get("owner")
+        owner = self.get_post_meta(project, post).owner
         if user.is_admin:
             return True
         return bool(owner) and owner == user.id
@@ -264,7 +264,7 @@ class DataInterface(BaseDataInterface):
                 if not post_dir.is_dir():
                     continue
                 meta = self.get_post_meta(project_dir.name, post_dir.name)
-                if meta.get("owner") == username:
+                if meta.owner == username:
                     total += self._dir_size(post_dir)
         return total
 
@@ -298,13 +298,11 @@ class DataInterface(BaseDataInterface):
         self.check_quota(user, body_bytes)
 
         post_dir.mkdir(parents=True, exist_ok=True)
-        meta = MarkdownPost(
-            project_slug,
-            post_slug,
+        meta = make_markdown_post(
             title.strip(),
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
             user.id,
-        ).to_dict()
+        )
         self.write_post_meta(project_slug, post_slug, meta)
         self.atomic_write(post_dir / "source.md", data=source_md, mode="w", encoding="utf-8")
         return project_slug, post_slug
@@ -315,11 +313,11 @@ class DataInterface(BaseDataInterface):
         source_md = self._validate_text(source_md, "Markdown", cfg.hammock.markdown_max_chars)
         post_dir = self._post_dir(project, post)
         meta = self._post_entry(project, post)
-        if meta.get("type") != "markdown":
+        if meta is None or meta.type != PostType.MARKDOWN:
             raise APIError("Post is not a markdown post")
         if not title.strip():
             raise APIError("Title is required")
-        meta["title"] = title.strip()
+        meta.title = title.strip()
         self.write_post_meta(project, post, meta)
         self.atomic_write(post_dir / "source.md", data=source_md, mode="w", encoding="utf-8")
 
@@ -340,57 +338,39 @@ class DataInterface(BaseDataInterface):
         post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
         post_dir.mkdir(parents=True, exist_ok=True)
-        post_meta = GalleryPost(
-            project_slug,
-            post_slug,
+        post_meta = make_gallery_post(
             title.strip(),
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
             user.id,
             description,
-        ).to_dict()
+        )
         self.write_post_meta(project_slug, post_slug, post_meta)
         return project_slug, post_slug
 
-    @staticmethod
-    def _gallery_template_data(meta: dict) -> dict:
-        data = meta.get("template-data")
-        return data if isinstance(data, dict) else {}
-
-    def get_gallery(self, project: str, post: str) -> dict:
+    def get_gallery(self, project: str, post: str) -> Gallery:
         meta = self.get_post_meta(project, post)
-        if meta.get("type") != "gallery":
-            return {"title": "", "description": "", "items": []}
-        template_data = self._gallery_template_data(meta)
-        return {
-            "title": meta.get("title", ""),
-            "description": template_data.get("description", ""),
-            "items": template_data.get("items", []),
-        }
-
-    @staticmethod
-    def _gallery_items(gallery: dict) -> list[dict]:
-        items = gallery.get("items")
-        if isinstance(items, list) and items:
-            return [
-                {"type": item.get("type", "image"), "filename": item.get("filename")}
-                for item in items
-                if isinstance(item, dict) and item.get("filename")
-            ]
-        return []
+        if meta.type != PostType.GALLERY:
+            return Gallery()
+        td = meta.template_data or GalleryTemplateData()
+        return Gallery(
+            title=meta.title,
+            description=td.description,
+            items=[item for item in td.items if item.filename],
+        )
 
     def update_gallery_meta(self, project: str, post: str, title: str, description: str) -> None:
         cfg = ConfigManager()
         title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
         description = self._validate_text(description, "Description", cfg.hammock.description_max_chars)
         meta = self._post_entry(project, post)
-        if meta.get("type") != "gallery":
+        if meta is None or meta.type != PostType.GALLERY:
             raise APIError("Post is not a gallery post")
         if not title.strip():
             raise APIError("Title is required")
-        meta["title"] = title.strip()
-        template_data = self._gallery_template_data(meta)
-        template_data["description"] = description
-        meta["template-data"] = template_data
+        meta.title = title.strip()
+        td = meta.template_data or GalleryTemplateData()
+        td.description = description
+        meta.template_data = td
         self.write_post_meta(project, post, meta)
 
     def add_gallery_images(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
@@ -399,7 +379,7 @@ class DataInterface(BaseDataInterface):
     def add_gallery_media(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
         post_dir = self._post_dir(project, post)
         meta = self._post_entry(project, post)
-        if meta.get("type") != "gallery":
+        if meta is None or meta.type != PostType.GALLERY:
             raise APIError("Post is not a gallery post")
 
         # Gather and validate each file. Read bytes once so we can quota-check
@@ -407,7 +387,7 @@ class DataInterface(BaseDataInterface):
         prepared: list[PreparedGalleryUpload] = []
         total_new_bytes = 0
         gallery = self.get_gallery(project, post)
-        existing_names = {item["filename"] for item in self._gallery_items(gallery)}
+        existing_names = {item.filename for item in gallery.items}
         for fs in files:
             if not fs or not fs.filename:
                 continue
@@ -438,12 +418,16 @@ class DataInterface(BaseDataInterface):
                 continue
             if media_type == "image":
                 image_data = self._make_thumbnail_bytes(data, safe)
-                prepared.append(PreparedGalleryUpload(media_type, candidate, image_data, safe, ext))
+                prepared.append(PreparedGalleryUpload(
+                    media_type=media_type, name=candidate, data=image_data,
+                    display_name=safe, upload_suffix=ext))
                 total_new_bytes += len(image_data)
             else:
                 if len(data) > ConfigManager().hammock.gallery_video_max_upload_bytes:
                     raise APIError(f"Video {fs.filename} is too large")
-                prepared.append(PreparedGalleryUpload(media_type, candidate, data, safe, ext))
+                prepared.append(PreparedGalleryUpload(
+                    media_type=media_type, name=candidate, data=data,
+                    display_name=safe, upload_suffix=ext))
                 total_new_bytes += len(data)
 
         if not prepared:
@@ -451,11 +435,11 @@ class DataInterface(BaseDataInterface):
 
         self.check_quota(user, total_new_bytes)
 
-        added: list[dict] = []
+        added: list[GalleryItem] = []
         for item in prepared:
             if item.media_type == "image":
                 self.atomic_write(post_dir / item.name, data=item.data, mode="wb")
-                added.append({"type": "image", "filename": item.name})
+                added.append(GalleryItem(type="image", filename=item.name))
                 continue
 
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=item.upload_suffix)
@@ -474,14 +458,11 @@ class DataInterface(BaseDataInterface):
                 self.atomic_delete(output_path)
                 raise
             self.atomic_delete(upload_path)
-            added.append({"type": "video", "filename": item.name})
+            added.append(GalleryItem(type="video", filename=item.name))
 
-        gallery = self.get_gallery(project, post)
-        items = self._gallery_items(gallery)
-        items.extend(added)
-        template_data = self._gallery_template_data(meta)
-        template_data["items"] = items
-        meta["template-data"] = template_data
+        td = meta.template_data or GalleryTemplateData()
+        td.items = [item for item in td.items if item.filename] + added
+        meta.template_data = td
         self.write_post_meta(project, post, meta)
         return len(added)
 
@@ -491,18 +472,14 @@ class DataInterface(BaseDataInterface):
     def delete_gallery_media(self, project: str, post: str, filename: str) -> None:
         post_dir = self._post_dir(project, post)
         meta = self._post_entry(project, post)
-        if meta.get("type") != "gallery":
+        if meta is None or meta.type != PostType.GALLERY:
             raise APIError("Post is not a gallery post")
-        gallery = self.get_gallery(project, post)
-        items = self._gallery_items(gallery)
-        item = next((item for item in items if item.get("filename") == filename), None)
-        if item is None:
+        td = meta.template_data or GalleryTemplateData()
+        if not any(item.filename == filename for item in td.items):
             raise APIError("Media not found in gallery")
         self.atomic_delete(post_dir / filename)
-        items = [item for item in items if item.get("filename") != filename]
-        template_data = self._gallery_template_data(meta)
-        template_data["items"] = items
-        meta["template-data"] = template_data
+        td.items = [item for item in td.items if item.filename != filename]
+        meta.template_data = td
         self.write_post_meta(project, post, meta)
 
     # ---------- thumbnails / video processing ----------
@@ -641,8 +618,8 @@ class DataInterface(BaseDataInterface):
 
     # ---------- rendering ----------
 
-    def _render_markdown_index(self, meta: dict, source_md: str) -> str:
-        title = html.escape(meta.get("title", ""))
+    def _render_markdown_index(self, meta: PostMeta, source_md: str) -> str:
+        title = html.escape(meta.title)
         body = self._md.render(source_md or "")
         return (
             f'<article class="hammock-post hammock-md">'
@@ -654,14 +631,16 @@ class DataInterface(BaseDataInterface):
             f'</article>'
         )
 
-    def _render_gallery_index(self, meta: dict, gallery: dict) -> str:
+    def _render_gallery_index(self, meta: PostMeta, gallery: Gallery) -> str:
         cfg = ConfigManager()
-        title = html.escape(gallery.get("title") or meta.get("title", ""))
-        description = html.escape(gallery.get("description", ""))
+        title = html.escape(gallery.title or meta.title)
+        description = html.escape(gallery.description)
         media_html = []
-        for item in self._gallery_items(gallery):
-            name = html.escape(item.get("filename", ""))
-            if item.get("type") == "video":
+        for item in gallery.items:
+            if not item.filename:
+                continue
+            name = html.escape(item.filename)
+            if item.type == "video":
                 media_html.append(
                     f'<figure class="hammock-gallery-photo hammock-gallery-video">'
                     f'<video autoplay loop muted playsinline preload="metadata">'
@@ -698,9 +677,9 @@ class DataInterface(BaseDataInterface):
         )
 
     @staticmethod
-    def _render_byline(meta: dict) -> str:
-        date = html.escape(meta.get("date", "")[:10])
-        owner = html.escape(meta.get("owner", ""))
+    def _render_byline(meta: PostMeta) -> str:
+        date = html.escape(meta.date[:10])
+        owner = html.escape(meta.owner)
         if owner and date:
             inner = f'by <span class="hammock-post-author">{owner}</span> &middot; {date}'
         elif owner:

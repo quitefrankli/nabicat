@@ -21,13 +21,13 @@
                     <div class="hammock-field">
                         <label class="hammock-label">Title</label>
                         <input type="text" name="title" class="hammock-input"
-                               value="{{ gallery.get('title') or meta.get('title', '') }}"
+                               value="{{ gallery.title or meta.title }}"
                                required maxlength="120">
                     </div>
 
                     <div class="hammock-field">
                         <label class="hammock-label">Description</label>
-                        <textarea name="description" class="hammock-input" rows="3">{{ gallery.get('description', '') }}</textarea>
+                        <textarea name="description" class="hammock-input" rows="3">{{ gallery.description }}</textarea>
                     </div>
                 </form>
 
@@ -35,11 +35,11 @@
 
                 <h2 class="hammock-section-title">Media</h2>
                 <div class="hammock-edit-grid">
-                    {% set media_items = gallery.get('items') or [] %}
+                    {% set media_items = gallery.items or [] %}
                     {% for item in media_items %}
-                    {% set filename = item.get('filename') %}
+                    {% set filename = item.filename %}
                     <div class="hammock-edit-tile">
-                        {% if item.get('type') == 'video' %}
+                        {% if item.type == 'video' %}
                         <video muted playsinline preload="metadata">
                             <source src="{{ url_for('.post_asset', project=project_name, post=post_name, filename=filename) }}" type="video/mp4">
                         </video>

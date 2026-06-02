@@ -282,5 +282,17 @@ class TestGoalReparenting:
         assert parent.children == [2]
 
 
+def test_goal_creation_dates_are_independent_per_instance():
+    """Regression guard: the datetime default must be evaluated per-instance
+    (default_factory), not once at import — otherwise every Goal would share the
+    process-start timestamp."""
+    import time
+
+    g1 = Goal(id=1, name='a', state=GoalState.ACTIVE)
+    time.sleep(0.01)
+    g2 = Goal(id=2, name='b', state=GoalState.ACTIVE)
+    assert g1.creation_date != g2.creation_date
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

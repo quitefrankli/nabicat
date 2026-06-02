@@ -13,6 +13,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import * # type: ignore
 from contextlib import contextmanager
+from pydantic import BaseModel
+
+_M = TypeVar("_M", bound=BaseModel)
 
 from web_app.users import User
 from web_app.config import ConfigManager
@@ -168,6 +171,21 @@ class DataInterface:
         # Discard original permissions - set to standard rw-r--r--
         file_path.chmod(0o644)
         # self.data_syncer.upload_file(file_path)
+
+    def load_model(self, path: Path, model: Type[_M], *, sync: bool = True) -> Optional[_M]:
+        if sync:
+            self.data_syncer.download_file(path)
+        if not path.exists():
+            return None
+        return model.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def save_model(self, path: Path, obj: BaseModel, *, exclude_none: bool = False) -> None:
+        self.atomic_write(
+            path,
+            data=obj.model_dump_json(indent=4, exclude_none=exclude_none),
+            mode="w",
+            encoding="utf-8",
+        )
 
     def atomic_delete(self, file_path: Path) -> None:
         if file_path.exists():

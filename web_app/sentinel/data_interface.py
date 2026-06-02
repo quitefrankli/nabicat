@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from datetime import datetime, timezone
@@ -8,6 +7,7 @@ from pathlib import Path
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface as BaseDataInterface
+from web_app.sentinel.models import Report
 
 
 _RUN_ID_RE = re.compile(r"^[a-f0-9]{32}$")
@@ -46,32 +46,24 @@ class DataInterface(BaseDataInterface):
     def screenshot_thumbnail_path(self, run_id: str, filename: str) -> Path:
         return self.screenshots_dir(run_id) / "thumbs" / filename
 
-    def save_report(self, report: dict) -> None:
-        run_id = self._safe_run_id(str(report["run_id"]))
-        report["updated_at"] = utc_now_iso()
-        self.atomic_write(
-            self.report_path(run_id),
-            data=json.dumps(report, indent=2),
-            mode="w",
-            encoding="utf-8",
-        )
+    def save_report(self, report: Report) -> None:
+        run_id = self._safe_run_id(report.run_id)
+        report.updated_at = utc_now_iso()
+        self.save_model(self.report_path(run_id), report)
 
-    def load_report(self, run_id: str) -> dict | None:
-        path = self.report_path(run_id)
-        if not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
+    def load_report(self, run_id: str) -> Report | None:
+        return self.load_model(self.report_path(run_id), Report, sync=False)
 
-    def list_reports(self) -> list[dict]:
+    def list_reports(self) -> list[Report]:
         if not self.runs_dir.exists():
             return []
         reports = []
         for path in self.runs_dir.glob("*/report.json"):
             try:
-                reports.append(json.loads(path.read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
+                reports.append(Report.model_validate_json(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
                 continue
-        reports.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        reports.sort(key=lambda item: item.created_at, reverse=True)
         return reports
 
     def prune_reports(self) -> None:

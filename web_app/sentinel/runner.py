@@ -12,11 +12,19 @@ from urllib.parse import urljoin, urlparse
 from web_app.config import ConfigManager
 from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
 from web_app.sentinel.data_interface import DataInterface, utc_now_iso
+from web_app.sentinel.models import (
+    AccountCredentials,
+    ActionResult,
+    Finding,
+    Report,
+    RunStatus,
+    Step,
+)
 from web_app.sentinel.providers import _get_provider
 from web_app.sentinel.target_policy import ValidatedTarget, validate_public_web_url
 
 
-_active_runs: dict[str, dict] = {}
+_active_runs: dict[str, Report] = {}
 _cancel_events: dict[str, threading.Event] = {}
 _active_lock = threading.RLock()
 
@@ -78,28 +86,22 @@ def _is_cancelled(run_id: str) -> bool:
     return event is not None and event.is_set()
 
 
-def _save(report: dict) -> None:
-    sanitized = {k: v for k, v in report.items() if not k.startswith("_")}
-    DataInterface().save_report(sanitized)
+_ACTIVE_STATUSES = {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.SUMMARIZING}
+
+
+def _save(report: Report) -> None:
+    # Private attrs (_card_details, _account_credentials, _peek_pending) are
+    # excluded from serialization automatically, so save_report never persists
+    # secrets. The live object keeps mutating; store a snapshot copy.
+    DataInterface().save_report(report)
     with _active_lock:
-        _active_runs[report["run_id"]] = dict(report)
+        _active_runs[report.run_id] = report.model_copy(deep=True)
 
 
-def get_run(run_id: str) -> dict | None:
-    with _active_lock:
-        if run_id in _active_runs:
-            return {k: v for k, v in _active_runs[run_id].items() if not k.startswith("_")}
-    try:
-        return DataInterface().load_report(run_id)
-    except ValueError:
-        return None
-
-
-def _get_run_internal(run_id: str) -> dict | None:
-    """Like get_run but preserves underscore-prefixed runtime-only fields."""
+def get_run(run_id: str) -> Report | None:
     with _active_lock:
         if run_id in _active_runs:
-            return dict(_active_runs[run_id])
+            return _active_runs[run_id].model_copy(deep=True)
     try:
         return DataInterface().load_report(run_id)
     except ValueError:
@@ -108,7 +110,7 @@ def _get_run_internal(run_id: str) -> dict | None:
 
 def delete_run(run_id: str) -> bool:
     report = get_run(run_id)
-    if report is None or report.get("status") in {"queued", "running", "summarizing"}:
+    if report is None or report.status in _ACTIVE_STATUSES:
         return False
     try:
         deleted = DataInterface().delete_run(run_id)
@@ -146,43 +148,34 @@ def start_run(
         device = cfg.sentinel.default_device
     if demographic not in cfg.sentinel.demographic_personas:
         demographic = cfg.sentinel.default_demographic
-    report = {
-        "run_id": run_id,
-        "status": "queued",
-        "owner": str(owner or ""),
-        "batch_id": str(batch_id or ""),
-        "batch_label": str(batch_label or ""),
-        "target_url": target.url,
-        "target_hostname": target.hostname,
-        "prompt": prompt,
-        "title": title,
-        "allow_accounts": bool(allow_accounts),
-        "allow_external": bool(allow_external),
-        "additional_domains": list(additional_domains or []),
-        "allow_financial": bool(allow_financial and card_details),
-        "device": device,
-        "demographic": demographic,
-        "limit_s": limit_s,
-        "created_at": now,
-        "updated_at": now,
-        "started_at": None,
-        "finished_at": None,
-        "run_outcome": None,
-        "steps": [],
-        "findings": [],
-        "screenshots": [],
-        "annotated_screenshots": [],
-        "final_report": "",
-        "error": None,
-    }
+    report = Report(
+        run_id=run_id,
+        status=RunStatus.QUEUED,
+        owner=str(owner or ""),
+        batch_id=str(batch_id or ""),
+        batch_label=str(batch_label or ""),
+        target_url=target.url,
+        target_hostname=target.hostname,
+        prompt=prompt,
+        title=title,
+        allow_accounts=bool(allow_accounts),
+        allow_external=bool(allow_external),
+        additional_domains=list(additional_domains or []),
+        allow_financial=bool(allow_financial and card_details),
+        device=device,
+        demographic=demographic,
+        limit_s=limit_s,
+        created_at=now,
+        updated_at=now,
+    )
     if allow_financial and card_details:
-        report["_card_details"] = dict(card_details)
+        report._card_details = dict(card_details)
     if allow_accounts and account_credentials:
-        report["_account_credentials"] = {
-            "username": account_credentials.get("username", ""),
-            "password": account_credentials.get("password", ""),
-            "extras": dict(account_credentials.get("extras") or {}),
-        }
+        report._account_credentials = AccountCredentials(
+            username=account_credentials.get("username", ""),
+            password=account_credentials.get("password", ""),
+            extras=dict(account_credentials.get("extras") or {}),
+        )
     _save(report)
     with _active_lock:
         _cancel_events[run_id] = threading.Event()
@@ -191,46 +184,46 @@ def start_run(
     return {"run_id": run_id, "status": "queued"}
 
 
-def _run_background(report: dict) -> None:
-    report["status"] = "running"
-    report["started_at"] = utc_now_iso()
-    if not report.get("title"):
-        report["title"] = _generate_title(report)
+def _run_background(report: Report) -> None:
+    report.status = RunStatus.RUNNING
+    report.started_at = utc_now_iso()
+    if not report.title:
+        report.title = _generate_title(report)
     _save(report)
     try:
         _execute_browser_run(report)
-        if _is_cancelled(report["run_id"]):
-            report["status"] = "cancelled"
-        outcome_status = "completed" if report["status"] == "running" else report["status"]
-        report["run_outcome"] = outcome_status
-        if outcome_status == "cancelled":
-            report["final_report"] = "## Summary\n\nThis run was cancelled before it finished."
-            report["status"] = outcome_status
+        if _is_cancelled(report.run_id):
+            report.status = RunStatus.CANCELLED
+        outcome_status = "completed" if report.status == RunStatus.RUNNING.value else report.status
+        report.run_outcome = outcome_status
+        if outcome_status == RunStatus.CANCELLED.value:
+            report.final_report = "## Summary\n\nThis run was cancelled before it finished."
+            report.status = outcome_status
         else:
-            report["status"] = "summarizing"
+            report.status = RunStatus.SUMMARIZING
             _save(report)
             _add_final_report(report)
-            if outcome_status == "completed":
+            if outcome_status == RunStatus.COMPLETED.value:
                 login_fail_reason = _detect_login_failure(report)
                 if login_fail_reason:
                     outcome_status = "failed"
-                    report["verdict_reason"] = login_fail_reason
+                    report.verdict_reason = login_fail_reason
                     _add_finding(report, "error", "Login failed", login_fail_reason)
                 else:
                     outcome_status = _classify_run_verdict(report)
-                report["run_outcome"] = outcome_status
-            report["status"] = outcome_status
+                report.run_outcome = outcome_status
+            report.status = outcome_status
     except Exception as e:
         logging.exception("Sentinel run failed")
-        report["status"] = "failed"
-        report["error"] = str(e)
+        report.status = RunStatus.FAILED
+        report.error = str(e)
     finally:
-        report["finished_at"] = utc_now_iso()
-        report.pop("_card_details", None)
-        report.pop("_account_credentials", None)
+        report.finished_at = utc_now_iso()
+        report._card_details = None
+        report._account_credentials = None
         _save(report)
         with _active_lock:
-            _cancel_events.pop(report["run_id"], None)
+            _cancel_events.pop(report.run_id, None)
         DataInterface().prune_reports()
 
 
@@ -250,12 +243,12 @@ def _navigation_host_allowed(hostname: str, target_hostname: str, additional_dom
     )
 
 
-def _execute_browser_run(report: dict) -> None:
+def _execute_browser_run(report: Report) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 
-    target = ValidatedTarget(url=report["target_url"], hostname=report["target_hostname"])
-    deadline = time.monotonic() + int(report["limit_s"])
+    target = ValidatedTarget(url=report.target_url, hostname=report.target_hostname)
+    deadline = time.monotonic() + int(report.limit_s)
     cfg = ConfigManager()
 
     from playwright_stealth import Stealth
@@ -267,7 +260,7 @@ def _execute_browser_run(report: dict) -> None:
         )
         context = None
         try:
-            device_key = str(report.get("device") or cfg.sentinel.default_device)
+            device_key = str(report.device or cfg.sentinel.default_device)
             profile_name = cfg.sentinel.device_profiles.get(device_key, "")
             context_kwargs: dict = {"ignore_https_errors": cfg.debug_mode}
             if profile_name:
@@ -293,8 +286,8 @@ def _execute_browser_run(report: dict) -> None:
             page.on("console", lambda msg: _add_finding(report, "info", "Console", msg.text))
             page.on("pageerror", lambda err: _add_finding(report, "error", "Page error", str(err)))
 
-            allow_external = bool(report.get("allow_external"))
-            additional_domains = list(report.get("additional_domains") or [])
+            allow_external = bool(report.allow_external)
+            additional_domains = list(report.additional_domains or [])
 
             def guard_route(route):
                 req_url = route.request.url
@@ -326,10 +319,10 @@ def _execute_browser_run(report: dict) -> None:
             # step-00.png: initial page state, before any agent action.
             _capture_screenshot(page, report, 0)
 
-            while time.monotonic() < deadline and len(report["steps"]) < cfg.sentinel.max_steps:
-                if _is_cancelled(report["run_id"]):
+            while time.monotonic() < deadline and len(report.steps) < cfg.sentinel.max_steps:
+                if _is_cancelled(report.run_id):
                     break
-                next_step_index = len(report["steps"]) + 1
+                next_step_index = len(report.steps) + 1
                 observation = _observe_page(page)
                 known_ids = {item["id"] for item in observation["elements"]}
                 # The screenshot the agent reasons about is the *current* page
@@ -353,7 +346,7 @@ def _execute_browser_run(report: dict) -> None:
                 )
                 # Set/clear the peek-pending flag so _annotated_image_paths
                 # knows whether to attach the raw screenshot next iteration.
-                report["_peek_pending"] = (action.action == "peek")
+                report._peek_pending = (action.action == "peek")
                 _record_step(report, action.action, action.reason, result)
                 # step-N.png: state AFTER step N's action — this is what gets
                 # surfaced in the final report so step number matches outcome.
@@ -374,10 +367,10 @@ def _execute_browser_run(report: dict) -> None:
                     break
 
             if time.monotonic() >= deadline:
-                report["status"] = "timed_out"
+                report.status = RunStatus.TIMED_OUT
         except PlaywrightTimeoutError as e:
             _add_finding(report, "error", "Browser timeout", str(e)[:500])
-            report["status"] = "timed_out"
+            report.status = RunStatus.TIMED_OUT
         finally:
             if context is not None:
                 context.close()
@@ -413,11 +406,13 @@ def _clean_title(text: str) -> str:
     return text
 
 
-def _generate_title(report: dict) -> str:
+def _generate_title(report) -> str:
+    # Accepts a Report or a plain dict (batch-name generation passes a dict).
+    getter = report.get if isinstance(report, dict) else lambda k, d="": getattr(report, k, d)
     payload = json.dumps(
         {
-            "target_url": report.get("target_url", ""),
-            "user_prompt": report.get("prompt") or "Explore and test the site's main unauthenticated flows.",
+            "target_url": getter("target_url", ""),
+            "user_prompt": getter("prompt", "") or "Explore and test the site's main unauthenticated flows.",
         },
         indent=2,
     )
@@ -428,22 +423,23 @@ def _generate_title(report: dict) -> str:
         return _fallback_title(report)
 
 
-def _fallback_title(report: dict) -> str:
-    return _clean_title(report.get("target_hostname") or report.get("target_url") or "Sentinel run")
+def _fallback_title(report) -> str:
+    getter = report.get if isinstance(report, dict) else lambda k, d="": getattr(report, k, d)
+    return _clean_title(getter("target_hostname", "") or getter("target_url", "") or "Sentinel run")
 
 
-def _add_finding(report: dict, severity: str, title: str, detail: str) -> None:
+def _add_finding(report: Report, severity: str, title: str, detail: str) -> None:
     max_chars = ConfigManager().sentinel.finding_detail_max_chars
     detail = " ".join(str(detail).split())
     if len(detail) > max_chars:
         detail = f"{detail[:max_chars].rstrip()}..."
-    report["findings"].append({"severity": severity, "title": title, "detail": detail})
+    report.findings.append(Finding(severity=severity, title=title, detail=detail))
 
 
 _VERDICT_FAIL_REASON_MAX_CHARS = 300
 
 
-def _classify_run_verdict(report: dict) -> str:
+def _classify_run_verdict(report: Report) -> str:
     """Ask the LLM whether the run actually fulfilled the user's prompt.
 
     Returns the new run status: 'completed' on pass, 'failed' on fail. On any
@@ -461,24 +457,24 @@ def _classify_run_verdict(report: dict) -> str:
     verdict, reason = parsed
     if verdict != "fail":
         return "completed"
-    report["verdict_reason"] = reason[:_VERDICT_FAIL_REASON_MAX_CHARS]
+    report.verdict_reason = reason[:_VERDICT_FAIL_REASON_MAX_CHARS]
     _add_finding(report, "warning", "Run did not fulfill prompt", reason)
     return "failed"
 
 
-def _verdict_prompt(report: dict) -> str:
+def _verdict_prompt(report: Report) -> str:
     payload = {
-        "original_prompt": report.get("prompt") or "",
-        "target_url": report.get("target_url"),
-        "allow_accounts": bool(report.get("allow_accounts")),
-        "allow_external": bool(report.get("allow_external")),
-        "additional_domains": list(report.get("additional_domains") or []),
+        "original_prompt": report.prompt or "",
+        "target_url": report.target_url,
+        "allow_accounts": bool(report.allow_accounts),
+        "allow_external": bool(report.allow_external),
+        "additional_domains": list(report.additional_domains or []),
         "steps": [
-            {"action": step.get("action"), "reason": step.get("reason"), "result": step.get("result")}
-            for step in report.get("steps", [])
+            {"action": step.action, "reason": step.reason, "result": step.result.model_dump(exclude_none=True)}
+            for step in report.steps
         ],
-        "findings": report.get("findings", []),
-        "final_report": report.get("final_report") or "",
+        "findings": [f.model_dump() for f in report.findings],
+        "final_report": report.final_report or "",
     }
     return json.dumps(payload, indent=2)
 
@@ -501,7 +497,7 @@ def _parse_verdict_payload(raw: str) -> tuple[str, str] | None:
     return verdict, reason
 
 
-def _add_final_report(report: dict) -> None:
+def _add_final_report(report: Report) -> None:
     picked = _pick_final_report_screenshots(report)
     try:
         text = _get_provider().final_report_text(
@@ -512,7 +508,7 @@ def _add_final_report(report: dict) -> None:
         logging.warning("Sentinel final report generation failed: %s", e)
         text = _fallback_final_report(report)
     text = _ensure_summary_heading(text)
-    report["final_report"] = _truncate_text(text, ConfigManager().sentinel.final_report_max_chars)
+    report.final_report = _truncate_text(text, ConfigManager().sentinel.final_report_max_chars)
     _save(report)
 
 
@@ -528,33 +524,35 @@ def _ensure_summary_heading(text: str) -> str:
     return f"## Summary\n\n{body}"
 
 
-def _screenshot_manifest(report: dict) -> list[dict]:
+def _screenshot_manifest(report: Report) -> list[dict]:
     """Build a [{filename, produced_by, url}, ...] manifest of all screenshots
     in the run, where produced_by names the action that produced that frame
     (or 'initial' for step-00.png).
     """
-    steps_by_index = {int(s.get("index", 0)): s for s in report.get("steps") or []}
+    steps_by_index = {int(s.index): s for s in report.steps}
     entries = []
-    for shot in report.get("screenshots") or []:
+    for shot in report.screenshots or []:
         filename = Path(str(shot)).name
         m = re.match(r"^step-(\d{2})\.png$", filename)
         if not m:
             continue
         idx = int(m.group(1))
         if idx == 0:
-            entries.append({"filename": filename, "produced_by": "initial", "url": report.get("target_url", "")})
+            entries.append({"filename": filename, "produced_by": "initial", "url": report.target_url})
             continue
-        step = steps_by_index.get(idx) or {}
-        result = step.get("result") or {}
+        step = steps_by_index.get(idx)
+        if step is None:
+            entries.append({"filename": filename, "produced_by": "", "url": ""})
+            continue
         entries.append({
             "filename": filename,
-            "produced_by": f"{step.get('action', '')}: {step.get('reason', '')}".strip(": "),
-            "url": result.get("url", ""),
+            "produced_by": f"{step.action}: {step.reason}".strip(": "),
+            "url": step.result.url,
         })
     return entries
 
 
-def _pick_final_report_screenshots(report: dict) -> list[str]:
+def _pick_final_report_screenshots(report: Report) -> list[str]:
     """Ask a cheap LLM call which screenshots to attach to the final-report
     call. Returns a list of filenames (e.g. ['step-04.png', 'step-17.png']).
     Falls back to the last N screenshots on any error.
@@ -567,15 +565,15 @@ def _pick_final_report_screenshots(report: dict) -> list[str]:
     available = [e["filename"] for e in manifest]
     fallback = available[-min(budget, len(available)):]
     payload = json.dumps({
-        "original_prompt": report.get("prompt") or "",
-        "target_url": report.get("target_url"),
-        "additional_domains": list(report.get("additional_domains") or []),
-        "status": report.get("run_outcome") or report.get("status"),
+        "original_prompt": report.prompt or "",
+        "target_url": report.target_url,
+        "additional_domains": list(report.additional_domains or []),
+        "status": report.run_outcome or report.status,
         "budget": budget,
         "available_screenshots": manifest,
         "findings": [
-            {"severity": f.get("severity"), "title": f.get("title"), "detail": f.get("detail")}
-            for f in (report.get("findings") or []) if f.get("severity") != "info"
+            {"severity": f.severity, "title": f.title, "detail": f.detail}
+            for f in report.findings if f.severity != "info"
         ],
     }, indent=2)
     try:
@@ -611,18 +609,18 @@ def _parse_picker_payload(raw: str, allowed: set[str], budget: int) -> list[str]
     return seen
 
 
-def _final_report_prompt(report: dict, picked: list[str] | None = None) -> str:
+def _final_report_prompt(report: Report, picked: list[str] | None = None) -> str:
     manifest = _screenshot_manifest(report)
     payload = {
-        "original_prompt": report.get("prompt") or "Explore and test the site's main unauthenticated flows.",
-        "target_url": report.get("target_url"),
-        "additional_domains": list(report.get("additional_domains") or []),
-        "status": report.get("run_outcome") or report.get("status"),
+        "original_prompt": report.prompt or "Explore and test the site's main unauthenticated flows.",
+        "target_url": report.target_url,
+        "additional_domains": list(report.additional_domains or []),
+        "status": report.run_outcome or report.status,
         "steps": [
-            {"action": step.get("action"), "reason": step.get("reason"), "result": step.get("result")}
-            for step in report.get("steps", [])
+            {"action": step.action, "reason": step.reason, "result": step.result.model_dump(exclude_none=True)}
+            for step in report.steps
         ],
-        "findings": report.get("findings", []),
+        "findings": [f.model_dump() for f in report.findings],
         "screenshots": [e["filename"] for e in manifest],
         "screenshot_manifest": manifest,
         "attached_screenshots": picked or [],
@@ -630,7 +628,7 @@ def _final_report_prompt(report: dict, picked: list[str] | None = None) -> str:
     return json.dumps(payload, indent=2)
 
 
-def _final_report_image_paths(report: dict, picked: list[str] | None = None) -> list[Path]:
+def _final_report_image_paths(report: Report, picked: list[str] | None = None) -> list[Path]:
     cfg = ConfigManager().sentinel
     if picked:
         names = list(picked)
@@ -638,26 +636,26 @@ def _final_report_image_paths(report: dict, picked: list[str] | None = None) -> 
         # Fallback: last N raw screenshots (preserves prior behavior if picker
         # is disabled or returns nothing).
         max_images = cfg.final_report_max_images
-        names = [Path(str(s)).name for s in (report.get("screenshots") or [])[-max_images:]]
+        names = [Path(str(s)).name for s in (report.screenshots or [])[-max_images:]]
     paths = []
     seen: set[str] = set()
     for name in names:
         if name in seen:
             continue
         seen.add(name)
-        path = DataInterface().screenshots_dir(report["run_id"]) / name
+        path = DataInterface().screenshots_dir(report.run_id) / name
         if path.exists():
             paths.append(path)
     return paths
 
 
-def _fallback_final_report(report: dict) -> str:
-    prompt = report.get("prompt") or "the requested public-site QA pass"
-    findings = report.get("findings", [])
+def _fallback_final_report(report: Report) -> str:
+    prompt = report.prompt or "the requested public-site QA pass"
+    findings = report.findings
     if findings:
-        finding_text = "; ".join(f"{item.get('title', 'Finding')}: {item.get('detail', '')}" for item in findings[:5])
-        return f"Sentinel tested {report.get('target_url')} for {prompt}. Key findings: {finding_text}"
-    return f"Sentinel tested {report.get('target_url')} for {prompt}. No findings were recorded during the run."
+        finding_text = "; ".join(f"{item.title or 'Finding'}: {item.detail}" for item in findings[:5])
+        return f"Sentinel tested {report.target_url} for {prompt}. Key findings: {finding_text}"
+    return f"Sentinel tested {report.target_url} for {prompt}. No findings were recorded during the run."
 
 
 def _truncate_text(text: str, max_chars: int) -> str:
@@ -667,22 +665,22 @@ def _truncate_text(text: str, max_chars: int) -> str:
     return f"{text[:max_chars].rstrip()}..."
 
 
-def _capture_screenshot(page, report: dict, index: int) -> str | None:
+def _capture_screenshot(page, report: Report, index: int) -> str | None:
     """Capture a screenshot at the given step index (0 = initial state, N = after step N).
 
     The screenshots list is treated as ordered by index — duplicate indices
     overwrite the existing entry rather than appending.
     """
     cfg = ConfigManager()
-    if len(report["screenshots"]) >= cfg.sentinel.max_screenshots:
+    if len(report.screenshots) >= cfg.sentinel.max_screenshots:
         return None
-    path = DataInterface().screenshot_path(report["run_id"], index)
+    path = DataInterface().screenshot_path(report.run_id, index)
     path.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(path), full_page=False)
-    ensure_screenshot_thumbnail(report["run_id"], path.name)
+    ensure_screenshot_thumbnail(report.run_id, path.name)
     rel = f"screenshots/{path.name}"
-    if rel not in report["screenshots"]:
-        report["screenshots"].append(rel)
+    if rel not in report.screenshots:
+        report.screenshots.append(rel)
     return rel
 
 
@@ -715,20 +713,20 @@ def ensure_screenshot_thumbnail(run_id: str, filename: str) -> Path | None:
     return thumb_path
 
 
-def _screenshot_image_paths(report: dict, screenshot: str | None) -> list[Path]:
+def _screenshot_image_paths(report: Report, screenshot: str | None) -> list[Path]:
     if not screenshot:
         return []
     filename = Path(screenshot).name
-    path = DataInterface().screenshots_dir(report["run_id"]) / filename
+    path = DataInterface().screenshots_dir(report.run_id) / filename
     return [path] if path.exists() else []
 
 
-def _capture_annotated_screenshot(report: dict, screenshot: str | None, observation: dict, index: int) -> str | None:
+def _capture_annotated_screenshot(report: Report, screenshot: str | None, observation: dict, index: int) -> str | None:
     if not screenshot:
         return None
     raw_filename = Path(screenshot).name
-    raw_path = DataInterface().screenshots_dir(report["run_id"]) / raw_filename
-    out_path = DataInterface().annotated_screenshot_path(report["run_id"], index)
+    raw_path = DataInterface().screenshots_dir(report.run_id) / raw_filename
+    out_path = DataInterface().annotated_screenshot_path(report.run_id, index)
     written = _annotate_screenshot(
         raw_path,
         out_path,
@@ -737,23 +735,22 @@ def _capture_annotated_screenshot(report: dict, screenshot: str | None, observat
     )
     if written is None:
         return None
-    ensure_screenshot_thumbnail(report["run_id"], out_path.name)
+    ensure_screenshot_thumbnail(report.run_id, out_path.name)
     rel = f"screenshots/{out_path.name}"
-    annots = report.setdefault("annotated_screenshots", [])
-    if rel not in annots:
-        annots.append(rel)
+    if rel not in report.annotated_screenshots:
+        report.annotated_screenshots.append(rel)
     return rel
 
 
-def _annotated_image_paths(report: dict, annotated: str | None, raw: str | None) -> list[Path]:
+def _annotated_image_paths(report: Report, annotated: str | None, raw: str | None) -> list[Path]:
     if annotated:
-        path = DataInterface().screenshots_dir(report["run_id"]) / Path(annotated).name
+        path = DataInterface().screenshots_dir(report.run_id) / Path(annotated).name
         if path.exists():
             paths = [path]
             # If the prior step was 'peek', also attach the raw (un-annotated)
             # screenshot so the model can see ui obscured by annotation boxes.
-            if report.get("_peek_pending") and raw:
-                raw_path = DataInterface().screenshots_dir(report["run_id"]) / Path(raw).name
+            if report._peek_pending and raw:
+                raw_path = DataInterface().screenshots_dir(report.run_id) / Path(raw).name
                 if raw_path.exists():
                     paths.append(raw_path)
             return paths
@@ -938,10 +935,10 @@ def _observe_page(page) -> dict:
     )
 
 
-def _agent_prompt(report: dict, observation: dict) -> str:
+def _agent_prompt(report: Report, observation: dict) -> str:
     history = [
-        {"action": step["action"], "reason": step["reason"], "result": step["result"]}
-        for step in report["steps"][-6:]
+        {"action": step.action, "reason": step.reason, "result": step.result.model_dump(exclude_none=True)}
+        for step in report.steps[-6:]
     ]
     elements = [
         {
@@ -953,20 +950,20 @@ def _agent_prompt(report: dict, observation: dict) -> str:
         for el in (observation.get("elements") or [])
     ]
     hints = [
-        f["detail"]
-        for f in (report.get("findings") or [])
-        if f.get("severity") in {"warning", "error"} and f.get("title") == "Repeated click with no navigation"
+        f.detail
+        for f in report.findings
+        if f.severity in {"warning", "error"} and f.title == "Repeated click with no navigation"
     ][-1:]
     payload = {
-        "target_url": report["target_url"],
-        "user_prompt": report["prompt"] or "Explore and test the site's main unauthenticated flows.",
+        "target_url": report.target_url,
+        "user_prompt": report.prompt or "Explore and test the site's main unauthenticated flows.",
         "history": history,
         "page": {
             "url": observation.get("url", ""),
             "title": observation.get("title", ""),
             "elements": elements,
         },
-        "additional_domains": list(report.get("additional_domains") or []),
+        "additional_domains": list(report.additional_domains or []),
         "instructions": (
             "The attached screenshot shows the page with each interactive element outlined and "
             "labelled with a synthetic id (e.g. e1, e2). Use the screenshot as your primary input "
@@ -1070,15 +1067,15 @@ def _blocked_external_click_url(
     return parsed.geturl()
 
 
-def _record_step(report: dict, action: str, reason: str, result: dict) -> None:
-    report["steps"].append(
-        {
-            "index": len(report["steps"]) + 1,
-            "action": action,
-            "reason": reason,
-            "result": result,
-            "created_at": utc_now_iso(),
-        }
+def _record_step(report: Report, action: str, reason: str, result: dict) -> None:
+    report.steps.append(
+        Step(
+            index=len(report.steps) + 1,
+            action=action,
+            reason=reason,
+            result=ActionResult.model_validate(result),
+            created_at=utc_now_iso(),
+        )
     )
 
 
@@ -1096,11 +1093,13 @@ def _request_agent_action(report, observation, image_paths, allow_external, know
         agent_text = _get_provider().agent_text(
             _agent_prompt(report, observation),
             image_paths=image_paths,
-            allow_accounts=bool(report.get("allow_accounts")),
-            demographic=str(report.get("demographic") or ""),
-            allow_external=allow_external or bool(report.get("additional_domains")),
-            card_details=report.get("_card_details"),
-            account_credentials=report.get("_account_credentials"),
+            allow_accounts=bool(report.allow_accounts),
+            demographic=str(report.demographic or ""),
+            allow_external=allow_external or bool(report.additional_domains),
+            card_details=report._card_details,
+            account_credentials=(
+                report._account_credentials.model_dump() if report._account_credentials else None
+            ),
         )
         try:
             return parse_agent_action(agent_text, known_ids)
@@ -1117,20 +1116,20 @@ def _request_agent_action(report, observation, image_paths, allow_external, know
 _LOGIN_FAIL_PREFIX = "login failed:"
 
 
-def _detect_login_failure(report: dict) -> str:
+def _detect_login_failure(report: Report) -> str:
     """If the agent finished with a 'login failed:' marker, return the reason."""
-    if not report.get("allow_accounts") or not report.get("steps"):
+    if not report.allow_accounts or not report.steps:
         return ""
-    last = report["steps"][-1]
-    if last.get("action") != "finish":
+    last = report.steps[-1]
+    if last.action != "finish":
         return ""
-    reason = str(last.get("reason", "")).strip()
+    reason = str(last.reason or "").strip()
     if reason.lower().startswith(_LOGIN_FAIL_PREFIX):
         return reason
     return ""
 
 
-def _detect_click_loop(report: dict) -> bool:
+def _detect_click_loop(report: Report) -> bool:
     """Surface a finding when the agent clicks the same element_id repeatedly
     without the URL changing — usually a sign the target control is broken or
     leads back to the same page.
@@ -1142,21 +1141,20 @@ def _detect_click_loop(report: dict) -> bool:
     threshold = cfg.click_loop_threshold
     if threshold <= 0:
         return False
-    steps = report.get("steps") or []
+    steps = report.steps
     if len(steps) < threshold:
         return False
     tail = steps[-threshold:]
-    if not all(s.get("action") == "click" for s in tail):
+    if not all(s.action == "click" for s in tail):
         return False
-    urls = {(s.get("result") or {}).get("url") for s in tail}
+    urls = {s.result.url for s in tail}
     if len(urls) != 1:
         return False
-    reasons = {s.get("reason", "")[:60] for s in tail}
-    last_step = tail[-1].get("index")
-    findings = report.get("findings") or []
+    reasons = {(s.reason or "")[:60] for s in tail}
+    last_step = tail[-1].index
     # Suppress if we already flagged a loop ending at this same step count.
-    for finding in findings:
-        if finding.get("title") == "Repeated click with no navigation" and str(last_step) in finding.get("detail", ""):
+    for finding in report.findings:
+        if finding.title == "Repeated click with no navigation" and str(last_step) in finding.detail:
             return False
     _add_finding(
         report,
@@ -1167,6 +1165,6 @@ def _detect_click_loop(report: dict) -> bool:
         "try a different element.",
     )
     loop_warnings = sum(
-        1 for f in (report.get("findings") or []) if f.get("title") == "Repeated click with no navigation"
+        1 for f in report.findings if f.title == "Repeated click with no navigation"
     )
     return cfg.click_loop_max_warnings > 0 and loop_warnings >= cfg.click_loop_max_warnings
