@@ -230,6 +230,7 @@ def sitemap():
         url_for('crosswords.index'),
         url_for('simulations_api.index'),
         url_for('simulations_api.game_of_life'),
+        url_for('simulations_api.astar'),
     ]
     for project in HammockDataInterface().get_posts_by_project():
         for post in project.posts:

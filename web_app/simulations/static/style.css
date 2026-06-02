@@ -5,6 +5,20 @@
   margin-bottom: 0.25rem;
 }
 
+.gol-rules {
+  display: inline-block;
+  text-align: left;
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--hw-text-muted);
+  line-height: 1.6;
+}
+
+.gol-rules li {
+  margin-bottom: 0.2rem;
+}
+
 .gol-panel {
   background: rgba(255, 255, 255, 0.9);
   border-radius: var(--hw-radius-lg);
@@ -102,7 +116,8 @@
   touch-action: none;
 }
 
-#gol-canvas {
+#gol-canvas,
+#astar-canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -124,9 +139,88 @@
   gap: 0.35rem;
 }
 
+.astar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: var(--hw-text-secondary);
+  font-weight: 600;
+}
+
+.astar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.astar-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--hw-border);
+}
+
+.astar-swatch-start { background: #6B8E5A; }
+.astar-swatch-goal { background: #E07A5F; }
+.astar-swatch-open { background: #A8C686; }
+.astar-swatch-closed { background: rgba(135, 168, 120, 0.35); }
+.astar-swatch-path { background: #E9C46A; }
+.astar-swatch-wall { background: #2D4A3E; }
+
+.astar-explainer {
+  margin-top: 1.25rem;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-md);
+  border: 1px solid var(--hw-border);
+  padding: 1.25rem 1.5rem;
+  color: var(--hw-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.astar-explainer p {
+  margin-bottom: 0.75rem;
+}
+
+.astar-explainer-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  color: var(--hw-forest);
+  font-size: 1.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.astar-explainer-list {
+  margin-bottom: 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.astar-explainer-list li {
+  margin-bottom: 0.4rem;
+}
+
+.astar-explainer strong {
+  color: var(--hw-forest);
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.astar-path-text {
+  color: var(--hw-gold);
+}
+
 @media (max-width: 768px) {
   .gol-toolbar {
     justify-content: center;
+  }
+  .astar-legend {
+    justify-content: center;
+  }
+  .astar-explainer {
+    padding: 1rem 1.1rem;
+    font-size: 0.9rem;
   }
   .gol-speed input[type="range"] {
     width: 100px;

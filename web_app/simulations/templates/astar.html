@@ -1,0 +1,95 @@
+{% extends "simulations_base.html" %}
+
+{% block page_title %}A* Pathfinding - NabiCat{% endblock %}
+{% block meta_description %}Watch the A* search algorithm find the shortest path through a grid. Paint walls, drag the start and goal, then play, step, and adjust speed.{% endblock %}
+
+{% block page_content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-10">
+
+      <div class="text-center mb-3">
+        <h1 class="sim-title">A* Pathfinding</h1>
+        <p class="text-muted mb-0 small">Drag to paint walls. Drag the <span class="text-sage fw-bold">start</span> or <span class="text-peach fw-bold">goal</span> node to move it. A* expands the lowest-cost frontier first using a Manhattan-distance heuristic. Each evaluated cell shows <strong>g</strong> (cost so far, top-left), <strong>h</strong> (heuristic, top-right), and <strong>f = g + h</strong> (center).</p>
+      </div>
+
+      <div class="gol-panel">
+        <div class="gol-toolbar">
+          <div class="d-flex gap-2 align-items-center flex-wrap">
+            <button class="btn-sim btn-sim-primary" id="astar-play" aria-label="Play or pause">
+              <i class="bi bi-play-fill" id="astar-play-icon"></i>
+              <span id="astar-play-label">Play</span>
+            </button>
+            <button class="btn-sim" id="astar-step" title="Advance one expansion">
+              <i class="bi bi-skip-forward-fill"></i>
+              <span>Step</span>
+            </button>
+            <button class="btn-sim" id="astar-reset" title="Clear search, keep walls">
+              <i class="bi bi-arrow-counterclockwise"></i>
+              <span>Reset</span>
+            </button>
+            <button class="btn-sim" id="astar-maze" title="Generate a random maze">
+              <i class="bi bi-bricks"></i>
+              <span>Maze</span>
+            </button>
+            <button class="btn-sim btn-sim-ghost" id="astar-clear" title="Clear all walls">
+              <i class="bi bi-eraser"></i>
+              <span>Clear</span>
+            </button>
+          </div>
+          <div class="gol-speed">
+            <label for="astar-speed" class="gol-speed-label">
+              <i class="bi bi-speedometer2"></i>
+              <span id="astar-speed-value">20</span> steps/s
+            </label>
+            <input type="range" id="astar-speed" min="1" max="120" value="20" step="1">
+          </div>
+        </div>
+
+        <div class="gol-canvas-wrap">
+          <canvas id="astar-canvas"></canvas>
+        </div>
+
+        <div class="astar-legend">
+          <span><i class="astar-swatch astar-swatch-start"></i> Start</span>
+          <span><i class="astar-swatch astar-swatch-goal"></i> Goal</span>
+          <span><i class="astar-swatch astar-swatch-open"></i> Frontier</span>
+          <span><i class="astar-swatch astar-swatch-closed"></i> Visited</span>
+          <span><i class="astar-swatch astar-swatch-path"></i> Path</span>
+          <span><i class="astar-swatch astar-swatch-wall"></i> Wall</span>
+        </div>
+
+        <div class="gol-status">
+          <span><i class="bi bi-grid"></i> Grid: <span id="astar-dims">—</span></span>
+          <span><i class="bi bi-broadcast"></i> Frontier: <span id="astar-open">0</span></span>
+          <span><i class="bi bi-check2-circle"></i> Visited: <span id="astar-closed">0</span></span>
+          <span><i class="bi bi-signpost-2"></i> Path: <span id="astar-path">—</span></span>
+        </div>
+      </div>
+
+      <div class="astar-explainer">
+        <h2 class="astar-explainer-title">How A* works</h2>
+        <p>A* finds the shortest path between two cells by always expanding the most promising cell first. For each cell it tracks three numbers:</p>
+        <ul class="astar-explainer-list">
+          <li><strong>g</strong> &mdash; the cost of the cheapest path found so far from the <span class="text-sage fw-bold">start</span> to this cell (here, one per step).</li>
+          <li><strong>h</strong> &mdash; a heuristic <em>estimate</em> of the remaining cost from this cell to the <span class="text-peach fw-bold">goal</span>. We use the Manhattan distance (|&Delta;x| + |&Delta;y|), which never overestimates, so A* is guaranteed to find a shortest path.</li>
+          <li><strong>f = g + h</strong> &mdash; the estimated total cost of a path through this cell. A* always expands the frontier cell with the lowest <strong>f</strong>.</li>
+        </ul>
+        <p>Each step the algorithm:</p>
+        <ol class="astar-explainer-list">
+          <li>Picks the <span class="text-sage fw-bold">frontier</span> cell with the smallest <strong>f</strong> and marks it <span class="fw-bold">visited</span>.</li>
+          <li>If that cell is the goal, it walks the recorded parent links backwards to reveal the <span class="astar-path-text fw-bold">path</span>.</li>
+          <li>Otherwise it looks at the four neighbours, and for any that offer a cheaper <strong>g</strong>, records this cell as their parent and adds them to the frontier.</li>
+        </ol>
+        <p class="mb-0">Because the heuristic guides the search toward the goal, A* explores far fewer cells than a blind flood fill while still guaranteeing the shortest route. If the frontier empties before reaching the goal, no path exists.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('.static', filename='astar.js') }}" defer></script>
+{% endblock %}

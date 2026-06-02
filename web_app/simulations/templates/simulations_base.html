@@ -3,14 +3,7 @@
 {% block subapp_index_url %}/simulations{% endblock %}
 {% block navbar_brand %}Simulations{% endblock %}
 
-{% block page_nav_items %}
-  <li class="nav-item mx-1">
-    <a class="nav-link {{'active' if active == 'Home' else ''}} d-flex align-items-center gap-2" href="/simulations">
-      <i class="bi bi-grid-3x3-gap-fill"></i>
-      <span>Simulations</span>
-    </a>
-  </li>
-{% endblock %}
+{% block page_nav_items %}{% endblock %}
 
 {% block scripts %}
   {{ super() }}

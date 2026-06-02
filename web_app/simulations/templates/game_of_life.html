@@ -10,7 +10,13 @@
 
       <div class="text-center mb-3">
         <h1 class="sim-title">Conway's Game of Life</h1>
-        <p class="text-muted mb-0 small">Tap cells to toggle. Two rules: a live cell with 2&ndash;3 live neighbours survives; a dead cell with exactly 3 is born.</p>
+        <p class="text-muted mb-2 small">Tap cells to toggle. Each step, every cell follows four rules:</p>
+        <ul class="gol-rules">
+          <li>Any live cell with fewer than two live neighbours dies, as if by underpopulation.</li>
+          <li>Any live cell with two or three live neighbours lives on to the next generation.</li>
+          <li>Any live cell with more than three live neighbours dies, as if by overpopulation.</li>
+          <li>Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.</li>
+        </ul>
       </div>
 
       <div class="gol-panel">

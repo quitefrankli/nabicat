@@ -22,3 +22,8 @@ def index():
 @simulations_api.route('/game-of-life', methods=['GET'])
 def game_of_life():
     return render_template('game_of_life.html')
+
+
+@simulations_api.route('/astar', methods=['GET'])
+def astar():
+    return render_template('astar.html')
