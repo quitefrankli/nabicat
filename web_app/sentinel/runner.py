@@ -25,6 +25,17 @@ def render_report_pdf(html: str) -> bytes:
     """Render an HTML string to PDF bytes using headless Chromium (Playwright)."""
     from playwright.sync_api import sync_playwright
 
+    cfg = ConfigManager().sentinel
+    # Chromium's header/footer templates do NOT inherit the page <style>, so
+    # the footer must carry fully inline styling. A near-empty header_template
+    # suppresses Chromium's default date/title header.
+    footer_template = (
+        '<div style="font-family: \'Nunito\', sans-serif; font-size:7.5pt; color:#8A9A8A; '
+        'width:100%; padding:0 14mm; display:flex; justify-content:space-between;">'
+        f'<span>{cfg.pdf_footer_label} &middot; <span class="date"></span></span>'
+        '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>'
+        "</div>"
+    )
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
@@ -34,7 +45,15 @@ def render_report_pdf(html: str) -> bytes:
             return page.pdf(
                 format="A4",
                 print_background=True,
-                margin={"top": "16mm", "bottom": "16mm", "left": "14mm", "right": "14mm"},
+                display_header_footer=True,
+                header_template="<span></span>",
+                footer_template=footer_template,
+                margin={
+                    "top": cfg.pdf_margin_top,
+                    "bottom": cfg.pdf_margin_bottom,
+                    "left": cfg.pdf_margin_left,
+                    "right": cfg.pdf_margin_right,
+                },
             )
         finally:
             browser.close()
