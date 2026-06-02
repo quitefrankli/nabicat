@@ -47,6 +47,13 @@ class LLMConfig:
         "medium": getenv("BEDROCK_MEDIUM_MODEL") or "anthropic.claude-sonnet-4-6",
         "strong": getenv("BEDROCK_STRONG_MODEL") or "anthropic.claude-opus-4-7",
     })
+    # Socket-level timeouts/retries for the boto3 bedrock-runtime client. Without
+    # these, a stalled connection hangs the calling thread forever (boto3's
+    # defaults are a 60s connect timeout but an unbounded read, plus retries).
+    # read_timeout is supplied per-call from the role's timeout_s; these are the
+    # connect ceiling and retry cap that apply to every call.
+    bedrock_connect_timeout_s: float = 10.0
+    bedrock_max_attempts: int = 2
 
     @property
     def meridian_url(self) -> str:

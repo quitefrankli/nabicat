@@ -350,11 +350,11 @@ class BedrockError(RuntimeError):
     """Raised when the AWS Bedrock Anthropic call fails."""
 
 
-_bedrock_client = None
+_bedrock_clients: dict = {}
 
 
-def _get_bedrock_client():
-    """Return a cached boto3 bedrock-runtime client.
+def _get_bedrock_client(read_timeout_s: float):
+    """Return a cached boto3 bedrock-runtime client with bounded socket timeouts.
 
     We use boto3 directly rather than the anthropic SDK's AnthropicBedrock
     because the SDK double-URL-encodes inference-profile ARNs in the request
@@ -364,14 +364,29 @@ def _get_bedrock_client():
     explicitly because profile-level ``region`` in ~/.aws/config takes
     precedence over the AWS_REGION env var otherwise — which would point
     the client at the wrong region for inference-profile ARNs.
+
+    Clients are cached per read-timeout: botocore sets the socket read timeout
+    on the client (not per call), so callers with different timeouts get
+    distinct clients. Without a read_timeout a stalled connection hangs the
+    calling thread forever, which defeats Sentinel's per-step deadline.
     """
-    global _bedrock_client
-    if _bedrock_client is None:
+    key = round(float(read_timeout_s), 3)
+    client = _bedrock_clients.get(key)
+    if client is None:
         import os
         import boto3
+        from botocore.config import Config
+
+        cfg = ConfigManager().llm
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-        _bedrock_client = boto3.client("bedrock-runtime", region_name=region)
-    return _bedrock_client
+        boto_cfg = Config(
+            connect_timeout=cfg.bedrock_connect_timeout_s,
+            read_timeout=read_timeout_s,
+            retries={"max_attempts": cfg.bedrock_max_attempts, "mode": "standard"},
+        )
+        client = boto3.client("bedrock-runtime", region_name=region, config=boto_cfg)
+        _bedrock_clients[key] = client
+    return client
 
 
 def bedrock_text(
@@ -379,7 +394,7 @@ def bedrock_text(
     system: str,
     model: str,
     max_tokens: int = 1024,
-    timeout_s: float = 120.0,  # noqa: ARG001 — accepted for symmetry with meridian_text; boto3 timeouts are set on the client, not per-call
+    timeout_s: float = 120.0,
     image_paths: list | None = None,
 ) -> str:
     """Invoke AWS Bedrock via boto3 with an Anthropic Messages payload.
@@ -416,9 +431,15 @@ def bedrock_text(
     })
 
     try:
-        resp = _get_bedrock_client().invoke_model(modelId=model, body=body)
+        resp = _get_bedrock_client(timeout_s).invoke_model(modelId=model, body=body)
     except Exception as e:
         msg = str(e)
+        if (
+            e.__class__.__name__ in {"ReadTimeoutError", "ConnectTimeoutError", "ConnectionError"}
+            or "Read timeout" in msg
+            or "Connect timeout" in msg
+        ):
+            raise BedrockError(f"bedrock call timed out after {timeout_s}s") from e
         if "Unable to locate credentials" in msg or "could not resolve credentials" in msg:
             raise BedrockError(
                 "AWS credentials not found. Set AWS_PROFILE in .env (and run aws sso login if needed)."
