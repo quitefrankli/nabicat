@@ -15,7 +15,7 @@
 }
 
 .sentinel-shell-with-sidebar {
-  --sentinel-sidebar-w: 280px;
+  --sentinel-sidebar-w: 320px;
   max-width: none;
   margin: 1.5rem 0 0;
   grid-template-columns: var(--sentinel-sidebar-w) 12px minmax(0, 1fr);

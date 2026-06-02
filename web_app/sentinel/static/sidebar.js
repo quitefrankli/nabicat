@@ -1,7 +1,7 @@
 (function () {
   const STORAGE_KEY = 'sentinel.sidebar.width';
   const VIEW_KEY = 'sentinel.sidebar.view';
-  const MIN = 200;
+  const MIN = 320;
   const MAX = 560;
 
   function csrfToken() {
@@ -111,7 +111,7 @@
 
     resizer.addEventListener('keydown', function (event) {
       const step = event.shiftKey ? 32 : 8;
-      const current = parseInt(getComputedStyle(shell).getPropertyValue('--sentinel-sidebar-w'), 10) || 280;
+      const current = parseInt(getComputedStyle(shell).getPropertyValue('--sentinel-sidebar-w'), 10) || 320;
       let next = current;
       if (event.key === 'ArrowLeft') next = current - step;
       else if (event.key === 'ArrowRight') next = current + step;
