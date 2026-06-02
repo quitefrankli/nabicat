@@ -440,6 +440,32 @@ body.sentinel-resizing * {
   gap: 0.4rem;
 }
 
+/* Opt-in "remember on server" toggle: deliberately loud so the plaintext
+   on-disk tradeoff can't be missed. */
+.sentinel-cache-toggle {
+  margin-top: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--hw-coral);
+  border-left: 4px solid var(--hw-coral);
+  border-radius: var(--hw-radius-sm);
+  background: rgba(224, 122, 95, 0.08);
+}
+
+.sentinel-cache-toggle .form-check-label {
+  font-weight: 600;
+  color: var(--hw-text-primary);
+}
+
+.sentinel-cache-warning {
+  margin-top: 0.25rem;
+  font-weight: 400;
+  color: var(--hw-coral);
+}
+
+.sentinel-cache-warning .bi {
+  margin-right: 0.25rem;
+}
+
 .sentinel-inline-fields > div {
   max-width: 12rem;
 }
@@ -1256,6 +1282,21 @@ body.sentinel-resizing * {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+/* The global .btn { border: none } strips Bootstrap's outline-secondary
+   border, so restore a visible sage outline on the batch action buttons. */
+.sentinel-batch-add-item,
+.sentinel-batch-item-duplicate {
+  border: 2px solid var(--hw-sage);
+  color: var(--hw-sage-dark);
+  background: transparent;
+}
+
+.sentinel-batch-add-item:hover,
+.sentinel-batch-item-duplicate:hover {
+  background: var(--hw-sage);
+  color: #fff;
 }
 
 .sentinel-batch-list,

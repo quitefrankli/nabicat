@@ -1,4 +1,5 @@
 {% extends "subpage_base.html" %}
+{% from "_sentinel_run_fields.html" import run_fields %}
 
 {% block subapp_index_url %}{{ url_for('sentinel.index') }}{% endblock %}
 {% block navbar_brand %}Sentinel{% endblock %}
@@ -7,7 +8,7 @@
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('sentinel.static', filename='style.css') }}">
   <script defer src="{{ url_for('sentinel.static', filename='sidebar.js') }}"></script>
-  <script defer src="{{ url_for('sentinel.static', filename='batch.js') }}"></script>
+  <script defer src="{{ url_for('sentinel.static', filename='run_form.js') }}"></script>
 {% endblock %}
 
 {% block page_content %}
@@ -29,7 +30,7 @@
 
       <form id="sentinel-batch-form" class="sentinel-form" autocomplete="off">
         <div>
-          <label class="form-label" for="sentinel-batch-name">Batch name</label>
+          <label class="form-label" for="sentinel-batch-name">Batch name <span class="text-muted">(optional)</span></label>
           <input class="form-control form-control-lg" type="text" id="sentinel-batch-name" name="name"
                  maxlength="{{ batch_name_max_chars }}" placeholder="Auto-generated if blank">
         </div>
@@ -38,7 +39,7 @@
 
         <button type="button" class="btn btn-outline-secondary sentinel-batch-add-item">
           <i class="bi bi-plus-circle"></i>
-          <span>Add run</span>
+          <span>Add another run</span>
         </button>
 
         <button class="btn btn-primary sentinel-submit" type="submit">
@@ -51,9 +52,10 @@
   </div>
 </div>
 
-{# Item-card template cloned by batch.js. Field names match _validate_run_params. #}
+{# Item-card template cloned by run_form.js. Shares run_fields() with the
+   single-run form so the two configurators never diverge. #}
 <template id="sentinel-batch-item-template">
-  <div class="sentinel-batch-item">
+  <div class="sentinel-batch-item sentinel-run-item">
     <div class="sentinel-batch-item-head">
       <button type="button" class="btn btn-sm btn-outline-secondary sentinel-batch-item-duplicate">
         <i class="bi bi-copy"></i>
@@ -64,121 +66,7 @@
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
-    <div>
-      <label class="form-label">URL</label>
-      <input class="form-control form-control-lg" type="text" name="url" inputmode="url" placeholder="nabicat.site" required>
-    </div>
-    <div>
-      <label class="form-label">Title <span class="text-muted">(optional)</span></label>
-      <input class="form-control" type="text" name="title" maxlength="{{ title_max_chars }}"
-             placeholder="Auto-generated if blank">
-    </div>
-    <div>
-      <label class="form-label">Prompt</label>
-      <textarea class="form-control" name="prompt" rows="4" maxlength="{{ prompt_max_chars }}"
-                placeholder="Check users can sign-up and create an account"></textarea>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input sentinel-batch-allow-accounts" type="checkbox" name="allow_accounts" value="1">
-      <label class="form-check-label">
-        Permit account creation, login, and deletion
-        <small class="text-muted d-block">Off by default. Optionally provide a synthetic username + password (and any extra fields the site asks for) for the agent to use. Credentials are held in memory only for the duration of the run and are never written to disk. Leave fields blank to let the agent invent its own.</small>
-      </label>
-    </div>
-    <div class="sentinel-batch-account-fields sentinel-card-fields" hidden>
-      <div class="sentinel-card-row">
-        <div>
-          <label class="form-label">Username</label>
-          <input class="form-control" type="text" name="account_username" autocomplete="off" placeholder="qatester">
-        </div>
-        <div>
-          <label class="form-label">Password</label>
-          <input class="form-control" type="password" name="account_password" autocomplete="off" placeholder="(hidden)">
-        </div>
-      </div>
-      <div>
-        <label class="form-label">Extra fields <span class="text-muted">(optional)</span></label>
-        <small class="text-muted d-block mb-2">Add any other fields the site's signup form requires (e.g. <code>email</code>, <code>pin</code>, <code>display_name</code>).</small>
-        <div class="sentinel-account-extra-fields sentinel-account-extras"></div>
-        <button type="button" class="btn btn-sm btn-outline-secondary sentinel-account-add-field">
-          <i class="bi bi-plus-circle"></i>
-          <span>Add field</span>
-        </button>
-      </div>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input sentinel-batch-allow-external" type="checkbox" name="allow_external" value="1">
-      <label class="form-check-label">
-        Permit navigation to any external site
-        <small class="text-muted d-block">Off by default. Add domains below to permit only specific external destinations.</small>
-      </label>
-    </div>
-    <div class="sentinel-batch-additional-domains" hidden>
-      <label class="form-label">Additional domains</label>
-      <textarea class="form-control" name="additional_domains" rows="3"></textarea>
-      <small class="text-muted d-block">One domain or URL per line. Up to {{ additional_domains_max_count }} domains are allowed.</small>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input sentinel-batch-allow-financial" type="checkbox" name="allow_financial" value="1">
-      <label class="form-check-label">
-        Permit financial transactions
-        <small class="text-muted d-block">Off by default. When on, the agent may complete payment forms with the card details below. Card details are held in memory only for the duration of the run and are never written to disk.</small>
-      </label>
-    </div>
-    <div class="sentinel-batch-card-fields sentinel-card-fields" hidden>
-      <div>
-        <label class="form-label">Card Number</label>
-        <input class="form-control" type="text" name="card_number" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242">
-      </div>
-      <div class="sentinel-card-row">
-        <div>
-          <label class="form-label">Expiry</label>
-          <input class="form-control" type="text" name="card_expiry" autocomplete="off" placeholder="MM/YY" maxlength="5">
-        </div>
-        <div>
-          <label class="form-label">CVV</label>
-          <input class="form-control" type="text" name="card_cvv" inputmode="numeric" autocomplete="off" placeholder="123" maxlength="4">
-        </div>
-      </div>
-    </div>
-    <div class="sentinel-inline-fields">
-      <div>
-        <label class="form-label">Device</label>
-        <div class="sentinel-select-wrap">
-          <select class="form-select sentinel-select" name="device">
-            {% for key, label in device_options %}
-              <option value="{{ key }}" {% if key == default_device %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label class="form-label">Demographic</label>
-        <div class="sentinel-select-wrap">
-          <select class="form-select sentinel-select" name="demographic">
-            {% for key, label in demographic_options %}
-              <option value="{{ key }}" {% if key == default_demographic %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label class="form-label">Region</label>
-        <div class="sentinel-select-wrap">
-          <select class="form-select sentinel-select" name="region">
-            {% for key, label in region_options %}
-              <option value="{{ key }}" {% if key == default_region %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label class="form-label">Time Limit (mins)</label>
-        <input class="form-control" type="number" name="limit" min="{{ min_limit }}" max="{{ max_limit }}"
-               value="{{ default_limit }}">
-      </div>
-    </div>
-    <small class="text-muted d-block">Credentials are held in memory only for the run and are never written to disk.</small>
+    {{ run_fields(form_options) }}
   </div>
 </template>
 {% endblock %}

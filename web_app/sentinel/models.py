@@ -79,6 +79,22 @@ class AccountCredentials(BaseModel):
     extras: dict[str, str] = Field(default_factory=dict)
 
 
+class CardDetails(BaseModel):
+    card_number: str = ""
+    card_expiry: str = ""
+    card_cvv: str = ""
+
+
+class CredentialCache(BaseModel):
+    """Opt-in plaintext cache of the last-entered test credentials and card
+    details, persisted on the server for rapid re-testing convenience only.
+    Excluded from backups. Either half is None until the user opts to cache it.
+    """
+
+    account: Optional[AccountCredentials] = None
+    card: Optional[CardDetails] = None
+
+
 class Report(BaseModel):
     # status is a real RunStatus enum on the instance. validate_assignment
     # re-coerces plain-string assignments (e.g. report.status = "failed" from

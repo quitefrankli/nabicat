@@ -698,11 +698,18 @@ def test_sentinel_run_prefills_form_from_clone_query_params(client):
 
     assert res.status_code == 200
     body = res.get_data(as_text=True)
-    assert 'value="https://example.com"' in body
-    assert "Test checkout" in body
-    assert 'value="5"' in body
-    assert 'value="small_phone" selected' in body
-    assert 'value="senior" selected' in body
+    # The single-run form now prefills client-side from a JSON blob (same shape
+    # as a batch item), applied by run_form.js.
+    import json as _json
+    import re as _re
+    m = _re.search(r'id="sentinel-run-prefill">(.*?)</script>', body, _re.DOTALL)
+    assert m, "prefill blob missing"
+    prefill = _json.loads(m.group(1))
+    assert prefill["url"] == "https://example.com"
+    assert prefill["prompt"] == "Test checkout"
+    assert prefill["limit"] == 5
+    assert prefill["device"] == "small_phone"
+    assert prefill["demographic"] == "senior"
 
 
 def test_sentinel_run_defaults_to_desktop_adult_australia(client):
@@ -720,15 +727,17 @@ def test_sentinel_run_defaults_to_desktop_adult_australia(client):
 
     assert res.status_code == 200
     body = res.get_data(as_text=True)
+    # Defaults are server-rendered as the selected <option> in the shared macro.
     assert 'value="desktop" selected' in body
     assert 'value="adult" selected' in body
-    assert 'id="sentinel-region"' in body
     assert 'value="australia" selected' in body
     assert 'value="china"' in body
     assert 'value="us"' in body
     assert 'value="uk"' in body
     assert 'value="japan"' in body
     assert 'placeholder="nabicat.site"' in body
+    # Fresh form (no query args) carries no prefill blob.
+    assert 'id="sentinel-run-prefill"' not in body
 
 
 def test_sentinel_index_renders_landing_page(client):
@@ -1274,6 +1283,69 @@ def test_create_batch_queues_runs_inline_without_persisting_a_batch(client, tmp_
 
     # No saved batch entity is written anywhere.
     assert not (tmp_path / "sentinel" / "batches").exists()
+
+
+def test_credential_cache_round_trips_but_is_excluded_from_backup(tmp_path):
+    """The opt-in plaintext credential cache persists for prefill, but must never
+    be copied into a backup (backups sync to S3)."""
+    from web_app.sentinel.data_interface import DataInterface as SentinelData
+    from web_app.sentinel.models import AccountCredentials, CardDetails, CredentialCache
+
+    data = SentinelData()
+    data.sentinel_dir = tmp_path / "sentinel"
+    data.runs_dir = data.sentinel_dir / "runs"
+    data.credential_cache_file = data.sentinel_dir / "credential_cache.json"
+    data.sentinel_dir.mkdir(parents=True, exist_ok=True)
+
+    assert data.load_credential_cache() == CredentialCache()  # empty default
+
+    data.save_credential_cache(CredentialCache(
+        account=AccountCredentials(username="qatester", password="hunter2"),
+        card=CardDetails(card_number="4242424242424242", card_expiry="12/30", card_cvv="123"),
+    ))
+    loaded = data.load_credential_cache()
+    assert loaded.account.username == "qatester"
+    assert loaded.card.card_number == "4242424242424242"
+    assert data.credential_cache_file.exists()
+
+    backup = tmp_path / "backup"
+    backup.mkdir()
+    data.backup_data(backup)
+    assert not (backup / "sentinel" / "credential_cache.json").exists()
+
+
+def test_create_batch_caches_credentials_only_when_opted_in(client, tmp_path):
+    """cache_account/cache_card flags persist the entered values server-side;
+    without them, nothing is cached. The GET endpoint then returns them."""
+    from web_app.sentinel.data_interface import DataInterface as SentinelData
+
+    def make_data():
+        d = SentinelData()
+        d.sentinel_dir = tmp_path / "sentinel"
+        d.runs_dir = d.sentinel_dir / "runs"
+        d.credential_cache_file = d.sentinel_dir / "credential_cache.json"
+        return d
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        _login_admin(client, mock_users)
+        with patch("web_app.sentinel.DataInterface", side_effect=make_data), patch(
+            "web_app.sentinel.validate_public_web_url"
+        ) as mock_validate, patch("web_app.sentinel.start_run",
+                                  return_value={"run_id": "a" * 32, "status": "queued"}):
+            mock_validate.return_value = ValidatedTarget("https://example.com/", "example.com")
+            res = client.post(
+                "/sentinel/api/batches",
+                json={"name": "Cached", "items": [{
+                    "url": "https://example.com", "prompt": "log in",
+                    "allow_accounts": True, "cache_account": True,
+                    "account_credentials": {"username": "qatester", "password": "hunter2", "extras": {}},
+                }]},
+            )
+            assert res.status_code == 202
+            cached = client.get("/sentinel/api/credential-cache").get_json()
+
+    assert cached["account"]["username"] == "qatester"
+    assert cached["card"] is None  # card was not opted in
 
 
 def test_batch_status_groups_runs_by_batch_id(client):

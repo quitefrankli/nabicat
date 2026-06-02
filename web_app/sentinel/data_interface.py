@@ -7,7 +7,7 @@ from pathlib import Path
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface as BaseDataInterface
-from web_app.sentinel.models import Report
+from web_app.sentinel.models import CredentialCache, Report
 
 
 _RUN_ID_RE = re.compile(r"^[a-f0-9]{32}$")
@@ -22,6 +22,9 @@ class DataInterface(BaseDataInterface):
         super().__init__()
         self.sentinel_dir = ConfigManager().save_data_path / "sentinel"
         self.runs_dir = self.sentinel_dir / "runs"
+        # Opt-in plaintext cache of test credentials/card details, for rapid
+        # re-testing convenience only. Deliberately excluded from backup_data.
+        self.credential_cache_file = self.sentinel_dir / "credential_cache.json"
 
     def _safe_run_id(self, run_id: str) -> str:
         if not _RUN_ID_RE.match(run_id):
@@ -85,9 +88,23 @@ class DataInterface(BaseDataInterface):
         shutil.rmtree(run_dir)
         return True
 
+    def load_credential_cache(self) -> CredentialCache:
+        return self.load_model(self.credential_cache_file, CredentialCache, sync=False) or CredentialCache()
+
+    def save_credential_cache(self, cache: CredentialCache) -> None:
+        self.save_model(self.credential_cache_file, cache)
+
     def delete_user_data(self, user) -> None:
         return None
 
     def backup_data(self, backup_dir: Path) -> None:
-        if self.sentinel_dir.exists():
-            shutil.copytree(self.sentinel_dir, backup_dir / "sentinel", dirs_exist_ok=True)
+        if not self.sentinel_dir.exists():
+            return
+        # Never copy the plaintext credential cache into backups (which sync to
+        # S3). It is a local debugging convenience, not durable run data.
+        shutil.copytree(
+            self.sentinel_dir,
+            backup_dir / "sentinel",
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(self.credential_cache_file.name),
+        )

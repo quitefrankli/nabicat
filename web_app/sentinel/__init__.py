@@ -11,7 +11,7 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.models import Report
+from web_app.sentinel.models import AccountCredentials, CardDetails, CredentialCache, Report
 from web_app.sentinel.runner import (
     delete_run,
     ensure_screenshot_thumbnail,
@@ -363,44 +363,46 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
 
 
 def _run_form_context() -> dict:
+    """Context for the single-run form. Field markup/options come from the
+    shared run_fields() macro via `form_options`; any Rerun query args are
+    packed into a single `prefill_item` blob with the same shape as a batch
+    item, which run_form.js applies client-side (mirrors the batch builder)."""
     cfg = ConfigManager()
-    prefill_url = str(request.args.get("url", "")).strip()
-    prefill_prompt = str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars]
-    prefill_title = str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
-    prefill_allow_accounts = _truthy(request.args.get("allow_accounts"))
-    prefill_allow_external = _truthy(request.args.get("allow_external"))
-    prefill_additional_domains = str(request.args.get("additional_domains", "")).strip()
-    try:
-        prefill_limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
-    except (TypeError, ValueError):
-        prefill_limit = cfg.sentinel.default_limit_mins
-    prefill_limit = max(cfg.sentinel.min_limit_mins, min(prefill_limit, cfg.sentinel.max_limit_mins))
+    if not request.args:
+        prefill_item = None
+    else:
+        try:
+            limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
+        except (TypeError, ValueError):
+            limit = cfg.sentinel.default_limit_mins
+        limit = max(cfg.sentinel.min_limit_mins, min(limit, cfg.sentinel.max_limit_mins))
 
-    raw_device = str(request.args.get("device", "")).strip()
-    prefill_device = raw_device if raw_device in cfg.sentinel.device_profiles else cfg.sentinel.default_device
-    raw_demographic_param = request.args.get("demographic")
-    raw_demographic = str(raw_demographic_param).strip() if raw_demographic_param is not None else None
-    prefill_demographic = (
-        raw_demographic
-        if raw_demographic is not None and raw_demographic in cfg.sentinel.demographic_personas
-        else cfg.sentinel.default_demographic
-    )
-    raw_region = str(request.args.get("region", "")).strip()
-    prefill_region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
+        raw_device = str(request.args.get("device", "")).strip()
+        device = raw_device if raw_device in cfg.sentinel.device_profiles else cfg.sentinel.default_device
+        raw_demographic = request.args.get("demographic")
+        demographic = str(raw_demographic).strip() if raw_demographic is not None else ""
+        if demographic not in cfg.sentinel.demographic_personas:
+            demographic = cfg.sentinel.default_demographic
+        raw_region = str(request.args.get("region", "")).strip()
+        region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
+
+        prefill_item = {
+            "url": str(request.args.get("url", "")).strip(),
+            "prompt": str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars],
+            "title": str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars],
+            "limit": limit,
+            "allow_accounts": _truthy(request.args.get("allow_accounts")),
+            "allow_external": _truthy(request.args.get("allow_external")),
+            "additional_domains": str(request.args.get("additional_domains", "")).strip(),
+            "device": device,
+            "demographic": demographic,
+            "region": region,
+        }
 
     return dict(
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
-        prefill_url=prefill_url,
-        prefill_prompt=prefill_prompt,
-        prefill_limit=prefill_limit,
-        prefill_title=prefill_title,
-        prefill_allow_accounts=prefill_allow_accounts,
-        prefill_allow_external=prefill_allow_external,
-        prefill_additional_domains=prefill_additional_domains,
-        prefill_device=prefill_device,
-        prefill_demographic=prefill_demographic,
-        prefill_region=prefill_region,
-        **_run_form_options(),
+        prefill_item=prefill_item,
+        form_options=_run_form_options(),
     )
 
 
@@ -434,6 +436,10 @@ def create_run():
         kwargs = _validate_run_params(payload, with_credentials=True)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    # Persist creds/card to the server cache when the user opted in (same path
+    # the batch builder uses), so the single-run form prefills next time.
+    if isinstance(payload, dict):
+        _persist_credential_cache([payload])
     return (
         jsonify(start_run(
             kwargs.pop("target"),
@@ -539,6 +545,46 @@ def _parse_batch_payload(payload) -> tuple[str, list[dict]]:
     return name, items
 
 
+def _persist_credential_cache(raw_items: list) -> None:
+    """Save the last item that opted into caching, per credential type, to the
+    server-side cache. This is a plaintext convenience store for rapid
+    re-testing — never used to drive runs (runs always use inline payload
+    values). Caching only triggers when both the relevant permit-flag and the
+    nested cache-flag are on; turning the cache-flag off clears that half."""
+    if not isinstance(raw_items, list):
+        return
+    cache = DataInterface().load_credential_cache()
+    changed = False
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        if _truthy(raw.get("allow_accounts")) and _truthy(raw.get("cache_account")):
+            creds = raw.get("account_credentials") or {}
+            cache.account = AccountCredentials(
+                username=str(creds.get("username", "")),
+                password=str(creds.get("password", "")),
+                extras={str(k): str(v) for k, v in (creds.get("extras") or {}).items()},
+            )
+            changed = True
+        if _truthy(raw.get("allow_financial")) and _truthy(raw.get("cache_card")):
+            cache.card = CardDetails(
+                card_number=str(raw.get("card_number", "")),
+                card_expiry=str(raw.get("card_expiry", "")),
+                card_cvv=str(raw.get("card_cvv", "")),
+            )
+            changed = True
+    if changed:
+        DataInterface().save_credential_cache(cache)
+
+
+@sentinel_api.route("/api/credential-cache")
+def credential_cache():
+    """Return the server-cached test credentials/card for prefill. Admin-only
+    (gated by the blueprint's before_request)."""
+    cache = DataInterface().load_credential_cache()
+    return jsonify(cache.model_dump())
+
+
 def _batch_child_runs_by_id(batch_id: str) -> list[dict]:
     """All runs sharing this batch_id, as slim status dicts (newest-first)."""
     children = []
@@ -603,7 +649,7 @@ def batches_index():
         max_batch_items=ConfigManager().sentinel.max_batch_items,
         batch_name_max_chars=ConfigManager().sentinel.batch_name_max_chars,
         prefill_batch=prefill,
-        **_run_form_options(),
+        form_options=_run_form_options(),
     )
 
 
@@ -620,6 +666,7 @@ def create_batch():
         return jsonify({"error": str(e)}), 400
 
     raw_items = payload.get("items") or []
+    _persist_credential_cache(raw_items)
     batch_id = uuid.uuid4().hex
     owner = str(getattr(current_user, "id", "") or "")
     run_ids = []
