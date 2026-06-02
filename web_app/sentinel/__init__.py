@@ -655,6 +655,19 @@ def batch_status(batch_id: str):
     return jsonify({"batch_id": batch_id, "child_runs": children})
 
 
+@sentinel_api.route("/api/batch/<batch_id>/delete", methods=["POST"])
+def delete_batch(batch_id: str):
+    children = _batch_child_runs_by_id(batch_id)
+    if not children:
+        abort(404)
+    if any(run.get("status") in {"queued", "running", "summarizing"} for run in children):
+        return jsonify({"error": "Batch has active runs"}), 409
+    run_ids = [str(run.get("run_id")) for run in children if run.get("run_id")]
+    for run_id in run_ids:
+        delete_run(run_id)
+    return jsonify({"batch_id": batch_id, "deleted": True, "run_ids": run_ids})
+
+
 @sentinel_api.route("/report/<run_id>")
 def report(run_id: str):
     report_data = get_run(run_id)

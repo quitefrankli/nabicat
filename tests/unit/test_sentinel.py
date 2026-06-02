@@ -1234,6 +1234,34 @@ def test_batch_status_groups_runs_by_batch_id(client):
     assert missing.status_code == 404
 
 
+def test_delete_batch_removes_child_runs_and_rejects_active_children(client):
+    active_runs = [
+        {"run_id": "a" * 32, "batch_id": "bid1", "status": "completed", "batch_label": "B1"},
+        {"run_id": "b" * 32, "batch_id": "bid1", "status": "running", "batch_label": "B1"},
+    ]
+    finished_runs = [
+        {"run_id": "a" * 32, "batch_id": "bid1", "status": "completed", "batch_label": "B1"},
+        {"run_id": "b" * 32, "batch_id": "bid1", "status": "cancelled", "batch_label": "B1"},
+    ]
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        _login_admin(client, mock_users)
+        with patch("web_app.sentinel.DataInterface") as mock_data, patch(
+            "web_app.sentinel.delete_run"
+        ) as mock_delete:
+            mock_data.return_value.list_reports.return_value = active_runs
+            res = client.post("/sentinel/api/batch/bid1/delete")
+            assert res.status_code == 409
+            mock_delete.assert_not_called()
+
+            mock_data.return_value.list_reports.return_value = finished_runs
+            mock_delete.return_value = True
+            res = client.post("/sentinel/api/batch/bid1/delete")
+
+    assert res.status_code == 200
+    assert res.get_json() == {"batch_id": "bid1", "deleted": True, "run_ids": ["a" * 32, "b" * 32]}
+    assert [call.args[0] for call in mock_delete.call_args_list] == ["a" * 32, "b" * 32]
+
+
 def test_create_batch_rejects_invalid_item_url(client):
     """A batch with an item whose URL fails validation is rejected with 400."""
     with patch("web_app.helpers.DataInterface") as mock_users:

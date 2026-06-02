@@ -127,6 +127,7 @@
     });
 
     document.querySelectorAll('.sentinel-run-delete').forEach(function (button) {
+      if (button.dataset.batchId) return;
       button.addEventListener('click', async function () {
         const runId = button.dataset.runId;
         if (!runId || !window.confirm('Delete this Sentinel run?')) return;
@@ -145,6 +146,31 @@
             return;
           }
           button.closest('[data-run-row]')?.remove();
+        } catch (_) {
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll('.sentinel-batch-delete').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        const batchId = button.dataset.batchId;
+        if (!batchId || !window.confirm('Delete this Sentinel batch and all of its runs?')) return;
+        button.disabled = true;
+        try {
+          const response = await fetch(`/sentinel/api/batch/${batchId}/delete`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken() }
+          });
+          if (!response.ok) {
+            button.disabled = false;
+            return;
+          }
+          if (button.dataset.current === '1') {
+            window.location.href = '/sentinel/batches';
+            return;
+          }
+          button.closest('[data-batch-group]')?.remove();
         } catch (_) {
           button.disabled = false;
         }

@@ -80,7 +80,8 @@
         {% for b in sidebar_batches %}
           {% set is_open = b.batch_id == active_batch_id %}
           <div class="sentinel-batch-group{% if is_open %} is-open{% endif %}" data-batch-group="{{ b.batch_id }}">
-            <div class="sentinel-sidebar-row-shell{% if is_open %} is-active{% endif %}">
+            <div class="sentinel-sidebar-row-shell{% if is_open %} is-active{% endif %}"
+                 data-batch-row="{{ b.batch_id }}">
               <a class="sentinel-run-row sentinel-sidebar-row sentinel-batch-parent"
                  href="{{ url_for('sentinel.batch_detail', batch_id=b.batch_id) }}">
                 <span class="sentinel-run-main">
@@ -89,6 +90,14 @@
                 </span>
                 <span class="sentinel-badge"><i class="bi bi-collection"></i></span>
               </a>
+              <button class="sentinel-run-delete sentinel-batch-delete"
+                      type="button"
+                      data-batch-id="{{ b.batch_id }}"
+                      data-current="{% if is_open %}1{% else %}0{% endif %}"
+                      aria-label="Delete batch {{ b.name }}"
+                      {% if b['items'] | selectattr('status', 'in', ['queued', 'running', 'summarizing']) | list %}disabled{% endif %}>
+                <i class="bi bi-trash"></i>
+              </button>
             </div>
             <div class="sentinel-batch-children">
               {% for run in b['items'] %}
