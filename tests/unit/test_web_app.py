@@ -122,6 +122,26 @@ class TestHelpers:
             assert '🎉' not in result
 
 
+class TestUserModel:
+    def test_elevated_round_trip_and_helper(self):
+        """Elevated flag persists through to_dict/from_dict and admin satisfies has_elevated_access."""
+        elevated = User(username='eve', password='pw', folder='eve', is_admin=False, is_elevated=True)
+        restored = User.from_dict(elevated.to_dict())
+        assert restored.is_elevated is True
+        assert restored.is_admin is False
+        assert restored.has_elevated_access() is True
+
+        admin = User(username='root', password='pw', folder='root', is_admin=True)
+        assert admin.has_elevated_access() is True
+
+        plain = User(username='bob', password='pw', folder='bob')
+        assert plain.has_elevated_access() is False
+
+        legacy = User.from_dict({'username': 'old', 'password': 'pw', 'folder': 'old'})
+        assert legacy.is_elevated is False
+        assert legacy.has_elevated_access() is False
+
+
 class TestParseRequest:
     def test_parse_request_json(self, app_context):
         """Test parse_request with JSON content"""

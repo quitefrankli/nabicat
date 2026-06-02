@@ -3,15 +3,20 @@ from typing import *
 
 
 class User(UserMixin):
-    def __init__(self, 
-                 username: str = "", 
-                 password: str = "", 
+    def __init__(self,
+                 username: str = "",
+                 password: str = "",
                  folder: str = "",
-                 is_admin: bool = False) -> None:
+                 is_admin: bool = False,
+                 is_elevated: bool = False) -> None:
         self.id = username
         self.password = password
         self.folder = folder
         self.is_admin = is_admin
+        self.is_elevated = is_elevated
+
+    def has_elevated_access(self) -> bool:
+        return self.is_admin or self.is_elevated
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -19,14 +24,16 @@ class User(UserMixin):
             'password': self.password,
             'folder': self.folder,
             'is_admin': self.is_admin,
+            'is_elevated': self.is_elevated,
         }
-    
+
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'User':
-        return User(data['username'], 
-                    data['password'], 
+        return User(data['username'],
+                    data['password'],
                     data['folder'],
-                    data.get('is_admin', False))
-    
+                    data.get('is_admin', False),
+                    data.get('is_elevated', False))
+
     def __repr__(self):
-        return f"User(username={self.id}, folder={self.folder}, is_admin={self.is_admin})"
+        return f"User(username={self.id}, folder={self.folder}, is_admin={self.is_admin}, is_elevated={self.is_elevated})"

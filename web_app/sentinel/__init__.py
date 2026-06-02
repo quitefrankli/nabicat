@@ -94,8 +94,8 @@ sentinel_api = Blueprint(
 
 @sentinel_api.before_request
 @login_required
-def require_admin():
-    if not current_user.is_admin:
+def require_elevated():
+    if not current_user.has_elevated_access():
         abort(403)
 
 

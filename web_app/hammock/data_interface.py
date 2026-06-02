@@ -270,7 +270,7 @@ class DataInterface(BaseDataInterface):
 
     def quota_bytes(self, user: User) -> int:
         cfg = ConfigManager()
-        return cfg.hammock.admin_quota_bytes if user.is_admin else cfg.hammock.non_admin_quota_bytes
+        return cfg.hammock.admin_quota_bytes if user.has_elevated_access() else cfg.hammock.non_admin_quota_bytes
 
     def check_quota(self, user: User, additional_bytes: int) -> None:
         used = self.user_storage_bytes(user.id)

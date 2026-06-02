@@ -43,7 +43,7 @@ def index():
     storage_info = None
     if user:
         total_used = data_interface.get_total_storage_size(user)
-        max_storage = ADMIN_MAX_STORAGE if user.is_admin else NON_ADMIN_MAX_STORAGE
+        max_storage = ADMIN_MAX_STORAGE if user.has_elevated_access() else NON_ADMIN_MAX_STORAGE
         usage_percent = (total_used / max_storage) * 100 if max_storage > 0 else 0
         storage_info = {
             'used': total_used,
@@ -62,7 +62,7 @@ def index():
 @limiter.limit(
     "10/second",
     key_func=lambda: flask_login.current_user.id,
-    exempt_when=lambda: flask_login.current_user.is_admin,
+    exempt_when=lambda: flask_login.current_user.has_elevated_access(),
 )
 def upload_file():
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -89,10 +89,10 @@ def upload_file():
     file_size = file.tell()
     file.seek(0)  # Reset to beginning
     
-    max_storage = ADMIN_MAX_STORAGE if user.is_admin else NON_ADMIN_MAX_STORAGE
-    
+    max_storage = ADMIN_MAX_STORAGE if user.has_elevated_access() else NON_ADMIN_MAX_STORAGE
+
     if current_size + file_size > max_storage:
-        max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.is_admin else f'{max_storage / (1024*1024):.0f}MB'
+        max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.has_elevated_access() else f'{max_storage / (1024*1024):.0f}MB'
         error_msg = (f'Upload failed: Storage limit of {max_label} exceeded. '
                      f'Current usage: {format_file_size(current_size)}, '
                      f'File size: {format_file_size(file_size)}')

@@ -408,6 +408,19 @@ def test_sentinel_thumbnail_generation_creates_small_copy(tmp_path):
         assert max(img.size) <= ConfigManager().sentinel.screenshot_thumb_max_px
 
 
+def test_sentinel_index_accessible_to_elevated_non_admin(client):
+    elevated = User(username="eve", password="pass", folder="ef", is_admin=False, is_elevated=True)
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"eve": elevated}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "eve"
+
+        with patch("web_app.sentinel.DataInterface") as mock_data:
+            mock_data.return_value.list_reports.return_value = []
+            assert client.get("/sentinel/").status_code == 200
+
+
 def test_sentinel_routes_require_admin_and_start_run_for_admin(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
     non_admin = User(username="user", password="pass", folder="uf", is_admin=False)
