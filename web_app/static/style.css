@@ -637,10 +637,6 @@ h6 {
   background: linear-gradient(135deg, var(--hw-sage-dark) 0%, var(--hw-sage) 100%);
 }
 
-.app-icon-jswipe {
-  background: linear-gradient(135deg, var(--hw-coral) 0%, var(--hw-peach) 100%);
-}
-
 .app-icon-proxy {
   background: linear-gradient(135deg, #5B8FB9 0%, #301E67 100%);
 }

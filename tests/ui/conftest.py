@@ -129,11 +129,3 @@ def crosswords_page(logged_in_page, test_server):
     logged_in_page.goto(f"{test_server}/crosswords")
     logged_in_page.wait_for_load_state("networkidle")
     yield logged_in_page
-
-
-@pytest.fixture
-def jswipe_page(logged_in_page, test_server):
-    """Navigate to JSwipe page."""
-    logged_in_page.goto(f"{test_server}/jswipe")
-    logged_in_page.wait_for_load_state("networkidle")
-    yield logged_in_page

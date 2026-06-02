@@ -321,22 +321,6 @@ class FileStoreConfig:
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
 
 
-@dataclass
-class JSwipeConfig:
-    _debug_mode: Callable[[], bool] = field(repr=False)
-
-    @property
-    def api_key(self) -> str:
-        api_key = getenv('X_RAPID_API_KEY')
-        if api_key:
-            return api_key
-
-        if self._debug_mode():
-            return "DEBUG_X_RAPID_API_KEY"
-
-        raise ValueError("API key for JSwipe is not set. Please set the 'X_RAPID_API_KEY' environment variable.")
-
-
 class ConfigManager:
     _instance = None  # Class-level variable to store the single instance
 
@@ -388,7 +372,6 @@ class ConfigManager:
         self.sentinel = SentinelConfig()
         self.hammock = HammockConfig()
         self.file_store = FileStoreConfig()
-        self.jswipe = JSwipeConfig(lambda: self.debug_mode)
 
     @property
     def project_name(self) -> str:

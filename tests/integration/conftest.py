@@ -54,8 +54,7 @@ def server_url():
     
     # Start the server as a subprocess with a script that disables rate limiting
     env = os.environ.copy()
-    env['X_RAPID_API_KEY'] = 'test_key_for_integration_tests'
-    
+
     # Create a startup script that disables rate limiting
     startup_script = f'''
 import sys

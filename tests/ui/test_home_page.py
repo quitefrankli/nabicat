@@ -16,7 +16,7 @@ def test_home_page_loads(logged_in_page, test_server):
 
 def test_app_grid_visible(logged_in_page, test_server):
     """Test that the app grid is displayed with all expected apps for admin."""
-    expected_apps = ["Todoist", "Metrics", "Tubio", "JSwipe", "File Store", "Sentinel"]
+    expected_apps = ["Todoist", "Metrics", "Tubio", "File Store", "Sentinel"]
     
     for app_name in expected_apps:
         app_card = logged_in_page.locator("text=" + app_name)
@@ -29,7 +29,6 @@ def test_all_app_cards_clickable(logged_in_page, test_server):
         ("Todoist", "/todoist"),
         ("Metrics", "/metrics"),
         ("Tubio", "/tubio"),
-        ("JSwipe", "/jswipe"),
         ("File Store", "/file_store"),
         ("Sentinel", "/sentinel"),
     ]
@@ -94,7 +93,7 @@ def test_admin_only_apps_disabled_for_non_admin(page, test_server):
     expect(page.locator("text=Crosswords")).to_be_visible()
 
     # Verify admin-only apps are shown as disabled entries.
-    for app_name in ["Sentinel", "JSwipe", "Proxy", "Dev"]:
+    for app_name in ["Sentinel", "Proxy", "Dev"]:
         link = page.locator(f"a.app-disabled:has-text('{app_name}')")
         expect(link).to_be_visible()
         expect(link).to_have_attribute("href", "#")

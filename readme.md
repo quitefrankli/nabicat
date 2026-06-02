@@ -10,7 +10,6 @@ A cozy collection of misc web apps [visit](https://nabicat.site)
 
 create a `.env` file in the root of the project with the following content:
 
-* `X_RAPID_API_KEY` - from https://rapidapi.com/hub
 * `FLASK_SECRET_KEY` - can be any random 24 char str
 
 ### Conda + Other Misc Reqs

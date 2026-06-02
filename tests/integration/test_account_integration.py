@@ -45,13 +45,11 @@ class TestAccountDeletionIntegration:
         api_user_dir = DEBUG_SAVE_DATA_PATH / "api_data" / user_folder
         todoist_user_dir = DEBUG_SAVE_DATA_PATH / "todoist" / user_folder
         metrics_user_dir = DEBUG_SAVE_DATA_PATH / "metrics" / user_folder
-        jswipe_user_dir = DEBUG_SAVE_DATA_PATH / "jswipe" / user_folder
 
         for directory, filename, content in [
             (api_user_dir, "payload.txt", "hello"),
             (todoist_user_dir, "goals.json", "{}"),
             (metrics_user_dir, "data.json", "{}"),
-            (jswipe_user_dir, "jobs.json", '{"jobs": {}}'),
         ]:
             directory.mkdir(parents=True, exist_ok=True)
             (directory / filename).write_text(content, encoding="utf-8")
@@ -142,7 +140,6 @@ class TestAccountDeletionIntegration:
         assert not api_user_dir.exists()
         assert not todoist_user_dir.exists()
         assert not metrics_user_dir.exists()
-        assert not jswipe_user_dir.exists()
 
         # Tubio cleanup checks
         with open(tubio_metadata_file, "r", encoding="utf-8") as f:

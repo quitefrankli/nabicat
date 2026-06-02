@@ -31,7 +31,6 @@ def get_all_data_interfaces() -> list[DataInterface]:
     from web_app.api.data_interface import DataInterface as APIDataInterface
     from web_app.todoist.data_interface import DataInterface as TodoistDataInterface
     from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
-    from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
     from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
     from web_app.hammock.data_interface import DataInterface as HammockDataInterface
@@ -41,7 +40,6 @@ def get_all_data_interfaces() -> list[DataInterface]:
         APIDataInterface,
         TodoistDataInterface,
         MetricsDataInterface,
-        JSwipeDataInterface,
         TubioDataInterface,
         FileStoreDataInterface,
         HammockDataInterface,
@@ -57,7 +55,6 @@ def register_all_blueprints(app):
     from web_app.account_api import account_api
     from web_app.file_store import file_store_api
     from web_app.api import api_api
-    from web_app.jswipe import jswipe_api
     from web_app.proxy import proxy_api
     from web_app.hammock import hammock_api
     from web_app.dev import dev_api
@@ -72,7 +69,6 @@ def register_all_blueprints(app):
         account_api,
         file_store_api,
         api_api,
-        jswipe_api,
         proxy_api,
         hammock_api,
         dev_api,
