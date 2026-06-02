@@ -1,10 +1,63 @@
 (function () {
   const STORAGE_KEY = 'sentinel.sidebar.width';
+  const VIEW_KEY = 'sentinel.sidebar.view';
   const MIN = 200;
   const MAX = 560;
 
   function csrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || '';
+  }
+
+  function initViewToggle(sidebar) {
+    const toggle = sidebar.querySelector('.sentinel-view-toggle');
+    if (!toggle) return;
+    const options = toggle.querySelectorAll('[data-view-option]');
+    const thumb = toggle.querySelector('.sentinel-view-toggle-thumb');
+
+    // data-view drives the thumb slide (immediate); data-list-view drives the
+    // list + action-button swap, applied only once the slide animation ends so
+    // the content changes in sync with the completed slide.
+    function setListView(view) {
+      sidebar.dataset.listView = view;
+    }
+
+    function applyView(view, animate) {
+      if (sidebar.dataset.view === view && sidebar.dataset.listView === view) return;
+      sidebar.dataset.view = view;
+      options.forEach((opt) => {
+        opt.setAttribute('aria-pressed', String(opt.dataset.viewOption === view));
+      });
+      try { localStorage.setItem(VIEW_KEY, view); } catch (_) { /* ignore */ }
+
+      if (!animate || !thumb) {
+        setListView(view);
+        return;
+      }
+      // Swap the list when the thumb finishes sliding; guard with a timeout
+      // fallback in case transitionend doesn't fire (e.g. reduced motion).
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        thumb.removeEventListener('transitionend', finish);
+        setListView(view);
+      };
+      thumb.addEventListener('transitionend', finish);
+      setTimeout(finish, 400);
+    }
+
+    // Prefer a stored choice; otherwise keep the server-rendered default
+    // (which is "batches" when viewing a batch page). No animation on load.
+    let stored = null;
+    try { stored = localStorage.getItem(VIEW_KEY); } catch (_) { stored = null; }
+    if (stored === 'individual' || stored === 'batches') applyView(stored, false);
+
+    // A click anywhere on the slider flips to the other view — including
+    // clicking the already-active side — so it behaves like a switch.
+    toggle.addEventListener('click', () => {
+      const next = sidebar.dataset.view === 'individual' ? 'batches' : 'individual';
+      applyView(next, true);
+    });
   }
 
   function applyWidth(shell, width) {
@@ -14,6 +67,9 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    const sidebar = document.getElementById('sentinel-sidebar');
+    if (sidebar) initViewToggle(sidebar);
+
     const shell = document.querySelector('.sentinel-shell-with-sidebar');
     const resizer = document.getElementById('sentinel-sidebar-resizer');
     if (!shell || !resizer) return;

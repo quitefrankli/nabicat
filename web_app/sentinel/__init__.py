@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
+import uuid
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, send_from_directory
 from flask_login import current_user, login_required
@@ -9,7 +10,7 @@ from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 from web_app.config import ConfigManager
-from web_app.sentinel.data_interface import DataInterface
+from web_app.sentinel.data_interface import DataInterface, utc_now_iso
 from web_app.sentinel.runner import (
     delete_run,
     ensure_screenshot_thumbnail,
@@ -99,12 +100,45 @@ def require_elevated():
         abort(403)
 
 
+def _derive_batches(reports: list[dict], max_n: int | None = None) -> list[dict]:
+    """Group runs by batch_id into batch summaries, newest-first.
+
+    A batch is no longer a saved entity — it is just the set of runs that share
+    a batch_id. ``reports`` is assumed newest-first (as list_reports returns),
+    so first appearance of each batch_id preserves recency order.
+    """
+    groups: dict[str, dict] = {}
+    for run in reports:
+        bid = run.get("batch_id")
+        if not bid:
+            continue
+        group = groups.get(bid)
+        if group is None:
+            groups[bid] = {
+                "batch_id": bid,
+                "name": run.get("batch_label") or bid,
+                "owner": run.get("owner", ""),
+                "created_at": run.get("created_at", ""),
+                "items": [run],
+            }
+        else:
+            group["items"].append(run)
+            # Earliest run in the group is the batch's creation time.
+            if run.get("created_at", "") and run["created_at"] < group["created_at"]:
+                group["created_at"] = run["created_at"]
+    derived = list(groups.values())
+    return derived[:max_n] if max_n is not None else derived
+
+
 @sentinel_api.context_processor
 def inject_app_name():
     cfg = ConfigManager()
+    data = DataInterface()
+    reports = data.list_reports()[: cfg.sentinel.max_retained_runs]
     return dict(
         app_name="Sentinel",
-        sidebar_runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
+        sidebar_runs=reports,
+        sidebar_batches=_derive_batches(reports, cfg.sentinel.max_retained_batches),
     )
 
 
@@ -256,6 +290,82 @@ def _report_payload(report: dict) -> dict:
     return payload
 
 
+def _run_form_options() -> dict:
+    """Shared select options + limit bounds for the run form and batch builder."""
+    cfg = ConfigManager()
+    return dict(
+        device_options=[(key, cfg.sentinel.device_labels.get(key, key)) for key in cfg.sentinel.device_profiles],
+        demographic_options=[
+            (key, cfg.sentinel.demographic_labels.get(key, key)) for key in cfg.sentinel.demographic_personas
+        ],
+        region_options=[(key, label) for key, label in cfg.sentinel.region_labels.items()],
+        default_device=cfg.sentinel.default_device,
+        default_demographic=cfg.sentinel.default_demographic,
+        default_region=cfg.sentinel.default_region,
+        default_limit=cfg.sentinel.default_limit_mins,
+        min_limit=cfg.sentinel.min_limit_mins,
+        max_limit=cfg.sentinel.max_limit_mins,
+        prompt_max_chars=cfg.sentinel.prompt_max_chars,
+        title_max_chars=cfg.sentinel.title_max_chars,
+        additional_domains_max_count=cfg.sentinel.additional_domains_max_count,
+    )
+
+
+def _validate_run_params(payload, *, with_credentials: bool) -> dict:
+    """Validate a single run-param set and return kwargs for ``start_run``.
+
+    Raises ValueError (or its subclass TargetValidationError) on any invalid
+    input. When ``with_credentials`` is False, credential/card fields are
+    ignored entirely — used to structurally validate saved batch items, which
+    never carry secrets. When True, account/card details are validated and
+    forwarded (used at launch time; never persisted).
+    """
+    cfg = ConfigManager()
+    raw_url = str(payload.get("url", "")).strip()
+    prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
+    title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
+    allow_accounts = _truthy(payload.get("allow_accounts"))
+    allow_external = _truthy(payload.get("allow_external"))
+    allow_financial = _truthy(payload.get("allow_financial"))
+    device = str(payload.get("device", "")).strip()
+    demographic = str(payload.get("demographic", "")).strip()
+    limit_s = _limit_from_request(payload.get("limit"))
+
+    target = validate_public_web_url(raw_url)
+    additional_domains = _validate_additional_domains(payload.get("additional_domains"))
+
+    if not allow_accounts:
+        hit = _detect_account_keyword(prompt, cfg.sentinel.account_keywords)
+        if hit:
+            raise ValueError(
+                f'Prompt mentions "{hit}" but "Permit account creation, login, '
+                'and deletion" is off. Enable it or rephrase the prompt.'
+            )
+
+    card_details = None
+    account_credentials = None
+    if with_credentials:
+        if allow_financial:
+            card_details = _validate_card_details(payload)
+        if allow_accounts:
+            account_credentials = _validate_account_credentials(payload.get("account_credentials"))
+
+    return dict(
+        target=target,
+        prompt=prompt,
+        limit_s=limit_s,
+        title=title,
+        allow_accounts=allow_accounts,
+        allow_external=allow_external,
+        additional_domains=additional_domains,
+        allow_financial=allow_financial,
+        card_details=card_details,
+        account_credentials=account_credentials,
+        device=device,
+        demographic=demographic,
+    )
+
+
 @sentinel_api.route("/")
 def index():
     cfg = ConfigManager()
@@ -283,20 +393,9 @@ def index():
     raw_region = str(request.args.get("region", "")).strip()
     prefill_region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
 
-    device_options = [(key, cfg.sentinel.device_labels.get(key, key)) for key in cfg.sentinel.device_profiles]
-    demographic_options = [
-        (key, cfg.sentinel.demographic_labels.get(key, key)) for key in cfg.sentinel.demographic_personas
-    ]
-    region_options = [(key, label) for key, label in cfg.sentinel.region_labels.items()]
-
     return render_template(
         "sentinel_index.html",
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
-        default_limit=cfg.sentinel.default_limit_mins,
-        min_limit=cfg.sentinel.min_limit_mins,
-        max_limit=cfg.sentinel.max_limit_mins,
-        prompt_max_chars=cfg.sentinel.prompt_max_chars,
-        title_max_chars=cfg.sentinel.title_max_chars,
         prefill_url=prefill_url,
         prefill_prompt=prefill_prompt,
         prefill_limit=prefill_limit,
@@ -304,80 +403,27 @@ def index():
         prefill_allow_accounts=prefill_allow_accounts,
         prefill_allow_external=prefill_allow_external,
         prefill_additional_domains=prefill_additional_domains,
-        additional_domains_max_count=cfg.sentinel.additional_domains_max_count,
         prefill_device=prefill_device,
         prefill_demographic=prefill_demographic,
         prefill_region=prefill_region,
-        device_options=device_options,
-        demographic_options=demographic_options,
-        region_options=region_options,
+        **_run_form_options(),
     )
 
 
 @sentinel_api.route("/api/runs", methods=["POST"])
 def create_run():
-    cfg = ConfigManager()
     payload = request.get_json(silent=True) or request.form
-    raw_url = str(payload.get("url", "")).strip()
-    prompt = str(payload.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars]
-    title = str(payload.get("title", "")).strip()[: cfg.sentinel.title_max_chars]
-    allow_accounts = _truthy(payload.get("allow_accounts"))
-    allow_external = _truthy(payload.get("allow_external"))
-    allow_financial = _truthy(payload.get("allow_financial"))
-    raw_additional_domains = payload.get("additional_domains")
-    device = str(payload.get("device", "")).strip()
-    demographic = str(payload.get("demographic", "")).strip()
-    limit_s = _limit_from_request(payload.get("limit"))
-
     try:
-        target = validate_public_web_url(raw_url)
-    except TargetValidationError as e:
-        return jsonify({"error": str(e)}), 400
-
-    try:
-        additional_domains = _validate_additional_domains(raw_additional_domains)
+        kwargs = _validate_run_params(payload, with_credentials=True)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-
-    if not allow_accounts:
-        hit = _detect_account_keyword(prompt, cfg.sentinel.account_keywords)
-        if hit:
-            return jsonify({
-                "error": (
-                    f"Prompt mentions \"{hit}\" but \"Permit account creation, login, "
-                    "and deletion\" is off. Enable it or rephrase the prompt."
-                )
-            }), 400
-
-    card_details = None
-    if allow_financial:
-        try:
-            card_details = _validate_card_details(payload)
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-
-    account_credentials = None
-    if allow_accounts:
-        try:
-            account_credentials = _validate_account_credentials(payload.get("account_credentials"))
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-
     return (
         jsonify(start_run(
-            target,
-            prompt,
-            limit_s,
-            title=title,
-            allow_accounts=allow_accounts,
-            allow_external=allow_external,
-            additional_domains=additional_domains,
-            allow_financial=allow_financial,
-            card_details=card_details,
-            account_credentials=account_credentials,
-            device=device,
-            demographic=demographic,
+            kwargs.pop("target"),
+            kwargs.pop("prompt"),
+            kwargs.pop("limit_s"),
             owner=str(getattr(current_user, "id", "") or ""),
+            **kwargs,
         )),
         202,
     )
@@ -412,6 +458,186 @@ def delete(run_id: str):
     if not delete_run(run_id):
         abort(404)
     return jsonify({"run_id": run_id, "deleted": True})
+
+
+# --- Batch jobs ------------------------------------------------------------
+
+def _sanitize_batch_item(raw: dict) -> dict:
+    """Validate a batch item structurally and return its normalized non-secret
+    fields. Credentials/card data are handled separately by create_batch and
+    forwarded to start_run in memory only."""
+    if not isinstance(raw, dict):
+        raise ValueError("Each batch item must be an object.")
+    cfg = ConfigManager()
+    # _validate_run_params raises on any invalid url/domain/prompt-keyword.
+    _validate_run_params(raw, with_credentials=False)
+    label = str(raw.get("label", "")).strip()[: cfg.sentinel.title_max_chars]
+    raw_region = str(raw.get("region", "")).strip()
+    region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
+    return {
+        "label": label,
+        "url": str(raw.get("url", "")).strip(),
+        "prompt": str(raw.get("prompt", "")).strip()[: cfg.sentinel.prompt_max_chars],
+        "title": str(raw.get("title", "")).strip()[: cfg.sentinel.title_max_chars],
+        "device": str(raw.get("device", "")).strip(),
+        "demographic": str(raw.get("demographic", "")).strip(),
+        # region collected for parity with the single-run form; start_run does
+        # not consume it yet (TODO: thread region through when region emulation
+        # is wired up).
+        "region": region,
+        "limit_mins": _limit_from_request(raw.get("limit")) // 60,
+        "allow_accounts": _truthy(raw.get("allow_accounts")),
+        "allow_external": _truthy(raw.get("allow_external")),
+        "allow_financial": _truthy(raw.get("allow_financial")),
+        "additional_domains": _validate_additional_domains(raw.get("additional_domains")),
+    }
+
+
+def _parse_batch_payload(payload) -> tuple[str, list[dict]]:
+    """Returns (name, sanitized_items) or raises ValueError."""
+    cfg = ConfigManager()
+    name = str(payload.get("name", "")).strip()[: cfg.sentinel.batch_name_max_chars]
+    if not name:
+        raise ValueError("Batch name is required.")
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ValueError("A batch must contain at least one run.")
+    if len(raw_items) > cfg.sentinel.max_batch_items:
+        raise ValueError(f"A batch is limited to {cfg.sentinel.max_batch_items} runs.")
+    items = [_sanitize_batch_item(item) for item in raw_items]
+    return name, items
+
+
+def _batch_child_runs_by_id(batch_id: str) -> list[dict]:
+    """All runs sharing this batch_id, as slim status dicts (newest-first)."""
+    children = []
+    for run in DataInterface().list_reports():
+        if run.get("batch_id") != batch_id:
+            continue
+        children.append({
+            "run_id": run.get("run_id"),
+            "status": run.get("status"),
+            "run_outcome": run.get("run_outcome"),
+            "title": run.get("title") or run.get("target_url"),
+            "batch_label": run.get("batch_label", ""),
+            "target_url": run.get("target_url", ""),
+        })
+    return children
+
+
+def _batch_summary(batch_id: str) -> dict | None:
+    """Synthesize a batch header from the runs that share batch_id."""
+    derived = _derive_batches(DataInterface().list_reports())
+    for group in derived:
+        if group["batch_id"] == batch_id:
+            return group
+    return None
+
+
+def _batch_prefill(batch_id: str) -> dict | None:
+    """Reconstruct builder form state (name + per-run items) from an existing
+    batch's runs, so a "Rerun" reopens the builder ready to queue again. Returns
+    None if no runs share this batch_id. Credentials are NOT reconstructed (never
+    stored) — they're re-entered if needed."""
+    summary = _batch_summary(batch_id)
+    if summary is None:
+        return None
+    # list_reports is newest-first; reverse so items keep the original order.
+    items = []
+    for run in reversed(summary["items"]):
+        items.append({
+            "label": "",
+            "url": run.get("target_url", ""),
+            "title": run.get("title", ""),
+            "prompt": run.get("prompt", ""),
+            "device": run.get("device", ""),
+            "demographic": run.get("demographic", ""),
+            "limit": (run.get("limit_s") or 0) // 60 or None,
+            "allow_accounts": bool(run.get("allow_accounts")),
+            "allow_external": bool(run.get("allow_external")),
+            "allow_financial": bool(run.get("allow_financial")),
+            "additional_domains": "\n".join(run.get("additional_domains") or []),
+        })
+    return {"name": summary["name"], "items": items}
+    return None
+
+
+@sentinel_api.route("/batches")
+def batches_index():
+    prefill = None
+    from_batch = str(request.args.get("from", "")).strip()
+    if from_batch:
+        prefill = _batch_prefill(from_batch)
+    return render_template(
+        "sentinel_batches.html",
+        max_batch_items=ConfigManager().sentinel.max_batch_items,
+        batch_name_max_chars=ConfigManager().sentinel.batch_name_max_chars,
+        prefill_batch=prefill,
+        **_run_form_options(),
+    )
+
+
+@sentinel_api.route("/api/batches", methods=["POST"])
+def create_batch():
+    """Validate the items and queue them all immediately as runs sharing a new
+    batch_id. There is no saved batch entity — the group is re-derived from the
+    runs themselves. Credentials travel inline on each item and are forwarded to
+    start_run (held in memory only), never written to disk."""
+    payload = request.get_json(silent=True) or request.form
+    try:
+        name, items = _parse_batch_payload(payload)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    raw_items = payload.get("items") or []
+    batch_id = uuid.uuid4().hex
+    owner = str(getattr(current_user, "id", "") or "")
+    run_ids = []
+    for idx, item in enumerate(items):
+        merged = dict(item)
+        merged["limit"] = item.get("limit_mins")
+        # Inline per-item credentials live on the raw payload item, not the
+        # normalized one (_sanitize_batch_item drops them).
+        raw = raw_items[idx] if idx < len(raw_items) and isinstance(raw_items[idx], dict) else {}
+        for key in ("account_credentials", "card_number", "card_expiry", "card_cvv"):
+            if key in raw:
+                merged[key] = raw[key]
+        try:
+            kwargs = _validate_run_params(merged, with_credentials=True)
+        except ValueError as e:
+            return jsonify({"error": f"Run {idx + 1}: {e}"}), 400
+        result = start_run(
+            kwargs.pop("target"),
+            kwargs.pop("prompt"),
+            kwargs.pop("limit_s"),
+            owner=owner,
+            batch_id=batch_id,
+            batch_label=name,
+            **kwargs,
+        )
+        run_ids.append(result["run_id"])
+
+    return jsonify({"batch_id": batch_id, "run_ids": run_ids}), 202
+
+
+@sentinel_api.route("/batch/<batch_id>")
+def batch_detail(batch_id: str):
+    summary = _batch_summary(batch_id)
+    if summary is None:
+        abort(404)
+    return render_template(
+        "sentinel_batch.html",
+        batch=summary,
+        child_runs=_batch_child_runs_by_id(batch_id),
+    )
+
+
+@sentinel_api.route("/api/batch/<batch_id>")
+def batch_status(batch_id: str):
+    children = _batch_child_runs_by_id(batch_id)
+    if not children:
+        abort(404)
+    return jsonify({"batch_id": batch_id, "child_runs": children})
 
 
 @sentinel_api.route("/report/<run_id>")

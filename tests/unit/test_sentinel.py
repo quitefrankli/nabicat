@@ -1133,3 +1133,103 @@ def test_parse_picker_payload_filters_to_allowed_and_respects_budget():
     assert picked == ["step-04.png", "step-09.png"]
     assert _parse_picker_payload("not json", allowed, budget=3) == []
     assert _parse_picker_payload('{"foo":"bar"}', allowed, budget=3) == []
+
+
+def _login_admin(client, mock_users):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    mock_users.return_value.load_users.return_value = {"admin": admin}
+    with client.session_transaction() as sess:
+        sess["_user_id"] = "admin"
+
+
+def test_create_batch_queues_runs_inline_without_persisting_a_batch(client, tmp_path):
+    """A single POST queues one run per item, all sharing a new batch_id and the
+    batch label. Inline per-item credentials are forwarded to start_run (held in
+    memory only); NO batch entity is written to disk."""
+    from web_app.sentinel.data_interface import DataInterface as SentinelData
+
+    calls = []
+
+    def fake_start_run(target, prompt, limit_s, **kwargs):
+        calls.append({"target": target, "prompt": prompt, "limit_s": limit_s, **kwargs})
+        return {"run_id": f"{len(calls):032x}", "status": "queued"}
+
+    def make_data():
+        d = SentinelData()
+        d.sentinel_dir = tmp_path / "sentinel"
+        d.runs_dir = d.sentinel_dir / "runs"
+        return d
+
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        _login_admin(client, mock_users)
+        with patch("web_app.sentinel.DataInterface", side_effect=make_data), patch(
+            "web_app.sentinel.validate_public_web_url"
+        ) as mock_validate, patch("web_app.sentinel.start_run", side_effect=fake_start_run):
+            mock_validate.return_value = ValidatedTarget("https://example.com/", "example.com")
+
+            res = client.post(
+                "/sentinel/api/batches",
+                json={
+                    "name": "Device sweep",
+                    "items": [
+                        {"url": "https://example.com", "prompt": "explore", "device": "small_phone"},
+                        {"url": "https://example.com", "prompt": "explore", "device": "desktop",
+                         "allow_accounts": True,
+                         "account_credentials": {"username": "qatester", "password": "hunter2", "extras": {}}},
+                    ],
+                },
+            )
+
+    assert res.status_code == 202
+    body = res.get_json()
+    batch_id = body["batch_id"]
+    assert len(body["run_ids"]) == 2
+
+    # One start_run per item, all sharing the batch_id and the batch label.
+    assert len(calls) == 2
+    assert {c["batch_id"] for c in calls} == {batch_id}
+    assert {c["batch_label"] for c in calls} == {"Device sweep"}
+    assert calls[0]["device"] == "small_phone"
+    # Credentials forwarded only for the item that supplied them.
+    assert calls[0]["account_credentials"] is None
+    assert calls[1]["account_credentials"] == {"username": "qatester", "password": "hunter2", "extras": {}}
+
+    # No saved batch entity is written anywhere.
+    assert not (tmp_path / "sentinel" / "batches").exists()
+
+
+def test_batch_status_groups_runs_by_batch_id(client):
+    """GET /api/batch/<id> returns the runs sharing that batch_id; 404 when none."""
+    runs = [
+        {"run_id": "a" * 32, "batch_id": "bid1", "batch_label": "B1", "status": "running",
+         "title": "Run A", "target_url": "https://example.com", "run_outcome": None},
+        {"run_id": "b" * 32, "batch_id": "bid1", "batch_label": "B1", "status": "completed",
+         "title": "Run B", "target_url": "https://example.com", "run_outcome": "completed"},
+        {"run_id": "c" * 32, "batch_id": "", "status": "completed", "title": "Solo",
+         "target_url": "https://example.com", "run_outcome": "completed"},
+    ]
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        _login_admin(client, mock_users)
+        with patch("web_app.sentinel.DataInterface") as mock_data:
+            mock_data.return_value.list_reports.return_value = runs
+            res = client.get("/sentinel/api/batch/bid1")
+            missing = client.get("/sentinel/api/batch/nope")
+
+    assert res.status_code == 200
+    children = res.get_json()["child_runs"]
+    assert {c["run_id"] for c in children} == {"a" * 32, "b" * 32}
+    assert missing.status_code == 404
+
+
+def test_create_batch_rejects_invalid_item_url(client):
+    """A batch with an item whose URL fails validation is rejected with 400."""
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        _login_admin(client, mock_users)
+        with patch("web_app.sentinel.validate_public_web_url",
+                   side_effect=TargetValidationError("bad url")):
+            res = client.post(
+                "/sentinel/api/batches",
+                json={"name": "Bad", "items": [{"url": "http://localhost"}]},
+            )
+    assert res.status_code == 400
+    assert "bad url" in res.get_json()["error"]

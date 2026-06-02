@@ -5,6 +5,8 @@ import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
+from web_app.config import ConfigManager
+
 
 class TargetValidationError(ValueError):
     pass
@@ -28,6 +30,15 @@ def _is_blocked_ip(value: str) -> bool:
     )
 
 
+def _looks_local(hostname: str) -> bool:
+    if hostname in {"localhost", "localhost.localdomain"}:
+        return True
+    try:
+        return _is_blocked_ip(hostname)
+    except ValueError:
+        return False
+
+
 def _resolved_ips(hostname: str, port: int | None) -> set[str]:
     try:
         infos = socket.getaddrinfo(hostname, port or 443, type=socket.SOCK_STREAM)
@@ -37,25 +48,37 @@ def _resolved_ips(hostname: str, port: int | None) -> set[str]:
 
 
 def validate_public_web_url(raw_url: str) -> ValidatedTarget:
-    url = (raw_url or "").strip()
-    if "://" not in url:
-        url = f"https://{url}"
+    raw = (raw_url or "").strip()
+    allow_local = ConfigManager().debug_mode
+    if "://" not in raw:
+        # Local dev servers usually speak plain HTTP, so in debug mode default a
+        # scheme-less local target to http:// rather than https:// (which fails
+        # with ERR_SSL_PROTOCOL_ERROR against a non-TLS server).
+        scheme_host = raw.split("/", 1)[0]
+        bare_host = urlparse(f"//{scheme_host}").hostname or scheme_host
+        default_scheme = "http" if (allow_local and _looks_local(bare_host.rstrip(".").lower())) else "https"
+        url = f"{default_scheme}://{raw}"
+    else:
+        url = raw
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise TargetValidationError("URL must start with http:// or https://")
     if not parsed.hostname:
         raise TargetValidationError("URL must include a valid host")
     hostname = parsed.hostname.rstrip(".").lower()
-    if hostname in {"localhost", "localhost.localdomain"}:
-        raise TargetValidationError("Local targets are not allowed")
+    # In debug mode, permit local/private targets so Sentinel can QA itself
+    # (e.g. localhost, 127.0.0.1, the dev server's LAN address).
+    if not allow_local:
+        if hostname in {"localhost", "localhost.localdomain"}:
+            raise TargetValidationError("Local targets are not allowed")
 
-    try:
-        if _is_blocked_ip(hostname):
-            raise TargetValidationError("Private or local targets are not allowed")
-    except ValueError:
-        for ip in _resolved_ips(hostname, parsed.port):
-            if _is_blocked_ip(ip):
-                raise TargetValidationError("Target resolves to a private or local address")
+        try:
+            if _is_blocked_ip(hostname):
+                raise TargetValidationError("Private or local targets are not allowed")
+        except ValueError:
+            for ip in _resolved_ips(hostname, parsed.port):
+                if _is_blocked_ip(ip):
+                    raise TargetValidationError("Target resolves to a private or local address")
 
     host_for_netloc = f"[{hostname}]" if ":" in hostname else hostname
     userinfo = f"{parsed.netloc.rsplit('@', 1)[0]}@" if "@" in parsed.netloc else ""

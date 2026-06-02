@@ -101,6 +101,9 @@ body.sentinel-resizing * {
   align-self: start;
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
+  /* Reserve the scrollbar gutter so switching between a long Individual list
+     and a short Batches list doesn't reflow/resize the sidebar contents. */
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -948,5 +951,316 @@ body.sentinel-resizing * {
 
   .sentinel-inline-fields > div {
     max-width: none;
+  }
+}
+
+/* --- Batch jobs --- */
+
+.sentinel-sidebar-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sentinel-sidebar-actions .sentinel-sidebar-new-run,
+.sentinel-sidebar-new-batch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex: 1;
+  /* Slightly smaller than the slider above (slider uses 0.625rem 0.95rem). */
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+/* Individual / Batches view slider switch */
+.sentinel-view-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0.25rem 0.25rem 0.5rem;
+  padding: 3px;
+  background: var(--hw-bg-cream);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-full);
+}
+
+.sentinel-view-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: var(--hw-radius-full);
+  background: var(--hw-gradient-sage);
+  box-shadow: var(--hw-shadow-sm);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 0;
+}
+
+.sentinel-sidebar[data-view="batches"] .sentinel-view-toggle-thumb {
+  transform: translateX(100%);
+}
+
+.sentinel-view-toggle-option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.625rem 1.25rem;
+  border: none;
+  background: transparent;
+  border-radius: var(--hw-radius-full);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--hw-text-secondary);
+  cursor: pointer;
+  transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sentinel-view-toggle-option[aria-pressed="true"] {
+  color: #fff;
+}
+
+.sentinel-view-toggle-option:focus-visible {
+  outline: 2px solid var(--hw-sage-dark);
+  outline-offset: 2px;
+}
+
+/* Section + action-button visibility follow data-list-view, which JS updates
+   only after the thumb's slide animation finishes, so the list swaps in sync
+   with the completed slide rather than mid-animation. */
+.sentinel-sidebar[data-list-view="individual"] [data-section="batches"],
+.sentinel-sidebar[data-list-view="batches"] [data-section="individual"] {
+  display: none;
+}
+
+.sentinel-sidebar[data-list-view="batches"] .sentinel-sidebar-new-run,
+.sentinel-sidebar[data-list-view="individual"] .sentinel-sidebar-new-batch {
+  display: none;
+}
+
+/* Batch groups: parent row with nested, collapsible child runs. */
+.sentinel-batch-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sentinel-batch-children {
+  display: none;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-left: 0.6rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--hw-border);
+}
+
+.sentinel-batch-group.is-open .sentinel-batch-children {
+  display: flex;
+}
+
+.sentinel-batch-child {
+  border-radius: var(--hw-radius-md);
+  background: rgba(135, 168, 120, 0.06);
+}
+
+.sentinel-batch-child.is-active {
+  background: rgba(135, 168, 120, 0.18);
+}
+
+.sentinel-batch-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sentinel-batch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+}
+
+.sentinel-batch-item-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sentinel-batch-item-head .sentinel-batch-item-heading {
+  flex: 1;
+  font-weight: 700;
+  font-family: 'Playfair Display', Georgia, serif;
+  color: var(--hw-forest);
+}
+
+.sentinel-batch-list,
+.sentinel-batch-item-summaries,
+.sentinel-batch-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sentinel-batch-card,
+.sentinel-batch-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+}
+
+.sentinel-batch-summary {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.sentinel-batch-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.sentinel-batch-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.sentinel-batch-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.sentinel-batch-run-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--hw-transition-fast), box-shadow var(--hw-transition-fast);
+}
+
+.sentinel-batch-run-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--hw-shadow-sm);
+}
+
+/* Launch credential modal */
+.sentinel-batch-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(45, 74, 62, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.sentinel-batch-modal[hidden] {
+  display: none;
+}
+
+.sentinel-batch-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-lg);
+  padding: 1.5rem;
+}
+
+.sentinel-batch-modal-card h2 {
+  margin: 0 0 0.5rem;
+  color: var(--hw-forest);
+}
+
+.sentinel-batch-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.9rem;
+  border: none;
+  background: transparent;
+  color: var(--hw-text-muted);
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sentinel-batch-modal-close:hover {
+  color: var(--hw-forest);
+}
+
+.sentinel-batch-cred-item {
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  padding: 0.75rem 1rem 1rem;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sentinel-batch-cred-item legend {
+  float: none;
+  width: auto;
+  padding: 0 0.4rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--hw-forest);
+}
+
+.sentinel-batch-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .sentinel-batch-card,
+  .sentinel-batch-run-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sentinel-batch-card-actions {
+    justify-content: flex-end;
+  }
+
+  .sentinel-batch-item-head {
+    flex-wrap: wrap;
+  }
+
+  .sentinel-batch-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .sentinel-batch-modal-actions .btn {
+    width: 100%;
   }
 }

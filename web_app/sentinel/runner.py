@@ -135,6 +135,8 @@ def start_run(
     device: str = "",
     demographic: str = "",
     owner: str = "",
+    batch_id: str = "",
+    batch_label: str = "",
 ) -> dict:
     run_id = uuid.uuid4().hex
     now = utc_now_iso()
@@ -148,6 +150,8 @@ def start_run(
         "run_id": run_id,
         "status": "queued",
         "owner": str(owner or ""),
+        "batch_id": str(batch_id or ""),
+        "batch_label": str(batch_label or ""),
         "target_url": target.url,
         "target_hostname": target.hostname,
         "prompt": prompt,
