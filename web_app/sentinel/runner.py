@@ -92,7 +92,10 @@ _ACTIVE_STATUSES = {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.SUMMARIZING}
 def _save(report: Report) -> None:
     # Private attrs (_card_details, _account_credentials, _peek_pending) are
     # excluded from serialization automatically, so save_report never persists
-    # secrets. The live object keeps mutating; store a snapshot copy.
+    # secrets. The cache snapshot is a deep copy: the run loop keeps mutating
+    # `report` (appending steps/findings) after this returns, and a shallow copy
+    # would alias those lists into the cached entry, so a concurrent reader via
+    # get_run() could observe half-written state.
     DataInterface().save_report(report)
     with _active_lock:
         _active_runs[report.run_id] = report.model_copy(deep=True)
@@ -101,6 +104,7 @@ def _save(report: Report) -> None:
 def get_run(run_id: str) -> Report | None:
     with _active_lock:
         if run_id in _active_runs:
+            # Hand callers their own deep copy so they can't mutate the cache.
             return _active_runs[run_id].model_copy(deep=True)
     try:
         return DataInterface().load_report(run_id)
@@ -188,25 +192,25 @@ def _run_background(report: Report) -> None:
     report.status = RunStatus.RUNNING
     report.started_at = utc_now_iso()
     if not report.title:
-        report.title = _generate_title(report)
+        report.title = _generate_title(report.target_url, report.prompt, report.target_hostname)
     _save(report)
     try:
         _execute_browser_run(report)
         if _is_cancelled(report.run_id):
             report.status = RunStatus.CANCELLED
-        outcome_status = "completed" if report.status == RunStatus.RUNNING.value else report.status
+        outcome_status = RunStatus.COMPLETED if report.status == RunStatus.RUNNING else report.status
         report.run_outcome = outcome_status
-        if outcome_status == RunStatus.CANCELLED.value:
+        if outcome_status == RunStatus.CANCELLED:
             report.final_report = "## Summary\n\nThis run was cancelled before it finished."
             report.status = outcome_status
         else:
             report.status = RunStatus.SUMMARIZING
             _save(report)
             _add_final_report(report)
-            if outcome_status == RunStatus.COMPLETED.value:
+            if outcome_status == RunStatus.COMPLETED:
                 login_fail_reason = _detect_login_failure(report)
                 if login_fail_reason:
-                    outcome_status = "failed"
+                    outcome_status = RunStatus.FAILED
                     report.verdict_reason = login_fail_reason
                     _add_finding(report, "error", "Login failed", login_fail_reason)
                 else:
@@ -406,26 +410,23 @@ def _clean_title(text: str) -> str:
     return text
 
 
-def _generate_title(report) -> str:
-    # Accepts a Report or a plain dict (batch-name generation passes a dict).
-    getter = report.get if isinstance(report, dict) else lambda k, d="": getattr(report, k, d)
+def _generate_title(target_url: str, prompt: str, target_hostname: str = "") -> str:
     payload = json.dumps(
         {
-            "target_url": getter("target_url", ""),
-            "user_prompt": getter("prompt", "") or "Explore and test the site's main unauthenticated flows.",
+            "target_url": target_url,
+            "user_prompt": prompt or "Explore and test the site's main unauthenticated flows.",
         },
         indent=2,
     )
     try:
-        return _clean_title(_get_provider().title_text(payload)) or _fallback_title(report)
+        return _clean_title(_get_provider().title_text(payload)) or _fallback_title(target_url, target_hostname)
     except Exception as e:
         logging.warning("Sentinel title generation failed: %s", e)
-        return _fallback_title(report)
+        return _fallback_title(target_url, target_hostname)
 
 
-def _fallback_title(report) -> str:
-    getter = report.get if isinstance(report, dict) else lambda k, d="": getattr(report, k, d)
-    return _clean_title(getter("target_hostname", "") or getter("target_url", "") or "Sentinel run")
+def _fallback_title(target_url: str, target_hostname: str = "") -> str:
+    return _clean_title(target_hostname or target_url or "Sentinel run")
 
 
 def _add_finding(report: Report, severity: str, title: str, detail: str) -> None:
@@ -439,11 +440,11 @@ def _add_finding(report: Report, severity: str, title: str, detail: str) -> None
 _VERDICT_FAIL_REASON_MAX_CHARS = 300
 
 
-def _classify_run_verdict(report: Report) -> str:
+def _classify_run_verdict(report: Report) -> RunStatus:
     """Ask the LLM whether the run actually fulfilled the user's prompt.
 
-    Returns the new run status: 'completed' on pass, 'failed' on fail. On any
-    error or unparseable response, falls back to 'completed' (the existing
+    Returns the new run status: COMPLETED on pass, FAILED on fail. On any
+    error or unparseable response, falls back to COMPLETED (the existing
     behavior) so this never blocks a real success.
     """
     try:
@@ -451,15 +452,15 @@ def _classify_run_verdict(report: Report) -> str:
         parsed = _parse_verdict_payload(raw)
     except Exception as e:
         logging.warning("Sentinel verdict classification failed: %s", e)
-        return "completed"
+        return RunStatus.COMPLETED
     if not parsed:
-        return "completed"
+        return RunStatus.COMPLETED
     verdict, reason = parsed
     if verdict != "fail":
-        return "completed"
+        return RunStatus.COMPLETED
     report.verdict_reason = reason[:_VERDICT_FAIL_REASON_MAX_CHARS]
     _add_finding(report, "warning", "Run did not fulfill prompt", reason)
-    return "failed"
+    return RunStatus.FAILED
 
 
 def _verdict_prompt(report: Report) -> str:

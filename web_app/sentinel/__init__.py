@@ -10,7 +10,7 @@ from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 from web_app.config import ConfigManager
-from web_app.sentinel.data_interface import DataInterface, utc_now_iso
+from web_app.sentinel.data_interface import DataInterface
 from web_app.sentinel.models import Report
 from web_app.sentinel.runner import (
     delete_run,
@@ -516,11 +516,11 @@ def _sanitize_batch_item(raw: dict) -> dict:
 def _generate_batch_name(items: list[dict]) -> str:
     cfg = ConfigManager()
     first = items[0] if items else {}
-    name = _generate_title({
-        "target_url": first.get("_target_url") or first.get("url", ""),
-        "target_hostname": first.get("_target_hostname", ""),
-        "prompt": first.get("prompt", ""),
-    })
+    name = _generate_title(
+        target_url=first.get("_target_url") or first.get("url", ""),
+        prompt=first.get("prompt", ""),
+        target_hostname=first.get("_target_hostname", ""),
+    )
     return str(name).strip()[: cfg.sentinel.batch_name_max_chars] or cfg.sentinel.batch_name_fallback
 
 

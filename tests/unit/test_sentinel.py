@@ -292,13 +292,14 @@ def test_time_limit_input_is_minutes_capped_at_ten():
 
 def test_report_loads_legacy_json_and_excludes_private_fields():
     """A report.json written before the typed schema (with an unknown key) must
-    still load, and runtime-only secrets must never appear in the dump."""
+    still load; the unknown key is dropped (not re-persisted), and runtime-only
+    secrets must never appear in the dump."""
     legacy = {
         "run_id": "f" * 32,
         "status": "completed",
         "steps": [{"index": 1, "action": "click", "reason": "go", "result": {"ok": True, "url": "u"}}],
         "findings": [{"severity": "info", "title": "t", "detail": "d"}],
-        "obsolete_legacy_key": "ignored-but-kept",
+        "obsolete_legacy_key": "ignored-and-dropped",
     }
     report = Report.model_validate(legacy)
     assert report.status == "completed"
@@ -309,6 +310,8 @@ def test_report_loads_legacy_json_and_excludes_private_fields():
     dumped = report.model_dump_json()
     assert "_card_details" not in dumped
     assert "4242" not in dumped
+    # Unknown legacy key is not silently re-persisted.
+    assert "obsolete_legacy_key" not in dumped
 
 
 def test_finding_details_are_truncated_and_single_line():
@@ -356,25 +359,21 @@ def test_report_payload_renders_final_report_markdown_without_html():
 
 
 def test_generate_title_uses_provider_when_title_blank_and_falls_back_on_error():
-    report = {
-        "target_url": "https://example.com",
-        "target_hostname": "example.com",
-        "prompt": "Test the checkout flow",
-    }
+    url, host, prompt = "https://example.com", "example.com", "Test the checkout flow"
 
     class _OkProvider:
         def title_text(self, _user):
             return '"Checkout flow smoke test"\n'
 
     with patch("web_app.sentinel.runner._get_provider", return_value=_OkProvider()):
-        assert _generate_title(report) == "Checkout flow smoke test"
+        assert _generate_title(url, prompt, host) == "Checkout flow smoke test"
 
     class _BadProvider:
         def title_text(self, _user):
             raise RuntimeError("nope")
 
     with patch("web_app.sentinel.runner._get_provider", return_value=_BadProvider()):
-        assert _generate_title(report) == _fallback_title(report) == "example.com"
+        assert _generate_title(url, prompt, host) == _fallback_title(url, host) == "example.com"
 
 
 def test_clean_title_strips_quotes_collapses_whitespace_and_truncates():

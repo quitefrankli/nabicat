@@ -66,7 +66,7 @@ class PostMeta(BaseModel):
     alias; gallery posts populate it, other types leave it None.
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     type: PostType
     title: str = ""

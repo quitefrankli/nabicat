@@ -1,5 +1,4 @@
 import binascii
-import json
 import logging
 import shutil
 
@@ -78,12 +77,7 @@ class DataInterface(BaseDataInterface):
         self.atomic_delete(self.app_audio_dir / f"{crc}.m4a")
 
     def get_metadata(self) -> Metadata:
-        if not self.app_metadata_file.exists():
-            return Metadata()
-        with open(self.app_metadata_file, 'r') as f:
-            data = f.read()
-
-        return Metadata(**json.loads(data))
+        return self.load_model(self.app_metadata_file, Metadata, sync=False) or Metadata()
     
     def get_user_metadata(self, user: User) -> UserMetadata:
         metadata = self.get_metadata()
@@ -142,10 +136,7 @@ class DataInterface(BaseDataInterface):
         self.save_metadata(metadata)
     
     def save_metadata(self, metadata: Metadata) -> None:
-        self.atomic_write(self.app_metadata_file, 
-                          data=metadata.model_dump_json(indent=4), 
-                          mode="w", 
-                          encoding='utf-8')
+        self.save_model(self.app_metadata_file, metadata)
 
     def get_audio_path(self, crc: int, metadata: Metadata|None = None) -> Path:
         """DEPRECATED want to stream eventually"""
@@ -217,7 +208,4 @@ class DataInterface(BaseDataInterface):
                 shutil.copy2(self.get_audio_path(audio.crc, metadata), 
                              audio_backup_dir / f"{audio.crc}.m4a")
 
-        self.atomic_write(tubio_backup_dir / "metadata.json", 
-                          data=metadata.model_dump_json(indent=4), 
-                          mode="w", 
-                          encoding='utf-8')
+        self.save_model(tubio_backup_dir / "metadata.json", metadata)

@@ -1,8 +1,6 @@
-import json
 import shutil
 
 from pathlib import Path
-from datetime import datetime
 from typing import * # type: ignore
 
 from web_app.users import User
@@ -17,19 +15,10 @@ class DataInterface(BaseDataInterface):
         self.metrics_data_directory = ConfigManager().save_data_path / "metrics"
 
     def load_data(self, user: User) -> Metrics:
-        data_path = self._get_data_file(user)
-        self.data_syncer.download_file(data_path)
-        if not data_path.exists():
-            return Metrics(metrics={})
-        
-        with open(data_path, 'r') as file:
-            data = json.load(file)
+        return self.load_model(self._get_data_file(user), Metrics) or Metrics(metrics={})
 
-        return Metrics(**data)
-            
     def save_data(self, data: Metrics, user: User) -> None:
-        data_file = self._get_data_file(user)
-        self.atomic_write(data_file, data=data.model_dump_json(indent=4), mode="w", encoding='utf-8')
+        self.save_model(self._get_data_file(user), data)
 
     def backup_data(self, backup_dir: Path) -> None:
         shutil.copytree(self.metrics_data_directory, backup_dir / "metrics")

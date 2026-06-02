@@ -45,9 +45,11 @@ class StepAction(_ValueStr):
 
 
 class ActionResult(BaseModel):
-    # Tolerant of legacy/partial shapes: a normal result is {ok, url}, an
-    # invalid-step result is {agent_text}, blocked clicks add blocked_url, etc.
-    model_config = ConfigDict(extra="allow")
+    # A normal result is {ok, url}; an invalid-step result is {agent_text};
+    # blocked clicks add blocked_url; slow nav adds warning. All variants are
+    # declared below, so extra="ignore" drops any stray key rather than
+    # silently persisting it.
+    model_config = ConfigDict(extra="ignore")
 
     ok: Optional[bool] = None
     url: str = ""
@@ -78,12 +80,13 @@ class AccountCredentials(BaseModel):
 
 
 class Report(BaseModel):
-    # use_enum_values keeps enum fields as plain strings on the instance (so
-    # templates/JSON see 'running'); validate_assignment re-coerces enum
-    # assignments in the runner (report.status = RunStatus.RUNNING) back to the
-    # string value. extra='allow' tolerates unknown keys in already-persisted
-    # report.json files written before this schema existed.
-    model_config = ConfigDict(use_enum_values=True, validate_assignment=True, extra="allow")
+    # status is a real RunStatus enum on the instance. validate_assignment
+    # re-coerces plain-string assignments (e.g. report.status = "failed" from
+    # the verdict classifier) back to the enum. _ValueStr serializes and
+    # stringifies to the bare value, so JSON/templates still see 'running'.
+    # extra='ignore' lets already-persisted report.json files load even if they
+    # carry keys this schema doesn't know, without re-persisting them.
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     run_id: str
     status: RunStatus = RunStatus.QUEUED

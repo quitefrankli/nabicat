@@ -1,5 +1,4 @@
 import binascii
-import json
 import logging
 import shutil
 from datetime import datetime
@@ -65,20 +64,11 @@ class DataInterface(BaseDataInterface):
 
     def get_metadata(self) -> Metadata:
         """Load metadata from file, returns empty metadata if file doesn't exist."""
-        if not self.metadata_file.exists():
-            return Metadata()
-        with open(self.metadata_file, 'r', encoding='utf-8') as f:
-            data = f.read()
-        return Metadata(**json.loads(data))
+        return self.load_model(self.metadata_file, Metadata, sync=False) or Metadata()
 
     def save_metadata(self, metadata: Metadata) -> None:
         """Save metadata to file."""
-        self.atomic_write(
-            self.metadata_file,
-            data=metadata.model_dump_json(indent=4),
-            mode="w",
-            encoding='utf-8'
-        )
+        self.save_model(self.metadata_file, metadata)
 
     def get_user_metadata(self, user: User) -> UserMetadata:
         """Get user metadata, creates new if doesn't exist."""
