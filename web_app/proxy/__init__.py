@@ -1,8 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from flask import Blueprint, render_template, request, Response, abort, url_for
+from flask import Blueprint, render_template, request, Response, url_for
 from flask_login import login_required, current_user
 from urllib.parse import urljoin, urlparse
+
+from web_app.config import ConfigManager
+from web_app.helpers import redirect_with_access_denied
 
 
 proxy_api = Blueprint(
@@ -19,7 +22,7 @@ proxy_api = Blueprint(
 def before_request():
     # This ensures all routes in this blueprint require login and admin access
     if not current_user.is_admin:
-        abort(403)
+        return redirect_with_access_denied(ConfigManager().admin_access_denied_message)
 
 
 @proxy_api.context_processor
