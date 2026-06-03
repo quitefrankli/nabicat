@@ -978,7 +978,10 @@ def _agent_prompt(report: Report, observation: dict) -> str:
             "external navigation is permitted only to those domains; other external domains are blocked. "
             "If the annotation boxes are obscuring text you need to read, or you think a clickable "
             "element is missing from the elements list, use the peek action — the next step will "
-            "include a clean un-annotated copy of the same screenshot."
+            "include a clean un-annotated copy of the same screenshot. When the user asks you to "
+            "check all items, apps, links, cards, rows, or sections on a page, use scroll to inspect "
+            "below the current screen before finishing. Do not assume the visible screen is the "
+            "whole page."
         ),
     }
     if hints:

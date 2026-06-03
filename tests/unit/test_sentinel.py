@@ -853,6 +853,26 @@ def test_agent_prompt_omits_body_text_and_rects():
     assert '"label": "Sign up"' in out
 
 
+def test_agent_prompt_requires_scrolling_for_whole_page_audits():
+    report = _mk_report(
+        run_id="a" * 32,
+        target_url="https://example.com",
+        prompt="check all app cards",
+        steps=[],
+    )
+    out = _agent_prompt(report, {"url": "https://example.com", "title": "Example", "elements": []})
+
+    assert "use scroll to inspect" in out
+    assert "Do not assume the visible screen is the whole page" in out
+
+
+def test_system_prompt_requires_full_page_scroll_before_finish():
+    prompt = _system_prompt(allow_accounts=False)
+
+    assert "inspect the whole page" in prompt
+    assert "Do not emit finish just because the currently visible viewport looks complete" in prompt
+
+
 def test_system_prompt_prepends_demographic_persona():
     cfg = ConfigManager()
     senior_persona = cfg.sentinel.demographic_personas["senior"]
