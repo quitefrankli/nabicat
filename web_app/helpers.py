@@ -182,6 +182,13 @@ def admin_only(failure_redirect: str):
         return decorated_view
     return _admin_only
 
+def redirect_with_access_denied(message: str, api_prefixes: tuple[str, ...] = ()):
+    if request.method != 'GET' or any(request.path.startswith(prefix) for prefix in api_prefixes):
+        flask.abort(403)
+    config = ConfigManager()
+    flask.flash(message, category='error')
+    return flask.redirect(flask.url_for(config.access_denied_redirect_endpoint))
+
 def get_ip() -> str:
     if request.headers.getlist("X-Forwarded-For"):
         return request.headers.getlist("X-Forwarded-For")[0]

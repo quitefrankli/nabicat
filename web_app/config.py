@@ -367,6 +367,11 @@ class ConfigManager:
         self.cache_browser_max_size_bytes = 10 * 1024 * 1024 * 1024
         self.cache_service_worker_ready_timeout_ms = 5000
         self.cache_service_worker_message_timeout_ms = 5000
+        self.access_denied_redirect_endpoint = "home"
+        self.elevated_access_denied_message = "You need elevated access to use Sentinel."
+        self.admin_access_denied_message = "You need admin access to use this app."
+        self.sentinel_access_denied_api_prefixes = ("/sentinel/api/",)
+        self.dev_access_denied_api_prefixes = ("/dev/logs", "/dev/map-data", "/dev/terminal/")
         self.smtp_port = 587
         self.project_dir = Path.cwd()
 

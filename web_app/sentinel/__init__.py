@@ -10,6 +10,7 @@ from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 from web_app.config import ConfigManager
+from web_app.helpers import redirect_with_access_denied
 from web_app.sentinel.data_interface import DataInterface
 from web_app.sentinel.models import Report
 from web_app.sentinel.runner import (
@@ -98,8 +99,12 @@ sentinel_api = Blueprint(
 @sentinel_api.before_request
 @login_required
 def require_elevated():
+    config = ConfigManager()
     if not current_user.has_elevated_access():
-        abort(403)
+        return redirect_with_access_denied(
+            config.elevated_access_denied_message,
+            config.sentinel_access_denied_api_prefixes,
+        )
 
 
 def _derive_batches(reports: list[Report], max_n: int | None = None) -> list[dict]:

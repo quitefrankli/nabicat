@@ -471,7 +471,7 @@ def test_sentinel_report_shows_run_id_with_copy_button(client):
     assert f'data-copy-text="{run_id}"' in body
 
 
-def test_sentinel_routes_require_admin_and_start_run_for_admin(client):
+def test_sentinel_routes_redirect_unauthorized_pages_and_start_run_for_admin(client):
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
     non_admin = User(username="user", password="pass", folder="uf", is_admin=False)
 
@@ -482,7 +482,7 @@ def test_sentinel_routes_require_admin_and_start_run_for_admin(client):
 
         with client.session_transaction() as sess:
             sess["_user_id"] = "user"
-        assert client.get("/sentinel/").status_code == 403
+        assert client.get("/sentinel/").status_code == 302
         assert client.post("/sentinel/api/runs", json={"url": "https://example.com"}).status_code == 403
 
         with client.session_transaction() as sess:
