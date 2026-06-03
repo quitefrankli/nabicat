@@ -345,6 +345,15 @@ def _execute_browser_run(report: Report) -> None:
                 action = _request_agent_action(report, observation, image_paths, allow_external, known_ids)
                 if action is None:
                     break
+                if _finish_requires_more_scroll(report, action, observation):
+                    action = AgentAction(
+                        action="scroll",
+                        value="down",
+                        reason=(
+                            "finish deferred: the prompt asks for full-page coverage and this page "
+                            "still has unseen content below"
+                        ),
+                    )
 
                 result = _apply_action(
                     page,
@@ -851,7 +860,7 @@ def _observe_page(page) -> dict:
     cfg = ConfigManager()
     return page.evaluate(
         """
-        ({ maxElements, maxTextChars, maxElementTextChars }) => {
+        ({ maxElements, maxTextChars, maxElementTextChars, scrollTolerancePx }) => {
           const rectOf = (el) => {
             const r = el.getBoundingClientRect();
             return {x: r.x, y: r.y, w: r.width, h: r.height};
@@ -924,12 +933,29 @@ def _observe_page(page) -> dict:
             });
           }
           const bodyText = (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, maxTextChars);
+          const scrollingEl = document.scrollingElement || document.documentElement;
+          const scrollY = Math.max(0, window.scrollY || scrollingEl.scrollTop || 0);
+          const scrollHeight = Math.max(
+            scrollingEl.scrollHeight || 0,
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+            document.body ? document.body.scrollHeight : 0
+          );
+          const screenHeight = window.innerHeight || scrollingEl.clientHeight || 0;
+          const maxY = Math.max(0, scrollHeight - screenHeight);
+          const canScrollDown = scrollY < maxY - scrollTolerancePx;
           return {
             url: location.href,
             title: document.title,
             text: bodyText,
             elements,
-            viewport: {w: window.innerWidth, h: window.innerHeight}
+            viewport: {w: window.innerWidth, h: window.innerHeight},
+            scroll: {
+              y: Math.round(scrollY),
+              max_y: Math.round(maxY),
+              can_scroll_down: canScrollDown,
+              can_scroll_up: scrollY > scrollTolerancePx,
+              at_bottom: !canScrollDown
+            }
           };
         }
         """,
@@ -937,6 +963,7 @@ def _observe_page(page) -> dict:
             "maxElements": cfg.sentinel.observation_max_elements,
             "maxTextChars": cfg.sentinel.observation_text_max_chars,
             "maxElementTextChars": cfg.sentinel.observation_element_text_max_chars,
+            "scrollTolerancePx": cfg.sentinel.scroll_position_tolerance_px,
         },
     )
 
@@ -968,6 +995,7 @@ def _agent_prompt(report: Report, observation: dict) -> str:
             "url": observation.get("url", ""),
             "title": observation.get("title", ""),
             "elements": elements,
+            "scroll": observation.get("scroll") or {},
         },
         "additional_domains": list(report.additional_domains or []),
         "instructions": (
@@ -987,6 +1015,18 @@ def _agent_prompt(report: Report, observation: dict) -> str:
     if hints:
         payload["hints"] = hints
     return json.dumps(payload, indent=2)
+
+
+def _full_page_coverage_requested(prompt: str | None) -> bool:
+    pattern = ConfigManager().sentinel.full_page_scope_prompt_pattern
+    return bool(re.search(pattern, prompt or "", re.IGNORECASE))
+
+
+def _finish_requires_more_scroll(report: Report, action: AgentAction, observation: dict) -> bool:
+    if action.action != "finish" or not _full_page_coverage_requested(report.prompt):
+        return False
+    scroll = observation.get("scroll") or {}
+    return bool(scroll.get("can_scroll_down"))
 
 
 def _apply_action(

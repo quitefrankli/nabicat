@@ -303,6 +303,32 @@ body.sentinel-resizing * {
   overflow-wrap: anywhere;
 }
 
+.sentinel-run-id-value {
+  font-family: 'SF Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.sentinel-copy-inline {
+  min-height: 2.5rem;
+  margin-left: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--hw-sage-dark);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: transform var(--hw-transition-fast), box-shadow var(--hw-transition-fast);
+}
+
+.sentinel-copy-inline:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--hw-shadow-sm);
+}
+
 .sentinel-report-fields dd a {
   color: var(--hw-sage-dark);
   text-decoration: none;
@@ -340,6 +366,9 @@ body.sentinel-resizing * {
   }
   .sentinel-report-fields dt:first-child {
     margin-top: 0;
+  }
+  .sentinel-copy-inline {
+    margin: 0.4rem 0 0;
   }
 }
 

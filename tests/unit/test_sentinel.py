@@ -6,7 +6,7 @@ from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.helpers import limiter, register_all_blueprints
 from web_app.sentinel import _limit_from_request, _parse_batch_payload, _report_payload, _validate_additional_domains
-from web_app.sentinel.actions import ActionValidationError, parse_agent_action
+from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
 from web_app.sentinel.providers import (
     _build_codex_cmd,
     _codex_text,
@@ -25,6 +25,8 @@ from web_app.sentinel.runner import (
     _ensure_summary_heading,
     _fallback_title,
     _final_report_prompt,
+    _finish_requires_more_scroll,
+    _full_page_coverage_requested,
     _generate_title,
     _host_allowed,
     _navigation_host_allowed,
@@ -446,6 +448,27 @@ def test_sentinel_index_accessible_to_elevated_non_admin(client):
         with patch("web_app.sentinel.DataInterface") as mock_data:
             mock_data.return_value.list_reports.return_value = []
             assert client.get("/sentinel/").status_code == 200
+
+
+def test_sentinel_report_shows_run_id_with_copy_button(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    run_id = "d" * 32
+    report = _mk_report(run_id=run_id, target_url="https://example.com", title="Run title", status="completed")
+
+    with patch("web_app.helpers.DataInterface") as mock_users, patch("web_app.sentinel.get_run", return_value=report):
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        with patch("web_app.sentinel.DataInterface") as mock_data:
+            mock_data.return_value.list_reports.return_value = [report]
+            res = client.get(f"/sentinel/report/{run_id}")
+
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "<dt>Run ID</dt>" in body
+    assert f'<span class="sentinel-run-id-value">{run_id}</span>' in body
+    assert f'data-copy-text="{run_id}"' in body
 
 
 def test_sentinel_routes_require_admin_and_start_run_for_admin(client):
@@ -873,6 +896,20 @@ def test_system_prompt_requires_full_page_scroll_before_finish():
     assert "Do not emit finish just because the currently visible viewport looks complete" in prompt
 
 
+def test_finish_is_deferred_for_full_page_prompt_when_content_remains_below():
+    report = _mk_report(prompt="visit every public and private app")
+    finish = AgentAction(action="finish", reason="done")
+
+    assert _full_page_coverage_requested(report.prompt)
+    assert _finish_requires_more_scroll(report, finish, {"scroll": {"can_scroll_down": True}})
+    assert not _finish_requires_more_scroll(report, finish, {"scroll": {"can_scroll_down": False}})
+    assert not _finish_requires_more_scroll(
+        _mk_report(prompt="log in and open the visible login menu"),
+        finish,
+        {"scroll": {"can_scroll_down": True}},
+    )
+
+
 def test_system_prompt_prepends_demographic_persona():
     cfg = ConfigManager()
     senior_persona = cfg.sentinel.demographic_personas["senior"]
@@ -973,7 +1010,7 @@ def test_observe_page_ignores_offscreen_hidden_and_covered_elements():
 
     html = """
     <style>
-      body { margin: 0; }
+      body { margin: 0; min-height: 900px; }
       #cover { position: absolute; left: 0; top: 90px; width: 160px; height: 60px; background: white; z-index: 2; }
       #covered { position: absolute; left: 0; top: 90px; width: 160px; height: 60px; z-index: 1; }
       #ok { position: absolute; left: 0; top: 180px; width: 160px; height: 60px; }
@@ -998,6 +1035,8 @@ def test_observe_page_ignores_offscreen_hidden_and_covered_elements():
 
     labels = [el["text"] for el in observation["elements"]]
     assert labels == ["Best Match\nPrice: Low - High"]
+    assert observation["scroll"]["can_scroll_down"] is True
+    assert observation["scroll"]["can_scroll_up"] is False
 
 
 def test_sentinel_cancel_signals_active_run(client):

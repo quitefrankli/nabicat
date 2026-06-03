@@ -24,6 +24,31 @@ function findingText(finding) {
     .join(' ');
 }
 
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+  }
+}
+
+function showCopied(button) {
+  const label = button.querySelector('span') || button;
+  const original = label.textContent;
+  label.textContent = 'Copied';
+  window.setTimeout(function () {
+    label.textContent = original;
+  }, 1200);
+}
+
 function renderReport(report) {
   const status = document.getElementById('sentinel-report-status');
   const steps = document.getElementById('sentinel-steps');
@@ -330,18 +355,17 @@ function bindFindingCopyButtons() {
     const textarea = button.closest('.sentinel-finding-full')?.querySelector('textarea');
     if (!textarea) return;
 
-    try {
-      await navigator.clipboard.writeText(textarea.value);
-    } catch (_) {
-      textarea.select();
-      document.execCommand('copy');
-    }
+    await copyTextToClipboard(textarea.value);
+    showCopied(button);
+  });
+}
 
-    const original = button.textContent;
-    button.textContent = 'Copied';
-    window.setTimeout(function () {
-      button.textContent = original;
-    }, 1200);
+function bindInlineCopyButtons() {
+  document.addEventListener('click', async function (event) {
+    const button = event.target.closest('[data-copy-text]');
+    if (!button) return;
+    await copyTextToClipboard(button.dataset.copyText || '');
+    showCopied(button);
   });
 }
 
@@ -353,6 +377,7 @@ document.addEventListener('DOMContentLoaded', function () {
   bindScreenshotButtons();
   bindFinalReportImages();
   bindFindingCopyButtons();
+  bindInlineCopyButtons();
 
   const exportLink = document.getElementById('sentinel-export-pdf');
   if (exportLink) {

@@ -40,6 +40,14 @@
       <span id="sentinel-report-status" class="sentinel-badge sentinel-badge-{{ report.status }}">{{ report.status }}</span>
       <h1 id="sentinel-report-title">{{ report.title or report.target_url }}</h1>
       <dl class="sentinel-report-fields">
+        <dt>Run ID</dt>
+        <dd>
+          <span class="sentinel-run-id-value">{{ report.run_id }}</span>
+          <button class="sentinel-copy-inline" type="button" data-copy-text="{{ report.run_id }}" aria-label="Copy run id">
+            <i class="bi bi-copy"></i>
+            <span>Copy</span>
+          </button>
+        </dd>
         <dt>URL</dt>
         <dd><a href="{{ report.target_url }}" target="_blank" rel="noopener noreferrer">{{ report.target_url }}</a></dd>
         {% if report.owner %}

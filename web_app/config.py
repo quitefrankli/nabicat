@@ -195,6 +195,13 @@ class SentinelConfig:
     # Pause for the explicit "wait" action.
     wait_action_ms: int = 1000
     scroll_action_delta_px: int = 650
+    scroll_position_tolerance_px: int = 2
+    full_page_scope_prompt_pattern: str = (
+        r"\b(?:all|every|each|whole|entire|full)\b.{0,80}\b"
+        r"(?:apps?|cards?|links?|items?|rows?|sections?|pages?|menus?|public|private)\b"
+        r"|\b(?:apps?|cards?|links?|items?|rows?|sections?|pages?|menus?|public|private)\b"
+        r".{0,80}\b(?:all|every|each|whole|entire|full)\b"
+    )
     observation_max_elements: int = 80
     observation_text_max_chars: int = 3000
     observation_element_text_max_chars: int = 140
