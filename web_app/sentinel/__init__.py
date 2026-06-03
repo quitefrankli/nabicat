@@ -433,6 +433,11 @@ def index():
     return render_template("sentinel_index.html", recent_runs=reports[:3], landing_stats=stats)
 
 
+@sentinel_api.route("/pitch")
+def pitch():
+    return render_template("sentinel_pitch.html")
+
+
 @sentinel_api.route("/run")
 def new_run():
     return render_template("sentinel_run.html", **_run_form_context())

@@ -56,6 +56,8 @@ def client():
     app.config["WTF_CSRF_ENABLED"] = False
     app.secret_key = "test-secret"
     limiter.enabled = False
+    if "home" not in app.view_functions:
+        app.add_url_rule("/", "home", lambda: "home")
     if "sentinel" not in app.blueprints:
         register_all_blueprints(app)
     with app.test_client() as client:
@@ -130,6 +132,20 @@ def test_additional_domains_allow_specific_external_navigation(client):
 
     assert res.status_code == 202
     assert captured["additional_domains"] == ["jobs.example.org"]
+
+
+def test_pitch_page_renders_for_admin(client):
+    admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    with patch("web_app.helpers.DataInterface") as mock_users:
+        mock_users.return_value.load_users.return_value = {"admin": admin}
+        with client.session_transaction() as sess:
+            sess["_user_id"] = "admin"
+
+        response = client.get("/sentinel/pitch")
+
+    assert response.status_code == 200
+    assert b"Sentinel is a placeholder name" in response.data
+    assert b"User-as-a-Service" in response.data
 
 
 def test_parse_agent_action_allows_only_known_actions_and_elements():
