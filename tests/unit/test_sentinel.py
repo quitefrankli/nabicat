@@ -36,7 +36,7 @@ from web_app.sentinel.runner import (
     _screenshot_manifest,
     ensure_screenshot_thumbnail,
 )
-from web_app.sentinel.models import Report, Step
+from web_app.sentinel.models import AccountCredentials, Report, Step
 from web_app.sentinel.target_policy import TargetValidationError, ValidatedTarget, validate_public_web_url
 from web_app.users import User
 
@@ -293,7 +293,7 @@ def test_time_limit_input_is_minutes_capped_at_ten():
 def test_report_loads_legacy_json_and_excludes_private_fields():
     """A report.json written before the typed schema (with an unknown key) must
     still load; the unknown key is dropped (not re-persisted), and runtime-only
-    secrets must never appear in the dump."""
+    private attrs must never appear in the dump."""
     legacy = {
         "run_id": "f" * 32,
         "status": "completed",
@@ -305,11 +305,10 @@ def test_report_loads_legacy_json_and_excludes_private_fields():
     assert report.status == "completed"
     assert report.steps[0].action == "click"
 
-    report._card_details = {"card_number": "4242"}
-    report._account_credentials = None
+    report._peek_pending = True
     dumped = report.model_dump_json()
-    assert "_card_details" not in dumped
-    assert "4242" not in dumped
+    # Runtime-only private attr stays out of the serialized report.
+    assert "_peek_pending" not in dumped
     # Unknown legacy key is not silently re-persisted.
     assert "obsolete_legacy_key" not in dumped
 
@@ -482,9 +481,9 @@ def test_sentinel_routes_require_admin_and_start_run_for_admin(client):
     assert mock_start.call_args.kwargs["owner"] == "admin"
 
 
-def test_sentinel_card_details_validate_and_never_persist(client, tmp_path):
-    """allow_financial round-trips card details into start_run, validates them,
-    keeps them in memory only, and never writes them to disk."""
+def test_sentinel_card_details_validate_and_forward(client, tmp_path):
+    """allow_financial round-trips card details into start_run and validates
+    them (start_run persists them on the run report)."""
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
 
     captured = {}
@@ -536,28 +535,53 @@ def test_sentinel_card_details_validate_and_never_persist(client, tmp_path):
     }
 
 
-def test_save_strips_underscore_keys_before_disk_write():
-    """Runtime-only fields (like _card_details) must not reach the persisted report."""
+def test_save_excludes_runtime_private_attrs():
+    """Runtime-only private attrs (_peek_pending) stay out of the serialized report."""
     from web_app.sentinel import runner
 
     captured = {}
 
     class FakeData:
         def save_report(self, report):
-            # Serialize like the real save_report would, to confirm secrets are
-            # excluded from what reaches disk.
             captured["json"] = report.model_dump_json()
-            captured["report"] = report
 
     report = _mk_report(run_id="r1", status="running")
-    report._card_details = {"card_number": "4242", "expiry": "12/30", "cvv": "123"}
+    report._peek_pending = True
 
     with patch.object(runner, "DataInterface", return_value=FakeData()):
         runner._save(report)
 
-    assert "_card_details" not in captured["json"]
-    assert "4242" not in captured["json"]
-    assert captured["report"].run_id == "r1"
+    assert "_peek_pending" not in captured["json"]
+
+
+def test_save_report_persists_credentials_only_when_remember_flag_set(tmp_path):
+    """save_report writes creds/card to disk only when the matching remember_*
+    flag is on; otherwise the on-disk report omits them (in-memory keeps them)."""
+    from web_app.sentinel.data_interface import DataInterface as SentinelData
+    from web_app.sentinel.models import AccountCredentials, CardDetails
+
+    data = SentinelData()
+    data.sentinel_dir = tmp_path / "sentinel"
+    data.runs_dir = data.sentinel_dir / "runs"
+
+    # remember_account on, remember_card off (default).
+    report = _mk_report(
+        run_id="a" * 32, status="completed",
+        account_credentials=AccountCredentials(username="qatester", password="hunter2"),
+        card_details=CardDetails(card_number="4242424242424242", expiry="12/30", cvv="123"),
+        remember_account=True,
+    )
+    data.save_report(report)
+    on_disk = data.report_path("a" * 32).read_text()
+
+    assert "qatester" in on_disk          # account remembered -> persisted
+    assert "hunter2" in on_disk
+    assert "4242424242424242" not in on_disk  # card not remembered -> omitted
+
+    # Reload: account comes back, card is gone.
+    loaded = data.load_report("a" * 32)
+    assert loaded.account_credentials.username == "qatester"
+    assert loaded.card_details is None
 
 
 def test_sentinel_account_credentials_round_trip_and_invalid_field_name(client):
@@ -680,26 +704,29 @@ def test_sentinel_rejects_account_prompt_when_accounts_disallowed(client):
     mock_start.assert_not_called()
 
 
-def test_sentinel_run_prefills_form_from_clone_query_params(client):
+def test_sentinel_run_rerun_prefills_form_from_persisted_run(client):
+    """Rerun (?from=<run_id>) loads the run server-side and packs its fields —
+    including persisted credentials — into the prefill blob run_form.js applies."""
     admin = User(username="admin", password="pass", folder="af", is_admin=True)
+    rerun = _mk_report(
+        run_id="a" * 32, target_url="https://example.com", prompt="Test checkout",
+        limit_s=300, device="small_phone", demographic="senior",
+        allow_accounts=True,
+        account_credentials=AccountCredentials(username="qatester", password="hunter2"),
+    )
 
     with patch("web_app.helpers.DataInterface") as mock_users, patch(
         "web_app.sentinel.DataInterface"
-    ) as mock_sentinel_data:
+    ) as mock_sentinel_data, patch("web_app.sentinel.get_run", return_value=rerun):
         mock_users.return_value.load_users.return_value = {"admin": admin}
         mock_sentinel_data.return_value.list_reports.return_value = []
         with client.session_transaction() as sess:
             sess["_user_id"] = "admin"
 
-        res = client.get(
-            "/sentinel/run?url=https://example.com&prompt=Test+checkout&limit=5"
-            "&device=small_phone&demographic=senior"
-        )
+        res = client.get(f"/sentinel/run?from={'a' * 32}")
 
     assert res.status_code == 200
     body = res.get_data(as_text=True)
-    # The single-run form now prefills client-side from a JSON blob (same shape
-    # as a batch item), applied by run_form.js.
     import json as _json
     import re as _re
     m = _re.search(r'id="sentinel-run-prefill">(.*?)</script>', body, _re.DOTALL)
@@ -710,6 +737,8 @@ def test_sentinel_run_prefills_form_from_clone_query_params(client):
     assert prefill["limit"] == 5
     assert prefill["device"] == "small_phone"
     assert prefill["demographic"] == "senior"
+    # Credentials are reconstructed from the persisted run.
+    assert prefill["account_credentials"]["username"] == "qatester"
 
 
 def test_sentinel_run_defaults_to_desktop_adult_australia(client):
@@ -1285,30 +1314,13 @@ def test_create_batch_queues_runs_inline_without_persisting_a_batch(client, tmp_
     assert not (tmp_path / "sentinel" / "batches").exists()
 
 
-def test_credential_cache_round_trips_but_is_excluded_from_backup(tmp_path):
-    """The opt-in plaintext credential cache persists for prefill, but must never
-    be copied into a backup (backups sync to S3)."""
+def test_sentinel_backup_copies_run_data(tmp_path):
+    """backup_data copies run reports + screenshots into the namespaced subdir."""
     from web_app.sentinel.data_interface import DataInterface as SentinelData
-    from web_app.sentinel.models import AccountCredentials, CardDetails, CredentialCache
 
     data = SentinelData()
     data.sentinel_dir = tmp_path / "sentinel"
     data.runs_dir = data.sentinel_dir / "runs"
-    data.credential_cache_file = data.sentinel_dir / "credential_cache.json"
-    data.sentinel_dir.mkdir(parents=True, exist_ok=True)
-
-    assert data.load_credential_cache() == CredentialCache()  # empty default
-
-    data.save_credential_cache(CredentialCache(
-        account=AccountCredentials(username="qatester", password="hunter2"),
-        card=CardDetails(card_number="4242424242424242", card_expiry="12/30", card_cvv="123"),
-    ))
-    loaded = data.load_credential_cache()
-    assert loaded.account.username == "qatester"
-    assert loaded.card.card_number == "4242424242424242"
-    assert data.credential_cache_file.exists()
-
-    # A real run on disk alongside the cache.
     run_dir = data.runs_dir / ("a" * 32)
     (run_dir / "screenshots").mkdir(parents=True)
     (run_dir / "report.json").write_text('{"run_id": "%s"}' % ("a" * 32))
@@ -1317,12 +1329,8 @@ def test_credential_cache_round_trips_but_is_excluded_from_backup(tmp_path):
     backup = tmp_path / "backup"
     backup.mkdir()
     data.backup_data(backup)
-    # Run data IS backed up (a no-op backup would wrongly pass the exclusion
-    # check below, so assert inclusion too)...
     assert (backup / "sentinel" / "runs" / ("a" * 32) / "report.json").exists()
     assert (backup / "sentinel" / "runs" / ("a" * 32) / "screenshots" / "step-00.png").exists()
-    # ...but the plaintext credential cache is NOT.
-    assert not (backup / "sentinel" / "credential_cache.json").exists()
 
 
 def test_sentinel_backup_is_noop_when_no_data_dir(tmp_path):
@@ -1332,7 +1340,6 @@ def test_sentinel_backup_is_noop_when_no_data_dir(tmp_path):
     data = SentinelData()
     data.sentinel_dir = tmp_path / "sentinel"  # does not exist
     data.runs_dir = data.sentinel_dir / "runs"
-    data.credential_cache_file = data.sentinel_dir / "credential_cache.json"
 
     backup = tmp_path / "backup"
     backup.mkdir()
@@ -1340,38 +1347,32 @@ def test_sentinel_backup_is_noop_when_no_data_dir(tmp_path):
     assert not (backup / "sentinel").exists()
 
 
-def test_create_batch_caches_credentials_only_when_opted_in(client, tmp_path):
-    """cache_account/cache_card flags persist the entered values server-side;
-    without them, nothing is cached. The GET endpoint then returns them."""
-    from web_app.sentinel.data_interface import DataInterface as SentinelData
+def test_create_run_persists_credentials_on_the_report(client, tmp_path):
+    """allow_accounts + credentials are forwarded to start_run, which persists
+    them on the run report (plaintext) so Rerun can reuse them."""
+    captured = {}
 
-    def make_data():
-        d = SentinelData()
-        d.sentinel_dir = tmp_path / "sentinel"
-        d.runs_dir = d.sentinel_dir / "runs"
-        d.credential_cache_file = d.sentinel_dir / "credential_cache.json"
-        return d
+    def fake_start_run(target, prompt, limit_s, **kwargs):
+        captured.update(kwargs)
+        return {"run_id": "a" * 32, "status": "queued"}
 
     with patch("web_app.helpers.DataInterface") as mock_users:
         _login_admin(client, mock_users)
-        with patch("web_app.sentinel.DataInterface", side_effect=make_data), patch(
-            "web_app.sentinel.validate_public_web_url"
-        ) as mock_validate, patch("web_app.sentinel.start_run",
-                                  return_value={"run_id": "a" * 32, "status": "queued"}):
+        with patch("web_app.sentinel.validate_public_web_url") as mock_validate, patch(
+            "web_app.sentinel.start_run", side_effect=fake_start_run
+        ):
             mock_validate.return_value = ValidatedTarget("https://example.com/", "example.com")
             res = client.post(
-                "/sentinel/api/batches",
-                json={"name": "Cached", "items": [{
+                "/sentinel/api/runs",
+                json={
                     "url": "https://example.com", "prompt": "log in",
-                    "allow_accounts": True, "cache_account": True,
+                    "allow_accounts": True,
                     "account_credentials": {"username": "qatester", "password": "hunter2", "extras": {}},
-                }]},
+                },
             )
-            assert res.status_code == 202
-            cached = client.get("/sentinel/api/credential-cache").get_json()
 
-    assert cached["account"]["username"] == "qatester"
-    assert cached["card"] is None  # card was not opted in
+    assert res.status_code == 202
+    assert captured["account_credentials"] == {"username": "qatester", "password": "hunter2", "extras": {}}
 
 
 def test_batch_status_groups_runs_by_batch_id(client):

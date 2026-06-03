@@ -80,19 +80,10 @@ class AccountCredentials(BaseModel):
 
 
 class CardDetails(BaseModel):
+    # Validated/agent shape (see _validate_card_details): expiry is "MM/YY".
     card_number: str = ""
-    card_expiry: str = ""
-    card_cvv: str = ""
-
-
-class CredentialCache(BaseModel):
-    """Opt-in plaintext cache of the last-entered test credentials and card
-    details, persisted on the server for rapid re-testing convenience only.
-    Excluded from backups. Either half is None until the user opts to cache it.
-    """
-
-    account: Optional[AccountCredentials] = None
-    card: Optional[CardDetails] = None
+    expiry: str = ""
+    cvv: str = ""
 
 
 class Report(BaseModel):
@@ -133,8 +124,15 @@ class Report(BaseModel):
     error: Optional[str] = None
     verdict_reason: Optional[str] = None
 
+    # Test credentials/card the agent may use during the run. They are only
+    # written to disk (plaintext, for Rerun reuse) when the matching remember_*
+    # flag is set — otherwise save_report drops them from the on-disk dump while
+    # the in-memory Report still carries them for the run. See save_report.
+    account_credentials: Optional[AccountCredentials] = None
+    card_details: Optional[CardDetails] = None
+    remember_account: bool = False
+    remember_card: bool = False
+
     # Runtime-only state, never persisted (PrivateAttr is excluded from
     # model_dump / model_dump_json automatically).
-    _card_details: Optional[dict] = PrivateAttr(default=None)
-    _account_credentials: Optional[AccountCredentials] = PrivateAttr(default=None)
     _peek_pending: bool = PrivateAttr(default=False)

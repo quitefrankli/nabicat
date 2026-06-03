@@ -11,7 +11,7 @@ from markupsafe import Markup
 
 from web_app.config import ConfigManager
 from web_app.sentinel.data_interface import DataInterface
-from web_app.sentinel.models import AccountCredentials, CardDetails, CredentialCache, Report
+from web_app.sentinel.models import Report
 from web_app.sentinel.runner import (
     delete_run,
     ensure_screenshot_thumbnail,
@@ -312,9 +312,9 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
 
     Raises ValueError (or its subclass TargetValidationError) on any invalid
     input. When ``with_credentials`` is False, credential/card fields are
-    ignored entirely — used to structurally validate saved batch items, which
-    never carry secrets. When True, account/card details are validated and
-    forwarded (used at launch time; never persisted).
+    ignored entirely — used to structurally validate saved batch items. When
+    True, account/card details are validated and forwarded; they reach the run
+    in memory and are only written to disk if the matching remember_* flag is on.
     """
     cfg = ConfigManager()
     raw_url = str(payload.get("url", "")).strip()
@@ -323,6 +323,8 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
     allow_accounts = _truthy(payload.get("allow_accounts"))
     allow_external = _truthy(payload.get("allow_external"))
     allow_financial = _truthy(payload.get("allow_financial"))
+    remember_account = _truthy(payload.get("remember_account"))
+    remember_card = _truthy(payload.get("remember_card"))
     device = str(payload.get("device", "")).strip()
     demographic = str(payload.get("demographic", "")).strip()
     limit_s = _limit_from_request(payload.get("limit"))
@@ -357,6 +359,8 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
         allow_financial=allow_financial,
         card_details=card_details,
         account_credentials=account_credentials,
+        remember_account=remember_account,
+        remember_card=remember_card,
         device=device,
         demographic=demographic,
     )
@@ -364,46 +368,46 @@ def _validate_run_params(payload, *, with_credentials: bool) -> dict:
 
 def _run_form_context() -> dict:
     """Context for the single-run form. Field markup/options come from the
-    shared run_fields() macro via `form_options`; any Rerun query args are
-    packed into a single `prefill_item` blob with the same shape as a batch
-    item, which run_form.js applies client-side (mirrors the batch builder)."""
+    shared run_fields() macro via `form_options`. A Rerun (?from=<run_id>) loads
+    that run server-side and packs its fields — including the persisted test
+    credentials/card — into a `prefill_item` blob that run_form.js applies."""
     cfg = ConfigManager()
-    if not request.args:
-        prefill_item = None
-    else:
-        try:
-            limit = int(request.args.get("limit", cfg.sentinel.default_limit_mins))
-        except (TypeError, ValueError):
-            limit = cfg.sentinel.default_limit_mins
-        limit = max(cfg.sentinel.min_limit_mins, min(limit, cfg.sentinel.max_limit_mins))
-
-        raw_device = str(request.args.get("device", "")).strip()
-        device = raw_device if raw_device in cfg.sentinel.device_profiles else cfg.sentinel.default_device
-        raw_demographic = request.args.get("demographic")
-        demographic = str(raw_demographic).strip() if raw_demographic is not None else ""
-        if demographic not in cfg.sentinel.demographic_personas:
-            demographic = cfg.sentinel.default_demographic
-        raw_region = str(request.args.get("region", "")).strip()
-        region = raw_region if raw_region in cfg.sentinel.region_labels else cfg.sentinel.default_region
-
-        prefill_item = {
-            "url": str(request.args.get("url", "")).strip(),
-            "prompt": str(request.args.get("prompt", ""))[: cfg.sentinel.prompt_max_chars],
-            "title": str(request.args.get("title", "")).strip()[: cfg.sentinel.title_max_chars],
-            "limit": limit,
-            "allow_accounts": _truthy(request.args.get("allow_accounts")),
-            "allow_external": _truthy(request.args.get("allow_external")),
-            "additional_domains": str(request.args.get("additional_domains", "")).strip(),
-            "device": device,
-            "demographic": demographic,
-            "region": region,
-        }
-
+    from_run = str(request.args.get("from", "")).strip()
+    prefill_item = _run_prefill(from_run) if from_run else None
     return dict(
         runs=DataInterface().list_reports()[: cfg.sentinel.max_retained_runs],
         prefill_item=prefill_item,
         form_options=_run_form_options(),
     )
+
+
+def _run_prefill(run_id: str) -> dict | None:
+    """Reconstruct single-run form state from an existing run, for Rerun.
+    Credentials are read from the persisted report (no longer passed via URL)."""
+    report = get_run(run_id)
+    if report is None:
+        return None
+    item = {
+        "url": report.target_url,
+        "prompt": report.prompt,
+        "title": report.title,
+        "limit": (report.limit_s or 0) // 60 or None,
+        "allow_accounts": bool(report.allow_accounts),
+        "allow_external": bool(report.allow_external),
+        "allow_financial": bool(report.allow_financial),
+        "additional_domains": "\n".join(report.additional_domains or []),
+        "device": report.device,
+        "demographic": report.demographic,
+    }
+    if report.account_credentials:
+        item["account_credentials"] = report.account_credentials.model_dump()
+        item["remember_account"] = bool(report.remember_account)
+    if report.card_details:
+        item["card_number"] = report.card_details.card_number
+        item["card_expiry"] = report.card_details.expiry
+        item["card_cvv"] = report.card_details.cvv
+        item["remember_card"] = bool(report.remember_card)
+    return item
 
 
 @sentinel_api.route("/")
@@ -436,10 +440,6 @@ def create_run():
         kwargs = _validate_run_params(payload, with_credentials=True)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    # Persist creds/card to the server cache when the user opted in (same path
-    # the batch builder uses), so the single-run form prefills next time.
-    if isinstance(payload, dict):
-        _persist_credential_cache([payload])
     return (
         jsonify(start_run(
             kwargs.pop("target"),
@@ -545,46 +545,6 @@ def _parse_batch_payload(payload) -> tuple[str, list[dict]]:
     return name, items
 
 
-def _persist_credential_cache(raw_items: list) -> None:
-    """Save the last item that opted into caching, per credential type, to the
-    server-side cache. This is a plaintext convenience store for rapid
-    re-testing — never used to drive runs (runs always use inline payload
-    values). Caching only triggers when both the relevant permit-flag and the
-    nested cache-flag are on; turning the cache-flag off clears that half."""
-    if not isinstance(raw_items, list):
-        return
-    cache = DataInterface().load_credential_cache()
-    changed = False
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            continue
-        if _truthy(raw.get("allow_accounts")) and _truthy(raw.get("cache_account")):
-            creds = raw.get("account_credentials") or {}
-            cache.account = AccountCredentials(
-                username=str(creds.get("username", "")),
-                password=str(creds.get("password", "")),
-                extras={str(k): str(v) for k, v in (creds.get("extras") or {}).items()},
-            )
-            changed = True
-        if _truthy(raw.get("allow_financial")) and _truthy(raw.get("cache_card")):
-            cache.card = CardDetails(
-                card_number=str(raw.get("card_number", "")),
-                card_expiry=str(raw.get("card_expiry", "")),
-                card_cvv=str(raw.get("card_cvv", "")),
-            )
-            changed = True
-    if changed:
-        DataInterface().save_credential_cache(cache)
-
-
-@sentinel_api.route("/api/credential-cache")
-def credential_cache():
-    """Return the server-cached test credentials/card for prefill. Admin-only
-    (gated by the blueprint's before_request)."""
-    cache = DataInterface().load_credential_cache()
-    return jsonify(cache.model_dump())
-
-
 def _batch_child_runs_by_id(batch_id: str) -> list[dict]:
     """All runs sharing this batch_id, as slim status dicts (newest-first)."""
     children = []
@@ -614,15 +574,15 @@ def _batch_summary(batch_id: str) -> dict | None:
 def _batch_prefill(batch_id: str) -> dict | None:
     """Reconstruct builder form state (name + per-run items) from an existing
     batch's runs, so a "Rerun" reopens the builder ready to queue again. Returns
-    None if no runs share this batch_id. Credentials are NOT reconstructed (never
-    stored) — they're re-entered if needed."""
+    None if no runs share this batch_id. Persisted credentials are reconstructed
+    too so the rerun is ready without re-entry."""
     summary = _batch_summary(batch_id)
     if summary is None:
         return None
     # list_reports is newest-first; reverse so items keep the original order.
     items = []
     for run in reversed(summary["items"]):
-        items.append({
+        item = {
             "label": "",
             "url": run.target_url,
             "title": run.title,
@@ -634,7 +594,16 @@ def _batch_prefill(batch_id: str) -> dict | None:
             "allow_external": bool(run.allow_external),
             "allow_financial": bool(run.allow_financial),
             "additional_domains": "\n".join(run.additional_domains or []),
-        })
+        }
+        if run.account_credentials:
+            item["account_credentials"] = run.account_credentials.model_dump()
+            item["remember_account"] = bool(run.remember_account)
+        if run.card_details:
+            item["card_number"] = run.card_details.card_number
+            item["card_expiry"] = run.card_details.expiry
+            item["card_cvv"] = run.card_details.cvv
+            item["remember_card"] = bool(run.remember_card)
+        items.append(item)
     return {"name": summary["name"], "items": items}
 
 
@@ -658,7 +627,8 @@ def create_batch():
     """Validate the items and queue them all immediately as runs sharing a new
     batch_id. There is no saved batch entity — the group is re-derived from the
     runs themselves. Credentials travel inline on each item and are forwarded to
-    start_run (held in memory only), never written to disk."""
+    start_run; they're written to a run's report only when its remember_* flag
+    is set."""
     payload = request.get_json(silent=True) or request.form
     try:
         name, items = _parse_batch_payload(payload)
@@ -666,7 +636,6 @@ def create_batch():
         return jsonify({"error": str(e)}), 400
 
     raw_items = payload.get("items") or []
-    _persist_credential_cache(raw_items)
     batch_id = uuid.uuid4().hex
     owner = str(getattr(current_user, "id", "") or "")
     run_ids = []
@@ -676,7 +645,8 @@ def create_batch():
         # Inline per-item credentials live on the raw payload item, not the
         # normalized one (_sanitize_batch_item drops them).
         raw = raw_items[idx] if idx < len(raw_items) and isinstance(raw_items[idx], dict) else {}
-        for key in ("account_credentials", "card_number", "card_expiry", "card_cvv"):
+        for key in ("account_credentials", "card_number", "card_expiry", "card_cvv",
+                    "remember_account", "remember_card"):
             if key in raw:
                 merged[key] = raw[key]
         try:

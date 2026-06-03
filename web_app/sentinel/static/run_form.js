@@ -71,8 +71,8 @@ function populateItem(item, data) {
   if (data.allow_accounts !== undefined) check('allow_accounts', data.allow_accounts);
   if (data.allow_external !== undefined) check('allow_external', data.allow_external);
   if (data.allow_financial !== undefined) check('allow_financial', data.allow_financial);
-  if (data.cache_account !== undefined) check('cache_account', data.cache_account);
-  if (data.cache_card !== undefined) check('cache_card', data.cache_card);
+  if (data.remember_account !== undefined) check('remember_account', data.remember_account);
+  if (data.remember_card !== undefined) check('remember_card', data.remember_card);
   if (data.account_credentials) {
     set('account_username', data.account_credentials.username || '');
     set('account_password', data.account_credentials.password || '');
@@ -102,13 +102,12 @@ function serializeItem(item) {
     allow_accounts: get('allow_accounts')?.checked || false,
     allow_external: get('allow_external')?.checked || false,
     allow_financial: get('allow_financial')?.checked || false,
-    cache_account: get('cache_account')?.checked || false,
-    cache_card: get('cache_card')?.checked || false,
     additional_domains: get('additional_domains')?.value || ''
   };
-  // Inline credentials — forwarded to start_run in memory only. They are only
-  // persisted server-side when the matching cache_* flag is also set.
+  // Credentials are sent only when their permit is on; they reach the run in
+  // memory and are written to disk only if the matching remember flag is set.
   if (data.allow_accounts) {
+    data.remember_account = get('remember_account')?.checked || false;
     const username = (get('account_username')?.value || '').trim();
     const password = get('account_password')?.value || '';
     const extras = {};
@@ -122,6 +121,7 @@ function serializeItem(item) {
     }
   }
   if (data.allow_financial) {
+    data.remember_card = get('remember_card')?.checked || false;
     const cardNumber = (get('card_number')?.value || '').trim();
     if (cardNumber || (get('card_expiry')?.value || '').trim() || (get('card_cvv')?.value || '').trim()) {
       data.card_number = cardNumber;
@@ -130,44 +130,6 @@ function serializeItem(item) {
     }
   }
   return data;
-}
-
-// Server-cached test credentials/card, fetched at most once per page.
-let cachePromise = null;
-function fetchCredentialCache() {
-  if (!cachePromise) {
-    cachePromise = fetch('/sentinel/api/credential-cache')
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-  }
-  return cachePromise;
-}
-
-// Apply server-cached credentials/card to an item, ticking the permit + cache
-// flags so the fields reveal and stay remembered on the next submit. When
-// `onlyIfEmpty` is set (the Rerun path), only fill blanks — credentials are
-// never stored per-run, so on Rerun the permit boxes come back ticked but empty
-// and this refills them without clobbering other prefilled data.
-async function applyCredentialCache(item, onlyIfEmpty = false) {
-  const cache = await fetchCredentialCache();
-  if (!cache) return;
-  const isBlank = (name) => !(item.querySelector(`[name="${name}"]`)?.value || '').trim();
-  if (cache.account && (!onlyIfEmpty || (isBlank('account_username') && isBlank('account_password')))) {
-    populateItem(item, {
-      allow_accounts: true,
-      cache_account: true,
-      account_credentials: cache.account
-    });
-  }
-  if (cache.card && (!onlyIfEmpty || isBlank('card_number'))) {
-    populateItem(item, {
-      allow_financial: true,
-      cache_card: true,
-      card_number: cache.card.card_number,
-      card_expiry: cache.card.card_expiry,
-      card_cvv: cache.card.card_cvv
-    });
-  }
 }
 
 function readPrefill(id) {
@@ -187,14 +149,12 @@ function initSingleRun() {
 
   wireItem(item);
 
-  // Rerun prefill (from the report page) arrives as a single item blob; else
-  // hydrate from the server credential cache for a fresh form.
+  // Rerun prefill (from the report page) arrives as a single item blob built
+  // server-side from the run, including its persisted credentials. A fresh form
+  // (no prefill) is left untouched.
   const prefill = readPrefill('sentinel-run-prefill');
   if (prefill) {
     populateItem(item, prefill);
-    applyCredentialCache(item, true);
-  } else {
-    applyCredentialCache(item);
   }
 
   form.addEventListener('submit', async (event) => {
@@ -273,22 +233,17 @@ function initBatchBuilder() {
 
   addButton.addEventListener('click', addItem);
 
-  // Prefill from an existing batch ("Rerun"), else start with one empty item
-  // and hydrate it from the server-side credential cache (if any).
+  // Prefill from an existing batch ("Rerun") — items (incl. persisted creds)
+  // are reconstructed server-side — else start with one empty item.
   const prefill = readPrefill('sentinel-batch-prefill');
   if (prefill && Array.isArray(prefill.items) && prefill.items.length) {
     if (prefill.name) form.name.value = prefill.name;
     prefill.items.slice(0, maxItems).forEach((data) => {
       const node = addItem();
-      if (node) {
-        populateItem(node, data);
-        // Rerun restores permit flags but not the (never-stored) creds.
-        applyCredentialCache(node, true);
-      }
+      if (node) populateItem(node, data);
     });
   } else {
-    const node = addItem();
-    if (node) applyCredentialCache(node);
+    addItem();
   }
 
   form.addEventListener('submit', async (event) => {

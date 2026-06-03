@@ -78,7 +78,7 @@
         <span>Cancel</span>
       </button>
       <a class="btn btn-primary"
-         href="{{ url_for('sentinel.new_run', url=report.target_url, prompt=report.prompt or '', limit=((report.limit_s or 60) // 60), title=report.title or '', allow_accounts=('1' if report.allow_accounts else ''), allow_external=('1' if report.allow_external else ''), additional_domains=(report.additional_domains or [])|join('\n'), device=report.device or '', demographic=report.demographic or '') }}">
+         href="{{ url_for('sentinel.new_run', **{'from': report.run_id}) }}">
         <i class="bi bi-arrow-clockwise"></i>
         <span>Rerun</span>
       </a>

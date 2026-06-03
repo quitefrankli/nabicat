@@ -440,8 +440,8 @@ body.sentinel-resizing * {
   gap: 0.4rem;
 }
 
-/* Opt-in "remember on server" toggle: deliberately loud so the plaintext
-   on-disk tradeoff can't be missed. */
+/* Opt-in "remember on disk" toggle inside the cred blocks: deliberately loud
+   so the plaintext on-disk tradeoff can't be missed. */
 .sentinel-cache-toggle {
   margin-top: 0.25rem;
   padding: 0.6rem 0.75rem;
@@ -456,13 +456,13 @@ body.sentinel-resizing * {
   color: var(--hw-text-primary);
 }
 
-.sentinel-cache-warning {
+.sentinel-cred-warning {
   margin-top: 0.25rem;
   font-weight: 400;
   color: var(--hw-coral);
 }
 
-.sentinel-cache-warning .bi {
+.sentinel-cred-warning .bi {
   margin-right: 0.25rem;
 }
 

@@ -25,7 +25,7 @@
     <input class="form-check-input sentinel-rf-allow-accounts" type="checkbox" name="allow_accounts" value="1">
     <label class="form-check-label">
       Permit account creation, login, and deletion
-      <small class="text-muted d-block">Off by default. Optionally provide a synthetic username + password (and any extra fields the site asks for) for the agent to use. Credentials are held in memory only for the duration of the run and are never written to disk. Leave fields blank to let the agent invent its own.</small>
+      <small class="text-muted d-block">Off by default. Optionally provide a synthetic username + password (and any extra fields the site asks for) for the agent to use. Leave fields blank to let the agent invent its own.</small>
     </label>
   </div>
   <div class="sentinel-rf-account-fields sentinel-card-fields" hidden>
@@ -49,14 +49,13 @@
       </button>
     </div>
     <div class="form-check sentinel-cache-toggle">
-      <input class="form-check-input sentinel-rf-cache-account" type="checkbox" name="cache_account" value="1">
+      <input class="form-check-input sentinel-rf-remember-account" type="checkbox" name="remember_account" value="1">
       <label class="form-check-label">
-        Remember these credentials on the server
-        <small class="sentinel-cache-warning d-block">
+        Remember these credentials for Rerun
+        <small class="sentinel-cred-warning d-block">
           <i class="bi bi-exclamation-triangle-fill"></i>
-          Debugging convenience only. These credentials will be written to the
-          server <strong>in plaintext</strong> so they prefill next time. Do not
-          use real or sensitive accounts.
+          Opt-in. Stores these credentials <strong>in plaintext</strong> on disk
+          with the run so they prefill on Rerun. Use synthetic test accounts only.
         </small>
       </label>
     </div>
@@ -79,7 +78,7 @@
     <input class="form-check-input sentinel-rf-allow-financial" type="checkbox" name="allow_financial" value="1">
     <label class="form-check-label">
       Permit financial transactions
-      <small class="text-muted d-block">Off by default. When on, the agent may complete payment forms with the card details below. Card details are held in memory only for the duration of the run and are never written to disk.</small>
+      <small class="text-muted d-block">Off by default. When on, the agent may complete payment forms with the card details below.</small>
     </label>
   </div>
   <div class="sentinel-rf-card-fields sentinel-card-fields" hidden>
@@ -98,14 +97,13 @@
       </div>
     </div>
     <div class="form-check sentinel-cache-toggle">
-      <input class="form-check-input sentinel-rf-cache-card" type="checkbox" name="cache_card" value="1">
+      <input class="form-check-input sentinel-rf-remember-card" type="checkbox" name="remember_card" value="1">
       <label class="form-check-label">
-        Remember this card on the server
-        <small class="sentinel-cache-warning d-block">
+        Remember this card for Rerun
+        <small class="sentinel-cred-warning d-block">
           <i class="bi bi-exclamation-triangle-fill"></i>
-          Debugging convenience only. These card details will be written to the
-          server <strong>in plaintext</strong> so they prefill next time. Use a
-          test card only — never a real one.
+          Opt-in. Stores this card <strong>in plaintext</strong> on disk with the
+          run so it prefills on Rerun. Use a test card only — never a real one.
         </small>
       </label>
     </div>

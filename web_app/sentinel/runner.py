@@ -15,6 +15,7 @@ from web_app.sentinel.data_interface import DataInterface, utc_now_iso
 from web_app.sentinel.models import (
     AccountCredentials,
     ActionResult,
+    CardDetails,
     Finding,
     Report,
     RunStatus,
@@ -90,11 +91,9 @@ _ACTIVE_STATUSES = {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.SUMMARIZING}
 
 
 def _save(report: Report) -> None:
-    # Private attrs (_card_details, _account_credentials, _peek_pending) are
-    # excluded from serialization automatically, so save_report never persists
-    # secrets. The cache snapshot is a deep copy: the run loop keeps mutating
-    # `report` (appending steps/findings) after this returns, and a shallow copy
-    # would alias those lists into the cached entry, so a concurrent reader via
+    # The cache snapshot is a deep copy: the run loop keeps mutating `report`
+    # (appending steps/findings) after this returns, and a shallow copy would
+    # alias those lists into the cached entry, so a concurrent reader via
     # get_run() could observe half-written state.
     DataInterface().save_report(report)
     with _active_lock:
@@ -138,6 +137,8 @@ def start_run(
     allow_financial: bool = False,
     card_details: dict | None = None,
     account_credentials: dict | None = None,
+    remember_account: bool = False,
+    remember_card: bool = False,
     device: str = "",
     demographic: str = "",
     owner: str = "",
@@ -171,11 +172,17 @@ def start_run(
         limit_s=limit_s,
         created_at=now,
         updated_at=now,
+        remember_account=bool(remember_account),
+        remember_card=bool(remember_card),
     )
     if allow_financial and card_details:
-        report._card_details = dict(card_details)
+        report.card_details = CardDetails(
+            card_number=card_details.get("card_number", ""),
+            expiry=card_details.get("expiry", ""),
+            cvv=card_details.get("cvv", ""),
+        )
     if allow_accounts and account_credentials:
-        report._account_credentials = AccountCredentials(
+        report.account_credentials = AccountCredentials(
             username=account_credentials.get("username", ""),
             password=account_credentials.get("password", ""),
             extras=dict(account_credentials.get("extras") or {}),
@@ -223,8 +230,6 @@ def _run_background(report: Report) -> None:
         report.error = str(e)
     finally:
         report.finished_at = utc_now_iso()
-        report._card_details = None
-        report._account_credentials = None
         _save(report)
         with _active_lock:
             _cancel_events.pop(report.run_id, None)
@@ -1097,9 +1102,9 @@ def _request_agent_action(report, observation, image_paths, allow_external, know
             allow_accounts=bool(report.allow_accounts),
             demographic=str(report.demographic or ""),
             allow_external=allow_external or bool(report.additional_domains),
-            card_details=report._card_details,
+            card_details=(report.card_details.model_dump() if report.card_details else None),
             account_credentials=(
-                report._account_credentials.model_dump() if report._account_credentials else None
+                report.account_credentials.model_dump() if report.account_credentials else None
             ),
         )
         try:
