@@ -98,6 +98,15 @@ class DataInterface:
         self.generate_metadata_file(backup_dir)
         shutil.copy2(self.users_file, backup_dir / "users.json")
 
+    def _backup_subtree(self, src_dir: Path, backup_dir: Path, name: str) -> None:
+        """Copy a subapp's data subtree into the backup, no-op if it doesn't exist.
+
+        Uses ``dirs_exist_ok=True`` so a re-run into an existing backup dir
+        merges rather than raising.
+        """
+        if src_dir.exists():
+            shutil.copytree(src_dir, backup_dir / name, dirs_exist_ok=True)
+
     def load_users(self) -> Dict[str, User]:
         self.data_syncer.download_file(self.users_file)
 

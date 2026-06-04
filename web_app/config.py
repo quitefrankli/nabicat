@@ -80,6 +80,9 @@ class TubioConfig:
     max_search_pages: int = 3
     max_video_length: timedelta = timedelta(minutes=10)
     test_video_id: str = "dQw4w9WgXcQ"
+    upload_allowed_extensions: tuple = ("mp3", "mp4", "m4a")
+    download_progress_poll_interval_s: float = 0.3
+    default_playlist_name: str = "Favourites"
     trackbar_volume_min_percent: int = 0
     trackbar_volume_max_percent: int = 100
     trackbar_volume_step_percent: int = 1
@@ -328,6 +331,15 @@ class FileStoreConfig:
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
 
 
+@dataclass
+class ProxyConfig:
+    request_timeout_s: int = 10
+    user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+
+
 class ConfigManager:
     _instance = None  # Class-level variable to store the single instance
 
@@ -374,6 +386,9 @@ class ConfigManager:
         self.dev_access_denied_api_prefixes = ("/dev/logs", "/dev/map-data", "/dev/terminal/")
         self.smtp_port = 587
         self.project_dir = Path.cwd()
+        # TTL for the ephemeral RSA keypair minted during the encrypted-request
+        # handshake. Surfaced to clients as `expires_in` in /api/handshake.
+        self.ephemeral_key_ttl_s = 300
 
         self.llm = LLMConfig()
         self.tubio = TubioConfig(lambda: self.save_data_path)
@@ -384,6 +399,7 @@ class ConfigManager:
         self.sentinel = SentinelConfig()
         self.hammock = HammockConfig()
         self.file_store = FileStoreConfig()
+        self.proxy = ProxyConfig()
 
     @property
     def project_name(self) -> str:

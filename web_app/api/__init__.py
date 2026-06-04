@@ -254,6 +254,6 @@ def api_handshake():
         "success": True,
         "session_id": session_id,
         "public_key": public_key,
-        "expires_in": 300,
+        "expires_in": ConfigManager().ephemeral_key_ttl_s,
         "algorithm": "RSA-2048-OAEP-SHA256/AES-256-GCM"
     }), 200

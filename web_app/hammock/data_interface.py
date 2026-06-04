@@ -733,5 +733,4 @@ class DataInterface(BaseDataInterface):
         self._write_meta_store(store)
 
     def backup_data(self, backup_dir: Path) -> None:
-        if self._content_dir.exists():
-            shutil.copytree(self._content_dir, backup_dir / "hammock", dirs_exist_ok=True)
+        self._backup_subtree(self._content_dir, backup_dir, "hammock")

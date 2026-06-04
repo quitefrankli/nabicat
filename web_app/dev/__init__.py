@@ -1,12 +1,10 @@
-import flask_login
-
 from flask import Blueprint, render_template
 
 from web_app.config import ConfigManager
 from web_app.dev.logs import register_logs_routes
 from web_app.dev.map import register_map_routes
 from web_app.dev.terminal import register_terminal_routes
-from web_app.helpers import redirect_with_access_denied
+from web_app.helpers import register_app_name, require_admin_blueprint
 
 
 dev_api = Blueprint(
@@ -17,20 +15,11 @@ dev_api = Blueprint(
     url_prefix='/dev')
 
 
-@dev_api.before_request
-@flask_login.login_required
-def before_request():
-    config = ConfigManager()
-    if not flask_login.current_user.is_admin:
-        return redirect_with_access_denied(
-            config.admin_access_denied_message,
-            config.dev_access_denied_api_prefixes,
-        )
-
-
-@dev_api.context_processor
-def inject_app_name():
-    return dict(app_name='Dev')
+require_admin_blueprint(
+    dev_api,
+    api_prefixes=ConfigManager().dev_access_denied_api_prefixes,
+)
+register_app_name(dev_api, 'Dev')
 
 
 @dev_api.route('/', methods=['GET'])

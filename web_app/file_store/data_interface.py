@@ -1,6 +1,5 @@
 import binascii
 import logging
-import shutil
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -13,10 +12,6 @@ from werkzeug.datastructures import FileStorage
 from web_app.data_interface import DataInterface as BaseDataInterface
 from web_app.config import ConfigManager
 from web_app.users import User
-
-
-NON_ADMIN_MAX_STORAGE = ConfigManager().file_store.non_admin_quota_bytes
-ADMIN_MAX_STORAGE = ConfigManager().file_store.admin_quota_bytes
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -284,7 +279,7 @@ class DataInterface(BaseDataInterface):
 
     def backup_data(self, backup_dir: Path) -> None:
         """Backup file store data to the backup directory."""
-        shutil.copytree(self.file_store_dir, backup_dir / self.data_sub_dirname)
+        self._backup_subtree(self.file_store_dir, backup_dir, self.data_sub_dirname)
 
     def delete_user_data(self, user: User) -> None:
         metadata = self.get_metadata()

@@ -14,7 +14,7 @@ from flask import (
 from web_app.app import csrf
 from web_app.errors import APIError
 from web_app.hammock.data_interface import DataInterface, slugify
-from web_app.helpers import cur_user, get_ip, limiter, parse_request
+from web_app.helpers import cur_user, get_ip, limiter, parse_request, register_app_name
 
 hammock_api = Blueprint(
     'hammock',
@@ -25,9 +25,7 @@ hammock_api = Blueprint(
 )
 
 
-@hammock_api.context_processor
-def inject_app_name():
-    return dict(app_name='Hammock')
+register_app_name(hammock_api, 'Hammock')
 
 
 def _require_post_owner(project: str, post: str):

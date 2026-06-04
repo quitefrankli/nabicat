@@ -102,5 +102,4 @@ class DataInterface(BaseDataInterface):
         return None
 
     def backup_data(self, backup_dir: Path) -> None:
-        if self.sentinel_dir.exists():
-            shutil.copytree(self.sentinel_dir, backup_dir / "sentinel", dirs_exist_ok=True)
+        self._backup_subtree(self.sentinel_dir, backup_dir, "sentinel")

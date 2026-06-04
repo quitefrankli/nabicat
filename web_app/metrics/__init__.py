@@ -1,12 +1,11 @@
 import flask
-import flask_login
 import logging
 
 from flask import render_template, Blueprint
 from typing import * # type: ignore
 from datetime import datetime
 
-from web_app.helpers import limiter, cur_user, from_req
+from web_app.helpers import limiter, cur_user, from_req, register_app_name, require_login_blueprint
 from web_app.users import User
 from web_app.metrics.app_data import Metric, DataPoint
 from web_app.metrics.data_interface import DataInterface
@@ -21,15 +20,8 @@ metrics_api = Blueprint(
     url_prefix='/metrics')
 
 
-@metrics_api.before_request
-@flask_login.login_required
-def before_request():
-    # This ensures all routes in this blueprint require login
-    pass
-
-@metrics_api.context_processor
-def inject_app_name():
-    return dict(app_name='Metrics')
+require_login_blueprint(metrics_api)
+register_app_name(metrics_api, 'Metrics')
 
 def get_default_redirect():
     return flask.redirect(flask.url_for('.get_metrics'))

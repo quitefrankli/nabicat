@@ -10,7 +10,7 @@ from flask_login import login_required
 from web_app.tubio.data_interface import DataInterface, AudioMetadata
 from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, get_download_progress, clear_download_progress
 from web_app.config import ConfigManager
-from web_app.helpers import cur_user, parse_request
+from web_app.helpers import cur_user, parse_request, require_login_blueprint
 from web_app.users import User
 from web_app.helpers import limiter
 
@@ -24,11 +24,7 @@ tubio_api = Blueprint(
 )
 
 
-@tubio_api.before_request
-@login_required
-def before_request():
-    # This ensures all routes in this blueprint require login
-    pass
+require_login_blueprint(tubio_api)
 
 
 @tubio_api.context_processor
@@ -176,7 +172,7 @@ def download_progress(video_id: str):
                 clear_download_progress(video_id)
                 break
 
-            time.sleep(0.3)
+            time.sleep(ConfigManager().tubio.download_progress_poll_interval_s)
 
     return Response(generate(), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
@@ -204,7 +200,7 @@ def upload_audio():
             title = Path(file.filename).stem
         
         # Validate file extension
-        allowed_extensions = {'mp3', 'mp4', 'm4a'}
+        allowed_extensions = set(ConfigManager().tubio.upload_allowed_extensions)
         file_ext = Path(file.filename).suffix.lower()[1:]
         
         if file_ext not in allowed_extensions:
@@ -534,7 +530,7 @@ def delete_playlist():
             return redirect(url_for('.index'))
         
         # Prevent deletion of Favourites playlist
-        if playlist_name == "Favourites":
+        if playlist_name == ConfigManager().tubio.default_playlist_name:
             flash('Cannot delete the Favourites playlist.', 'error')
             return redirect(url_for('.index'))
         

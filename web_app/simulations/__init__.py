@@ -1,5 +1,7 @@
 from flask import Blueprint, render_template
 
+from web_app.helpers import register_app_name
+
 
 simulations_api = Blueprint(
     'simulations_api',
@@ -9,9 +11,7 @@ simulations_api = Blueprint(
     url_prefix='/simulations')
 
 
-@simulations_api.context_processor
-def inject_app_name():
-    return dict(app_name='Simulations')
+register_app_name(simulations_api, 'Simulations')
 
 
 @simulations_api.route('/', methods=['GET'])

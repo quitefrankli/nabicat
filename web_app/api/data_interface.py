@@ -45,8 +45,11 @@ class DataInterface(BaseDataInterface):
         return [f.name for f in user_dir.iterdir() if f.is_file()]
 
     def backup_data(self, backup_dir: Path) -> None:
-        shutil.copytree(ConfigManager().save_data_path / self.data_sub_dirname,
-                        backup_dir / self.data_sub_dirname)
+        self._backup_subtree(
+            ConfigManager().save_data_path / self.data_sub_dirname,
+            backup_dir,
+            self.data_sub_dirname,
+        )
 
     def delete_user_data(self, user: User) -> None:
         shutil.rmtree(self._get_user_dir(user), ignore_errors=True)

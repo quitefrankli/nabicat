@@ -71,7 +71,7 @@ class DataInterface(BaseDataInterface):
         self.save_model(self._get_diary_file(user), data)
 
     def backup_data(self, backup_dir: Path) -> None:
-        shutil.copytree(self.todoist_data_directory, backup_dir / "todoist")
+        self._backup_subtree(self.todoist_data_directory, backup_dir, "todoist")
 
     def delete_user_data(self, user: User) -> None:
         shutil.rmtree(self.todoist_data_directory / user.folder, ignore_errors=True)

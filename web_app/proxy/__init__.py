@@ -1,11 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, request, Response, url_for
-from flask_login import login_required, current_user
 from urllib.parse import urljoin, urlparse
 
 from web_app.config import ConfigManager
-from web_app.helpers import redirect_with_access_denied
+from web_app.helpers import register_app_name, require_admin_blueprint
 
 
 proxy_api = Blueprint(
@@ -17,17 +16,8 @@ proxy_api = Blueprint(
 )
 
 
-@proxy_api.before_request
-@login_required
-def before_request():
-    # This ensures all routes in this blueprint require login and admin access
-    if not current_user.is_admin:
-        return redirect_with_access_denied(ConfigManager().admin_access_denied_message)
-
-
-@proxy_api.context_processor
-def inject_app_name():
-    return dict(app_name='Proxy')
+require_admin_blueprint(proxy_api)
+register_app_name(proxy_api, 'Proxy')
 
 
 def _rewrite_links(content, base_url):
@@ -112,11 +102,10 @@ def browse():
 
     try:
         # Make the request to the target URL
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+        proxy_cfg = ConfigManager().proxy
+        headers = {'User-Agent': proxy_cfg.user_agent}
 
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        resp = requests.get(url, headers=headers, timeout=proxy_cfg.request_timeout_s, allow_redirects=True)
 
         # Get content type
         content_type = resp.headers.get('Content-Type', 'text/html')

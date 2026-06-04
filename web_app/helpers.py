@@ -133,7 +133,7 @@ class TimedDict:
 
 
 # Ephemeral RSA key storage (session_id -> private_key)
-_ephemeral_keys = TimedDict(default_ttl_seconds=300)
+_ephemeral_keys = TimedDict(default_ttl_seconds=ConfigManager().ephemeral_key_ttl_s)
 
 
 login_manager = flask_login.LoginManager()
@@ -181,6 +181,33 @@ def admin_only(failure_redirect: str):
 
         return decorated_view
     return _admin_only
+
+def register_app_name(blueprint, name: str) -> None:
+    """Register a context processor exposing ``app_name`` to this blueprint's templates."""
+    @blueprint.context_processor
+    def _inject_app_name():
+        return dict(app_name=name)
+
+
+def require_login_blueprint(blueprint) -> None:
+    """Gate every route in ``blueprint`` behind login."""
+    @blueprint.before_request
+    @flask_login.login_required
+    def _require_login():
+        pass
+
+
+def require_admin_blueprint(blueprint, message: str | None = None, api_prefixes: tuple[str, ...] = ()) -> None:
+    """Gate every route in ``blueprint`` behind admin access."""
+    @blueprint.before_request
+    @flask_login.login_required
+    def _require_admin():
+        if not flask_login.current_user.is_admin:
+            return redirect_with_access_denied(
+                message or ConfigManager().admin_access_denied_message,
+                api_prefixes,
+            )
+
 
 def redirect_with_access_denied(message: str, api_prefixes: tuple[str, ...] = ()):
     if request.method != 'GET' or any(request.path.startswith(prefix) for prefix in api_prefixes):
@@ -238,8 +265,8 @@ def generate_ephemeral_keypair() -> tuple[str, str]:
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     ).decode('utf-8')
     
-    # Store private key in memory (5 minute TTL)
-    _ephemeral_keys.set(session_id, private_key, ttl=300)
+    # Store private key in memory (TTL from config)
+    _ephemeral_keys.set(session_id, private_key, ttl=ConfigManager().ephemeral_key_ttl_s)
     
     logging.debug(f"Generated ephemeral keypair, session_id: {session_id}")
     return session_id, public_pem
@@ -341,6 +368,33 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
     return request_body
 
 
+def _build_message_content(user_message: str, image_paths: list | None):
+    """Build an Anthropic message content value from text + optional images.
+
+    Returns the plain string when no images are supplied; otherwise a list of
+    content blocks (text first, then a base64 image block per existing file).
+    Missing files are silently skipped.
+    """
+    if not image_paths:
+        return user_message
+    content: list = [{"type": "text", "text": user_message}]
+    for path in image_paths:
+        p = Path(path)
+        if not p.exists():
+            continue
+        ext = p.suffix.lower()
+        media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64.b64encode(p.read_bytes()).decode("ascii"),
+            },
+        })
+    return content
+
+
 class MeridianError(RuntimeError):
     """Raised when the Meridian proxy is unreachable or returns an error."""
 
@@ -406,25 +460,7 @@ def bedrock_text(
     keys / instance role). ``model`` is a Bedrock foundation-model ID or an
     inference-profile ARN.
     """
-    if image_paths:
-        content: list = [{"type": "text", "text": user_message}]
-        for path in image_paths:
-            p = Path(path)
-            if not p.exists():
-                continue
-            ext = p.suffix.lower()
-            media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": base64.b64encode(p.read_bytes()).decode("ascii"),
-                },
-            })
-        message_content = content
-    else:
-        message_content = user_message
+    message_content = _build_message_content(user_message, image_paths)
 
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
@@ -514,25 +550,7 @@ def meridian_text(
     user text. Concatenates all ``text`` blocks from the response and returns
     the stripped result. Raises ``MeridianError`` on transport failures.
     """
-    if image_paths:
-        content: list = [{"type": "text", "text": user_message}]
-        for path in image_paths:
-            p = Path(path)
-            if not p.exists():
-                continue
-            ext = p.suffix.lower()
-            media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": base64.b64encode(p.read_bytes()).decode("ascii"),
-                },
-            })
-        message_content = content
-    else:
-        message_content = user_message
+    message_content = _build_message_content(user_message, image_paths)
 
     result = call_meridian(
         messages=[{"role": "user", "content": message_content}],

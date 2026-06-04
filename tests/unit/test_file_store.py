@@ -13,8 +13,6 @@ from web_app.config import ConfigManager
 from web_app.file_store import file_store_api
 from web_app.file_store.data_interface import (
     DataInterface,
-    NON_ADMIN_MAX_STORAGE,
-    ADMIN_MAX_STORAGE,
     Metadata,
     UserMetadata,
     FileMetadata,
@@ -445,14 +443,6 @@ class TestFileStoreBlueprint:
     def test_blueprint_url_prefix(self):
         """Test blueprint URL prefix"""
         assert file_store_api.url_prefix == '/file_store'
-
-    def test_non_admin_max_storage_constant(self):
-        """Test the storage limit constant"""
-        assert NON_ADMIN_MAX_STORAGE == ConfigManager().file_store.non_admin_quota_bytes
-
-    def test_admin_max_storage_constant(self):
-        """Test the admin storage limit constant"""
-        assert ADMIN_MAX_STORAGE == ConfigManager().file_store.admin_quota_bytes
 
 
 if __name__ == '__main__':

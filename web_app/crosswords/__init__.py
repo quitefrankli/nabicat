@@ -12,6 +12,7 @@ from web_app.crosswords.word_bank import (
     validate_theme,
 )
 from web_app.crosswords.word_source import default_source
+from web_app.helpers import register_app_name
 
 crosswords_api = Blueprint(
     'crosswords',
@@ -22,9 +23,7 @@ crosswords_api = Blueprint(
 )
 
 
-@crosswords_api.context_processor
-def inject_app_name():
-    return dict(app_name='Crosswords')
+register_app_name(crosswords_api, 'Crosswords')
 
 
 @crosswords_api.route('/')

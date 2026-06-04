@@ -2,13 +2,12 @@ import logging
 
 from werkzeug.datastructures import FileStorage
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash
-from flask_login import login_required
 import flask_login
 
-from web_app.helpers import cur_user
+from web_app.helpers import cur_user, register_app_name, require_login_blueprint
 from web_app.helpers import limiter
 from web_app.config import ConfigManager
-from web_app.file_store.data_interface import DataInterface, format_file_size, NON_ADMIN_MAX_STORAGE, ADMIN_MAX_STORAGE
+from web_app.file_store.data_interface import DataInterface, format_file_size
 
 
 file_store_api = Blueprint(
@@ -20,16 +19,8 @@ file_store_api = Blueprint(
 )
 
 
-@file_store_api.before_request
-@login_required
-def before_request():
-    # This ensures all routes in this blueprint require login
-    pass
-
-
-@file_store_api.context_processor
-def inject_app_name():
-    return dict(app_name='File Store')
+require_login_blueprint(file_store_api)
+register_app_name(file_store_api, 'File Store')
 
 
 @file_store_api.route('/')
@@ -43,7 +34,8 @@ def index():
     storage_info = None
     if user:
         total_used = data_interface.get_total_storage_size(user)
-        max_storage = ADMIN_MAX_STORAGE if user.has_elevated_access() else NON_ADMIN_MAX_STORAGE
+        fs_cfg = ConfigManager().file_store
+        max_storage = fs_cfg.admin_quota_bytes if user.has_elevated_access() else fs_cfg.non_admin_quota_bytes
         usage_percent = (total_used / max_storage) * 100 if max_storage > 0 else 0
         storage_info = {
             'used': total_used,
@@ -89,7 +81,8 @@ def upload_file():
     file_size = file.tell()
     file.seek(0)  # Reset to beginning
     
-    max_storage = ADMIN_MAX_STORAGE if user.has_elevated_access() else NON_ADMIN_MAX_STORAGE
+    fs_cfg = ConfigManager().file_store
+    max_storage = fs_cfg.admin_quota_bytes if user.has_elevated_access() else fs_cfg.non_admin_quota_bytes
 
     if current_size + file_size > max_storage:
         max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.has_elevated_access() else f'{max_storage / (1024*1024):.0f}MB'
