@@ -48,7 +48,7 @@ def owner_or_admin(func):
 
 @hammock_api.route('/')
 def index():
-    posts_by_project = DataInterface().get_posts_by_project()
+    posts_by_project = DataInterface().get_posts_by_project(flask_login.current_user)
     return render_template("hammock_index.html", posts_by_project=posts_by_project)
 
 
@@ -105,13 +105,13 @@ def new_post():
 
     return render_template(
         "hammock_new.html",
-        posts_by_project=di.get_posts_by_project(),
+        posts_by_project=di.get_posts_by_project(flask_login.current_user),
     )
 
 
 @hammock_api.route('/<project>/')
 def view_project(project: str):
-    posts_by_project = DataInterface().get_posts_by_project()
+    posts_by_project = DataInterface().get_posts_by_project(flask_login.current_user)
     project_obj = next((p for p in posts_by_project if p.name == project), None)
     if project_obj and project_obj.posts:
         return redirect(f'/hammock/{project}/{project_obj.posts[0]}/')
@@ -121,7 +121,9 @@ def view_project(project: str):
 @hammock_api.route('/<project>/<post>/')
 def view_post(project: str, post: str):
     di = DataInterface()
-    posts_by_project = di.get_posts_by_project()
+    if not di.user_can_view(flask_login.current_user, project, post):
+        abort(404)
+    posts_by_project = di.get_posts_by_project(flask_login.current_user)
     try:
         post_content = di.get_post_content(project, post)
     except FileNotFoundError:
@@ -179,7 +181,7 @@ def edit_post(project: str, post: str):
             return jsonify({"redirect_url": url_for('.view_post', project=project, post=post)})
         return redirect(url_for('.view_post', project=project, post=post))
 
-    posts_by_project = di.get_posts_by_project()
+    posts_by_project = di.get_posts_by_project(flask_login.current_user)
     if template == 'markdown':
         return render_template(
             "hammock_edit_markdown.html",
@@ -308,6 +310,8 @@ def upload_post():
 @limiter.limit("20/second")
 def post_asset(project: str, post: str, filename: str):
     data_interface = DataInterface()
+    if not data_interface.user_can_view(flask_login.current_user, project, post):
+        abort(404)
     asset_path = data_interface.get_asset_path(project, post, filename)
     if not asset_path or not asset_path.exists():
         abort(404)

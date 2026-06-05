@@ -143,6 +143,42 @@ class TestGetPostsByProjectSorting:
         result = DataInterface().get_posts_by_project()
         assert result[0].posts == ["aaa-oldest-name", "zzz-newest-name"]
 
+    def test_unlisted_posts_are_sidebar_hidden_except_for_elevated_users(self, projects_dir):
+        _make_post(projects_dir, "ideas", "public")
+        _make_post(projects_dir, "ideas", "private")
+        _make_post(projects_dir, "private-project", "only-post")
+        meta = json.loads((projects_dir.parent / "meta.json").read_text())
+        meta["projects"]["ideas"]["posts"]["private"]["visibility"] = "unlisted"
+        meta["projects"]["private-project"]["posts"]["only-post"]["visibility"] = "unlisted"
+        (projects_dir.parent / "meta.json").write_text(json.dumps(meta))
+
+        normal = User("alice", "x", "fa", is_admin=False)
+        elevated = User("eve", "x", "fe", is_elevated=True)
+        admin = User("root", "x", "fr", is_admin=True)
+
+        assert DataInterface().get_posts_by_project()[0].posts == ["public"]
+        assert DataInterface().get_posts_by_project(normal)[0].posts == ["public"]
+        assert [p.name for p in DataInterface().get_posts_by_project()] == ["ideas"]
+        assert DataInterface().get_posts_by_project(elevated)[0].posts == ["public", "private"]
+        assert DataInterface().get_posts_by_project(admin)[0].posts == ["public", "private"]
+        assert "<h1>test</h1>" in DataInterface().get_post_content("ideas", "private")
+
+    def test_restricted_visibility_requires_elevated_access(self, projects_dir):
+        _make_post(projects_dir, "ideas", "public")
+        _make_post(projects_dir, "ideas", "private")
+        meta = json.loads((projects_dir.parent / "meta.json").read_text())
+        meta["projects"]["ideas"]["posts"]["private"]["visibility"] = "restricted"
+        (projects_dir.parent / "meta.json").write_text(json.dumps(meta))
+
+        normal = User("alice", "x", "fa", is_admin=False)
+        elevated = User("eve", "x", "fe", is_elevated=True)
+
+        assert DataInterface().get_posts_by_project(normal)[0].posts == ["public"]
+        assert DataInterface().get_posts_by_project(elevated)[0].posts == ["public", "private"]
+        assert DataInterface().user_can_view(normal, "ideas", "private") is False
+        assert DataInterface().user_can_view(elevated, "ideas", "private") is True
+        assert DataInterface().user_can_view(None, "ideas", "private") is False
+
 
 class TestMarkdownLifecycleAndAuthz:
     def test_markdown_create_render_edit_and_ownership(self, projects_dir):
@@ -472,6 +508,33 @@ class TestGalleryEditRoute:
         assert _post_meta(projects_dir, proj, post)["template-data"]["items"] == [
             {"type": "image", "filename": "photo.webp"}
         ]
+
+
+class TestRestrictedPostRoute:
+    def test_restricted_post_direct_url_requires_elevated_user(self, client, projects_dir, monkeypatch):
+        if "hammock" not in client.application.blueprints:
+            client.application.register_blueprint(hammock_api)
+        _make_post(projects_dir, "ideas", "private")
+        meta = json.loads((projects_dir.parent / "meta.json").read_text())
+        meta["projects"]["ideas"]["posts"]["private"]["visibility"] = "restricted"
+        (projects_dir.parent / "meta.json").write_text(json.dumps(meta))
+
+        assert client.get("/hammock/ideas/private/").status_code == 404
+
+        elevated = User("eve", "x", "fe", is_elevated=True)
+        monkeypatch.setattr(
+            helpers.login_manager,
+            "_user_callback",
+            lambda username: elevated if username == elevated.id else None,
+        )
+        with client.session_transaction() as sess:
+            sess["_user_id"] = elevated.id
+            sess["_fresh"] = True
+
+        response = client.get("/hammock/ideas/private/")
+
+        assert response.status_code == 200
+        assert b"<h1>test</h1>" in response.data
 
 
 class TestHammockBackup:

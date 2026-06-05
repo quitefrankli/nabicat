@@ -36,7 +36,7 @@
     - Test behavior when the keyboard is open on mobile (fixed bottom bars can get covered).
     - Thumbnail/image grids should not assign all real image URLs directly in HTML. Use the established file_store/Hammock pattern: render a tiny placeholder `src`, put the real URL in a data attribute, lazy-load with `IntersectionObserver`, serialize requests with a small stagger, and retry failed loads with cache-busting query params. Define stagger/retry constants in `ConfigManager`.
 
-* start every new session with "CLAUDE.md read!"
+* start every new session with "AGENTS.md read!"
 
 ## Sentinel subapp
 
