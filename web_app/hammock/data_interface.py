@@ -35,6 +35,12 @@ class PostType(str, Enum):
     GALLERY = "gallery"
 
 
+class PostVisibility(str, Enum):
+    PUBLIC = "public"
+    UNLISTED = "unlisted"
+    RESTRICTED = "restricted"
+
+
 class Project(BaseModel):
     name: str
     posts: list[str]
@@ -72,6 +78,7 @@ class PostMeta(BaseModel):
     title: str = ""
     date: str = ""
     owner: str = ""
+    visibility: PostVisibility = PostVisibility.PUBLIC
     template_data: Optional[GalleryTemplateData] = Field(default=None, alias="template-data")
 
     def to_dict(self) -> dict:
@@ -124,14 +131,32 @@ class DataInterface(BaseDataInterface):
         meta = self.get_post_meta(post_dir.parent.name, post_dir.name)
         return (meta.date, post_dir.name)
 
-    def get_posts_by_project(self) -> list[Project]:
+    @staticmethod
+    def _can_see_nonpublic_posts(user: Optional[User]) -> bool:
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        return bool(user.has_elevated_access())
+
+    def _post_visible_in_listing(self, project: str, post: str, user: Optional[User]) -> bool:
+        meta = self.get_post_meta(project, post)
+        return meta.visibility == PostVisibility.PUBLIC or self._can_see_nonpublic_posts(user)
+
+    def user_can_view(self, user: Optional[User], project: str, post: str) -> bool:
+        meta = self.get_post_meta(project, post)
+        return meta.visibility != PostVisibility.RESTRICTED or self._can_see_nonpublic_posts(user)
+
+    def get_posts_by_project(self, user: Optional[User] = None) -> list[Project]:
         projects: list[Project] = []
         for project_dir in sorted(self.projects_dir.iterdir(), key=lambda p: p.name):
             if not project_dir.is_dir():
                 continue
             post_dirs = [d for d in project_dir.iterdir() if d.is_dir()]
-            posts = [d.name for d in sorted(post_dirs, key=self._post_sort_key, reverse=True)]
-            projects.append(Project(name=project_dir.name, posts=posts))
+            posts = [
+                d.name for d in sorted(post_dirs, key=self._post_sort_key, reverse=True)
+                if self._post_visible_in_listing(project_dir.name, d.name, user)
+            ]
+            if posts:
+                projects.append(Project(name=project_dir.name, posts=posts))
         return projects
 
     def get_post_content(self, project: str, post: str) -> str:
