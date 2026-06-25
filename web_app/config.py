@@ -82,6 +82,7 @@ class TubioConfig:
     test_video_id: str = "dQw4w9WgXcQ"
     upload_allowed_extensions: tuple = ("mp3", "mp4", "m4a")
     download_progress_poll_interval_s: float = 0.3
+    youtube_403_fallback_player_client: str = "web"
     default_playlist_name: str = "Favourites"
     trackbar_volume_min_percent: int = 0
     trackbar_volume_max_percent: int = 100
