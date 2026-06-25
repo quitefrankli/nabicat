@@ -273,10 +273,36 @@ class AudioDownloader:
         return opts
 
     @staticmethod
+    def _with_youtube_player_client(ydl_opts: dict, player_client: str) -> dict:
+        retry_opts = {
+            **ydl_opts,
+            'extractor_args': {
+                **ydl_opts.get('extractor_args', {}),
+                'youtube': {
+                    **ydl_opts.get('extractor_args', {}).get('youtube', {}),
+                    'player_client': [player_client],
+                },
+            },
+        }
+        return retry_opts
+
+    @staticmethod
     def download_audio_file(video_id: str, ydl_opts: dict) -> None:
         url = f"https://www.youtube.com/watch?v={video_id}"
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+        except yt_dlp.utils.DownloadError as e:
+            fallback_client = ConfigManager().tubio.youtube_403_fallback_player_client
+            if "HTTP Error 403" not in str(e) or not fallback_client:
+                raise
+            logging.warning(
+                "YouTube media download returned HTTP 403; retrying with player_client=%s",
+                fallback_client,
+            )
+            retry_opts = AudioDownloader._with_youtube_player_client(ydl_opts, fallback_client)
+            with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                ydl.download([url])
 
     @staticmethod
     def download_youtube_audio(video_id: str, title: str, user: User, crc: int|None = None) -> None:

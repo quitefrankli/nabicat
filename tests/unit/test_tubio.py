@@ -2,6 +2,7 @@ import pytest
 
 from unittest.mock import Mock, patch, MagicMock
 from datetime import timedelta
+from yt_dlp.utils import DownloadError
 
 from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress, _active_downloads
 
@@ -176,6 +177,32 @@ class TestGetVideoInfo:
         assert result is not None
         # Should use the last (highest quality) thumbnail
         assert result['thumbnail_url'] == 'https://example.com/large.jpg'
+
+
+class TestDownloadAudioFile:
+    @patch('web_app.tubio.audio_downloader.ConfigManager')
+    @patch('web_app.tubio.audio_downloader.yt_dlp.YoutubeDL')
+    def test_retries_youtube_403_with_fallback_player_client(self, mock_ydl_class, mock_config):
+        mock_config.return_value.tubio.youtube_403_fallback_player_client = "web"
+
+        first_ydl = MagicMock()
+        first_ydl.__enter__ = Mock(return_value=first_ydl)
+        first_ydl.__exit__ = Mock(return_value=False)
+        first_ydl.download.side_effect = DownloadError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+
+        retry_ydl = MagicMock()
+        retry_ydl.__enter__ = Mock(return_value=retry_ydl)
+        retry_ydl.__exit__ = Mock(return_value=False)
+
+        mock_ydl_class.side_effect = [first_ydl, retry_ydl]
+        ydl_opts = {"format": "bestaudio"}
+
+        AudioDownloader.download_audio_file("dQw4w9WgXcQ", ydl_opts)
+
+        retry_opts = mock_ydl_class.call_args_list[1].args[0]
+        assert retry_opts["extractor_args"]["youtube"]["player_client"] == ["web"]
+        retry_ydl.download.assert_called_once_with(["https://www.youtube.com/watch?v=dQw4w9WgXcQ"])
+        assert "extractor_args" not in ydl_opts
 
 
 class TestDownloadThumbnail:
