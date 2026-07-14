@@ -95,9 +95,7 @@ function setupImageModal() {
     if (!modal || !shell) return;
     const image = document.getElementById('modalImage');
     const previews = Array.from(document.querySelectorAll('.file-grid-item [data-bs-toggle="modal"]'));
-    const swipeDistancePx = Number(shell.dataset.gallerySwipeMinDistancePx);
     let activeIndex = -1;
-    let touchStartX = null;
 
     const showImage = (index) => {
         if (index < 0 || index >= previews.length) return;
@@ -111,8 +109,7 @@ function setupImageModal() {
     previews.forEach((preview, index) => {
         preview.addEventListener('click', () => showImage(index));
     });
-    image.addEventListener('pointerup', (event) => {
-        if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    image.addEventListener('click', (event) => {
         const imageBounds = image.getBoundingClientRect();
         moveImage(event.clientX < imageBounds.left + imageBounds.width / 2 ? -1 : 1);
     });
@@ -125,17 +122,6 @@ function setupImageModal() {
             moveImage(1);
         }
     });
-    modal.addEventListener('touchstart', (event) => {
-        touchStartX = event.changedTouches[0]?.screenX ?? null;
-    }, { passive: true });
-    modal.addEventListener('touchend', (event) => {
-        if (touchStartX === null) return;
-        const touchEndX = event.changedTouches[0]?.screenX;
-        const distance = touchEndX - touchStartX;
-        touchStartX = null;
-        if (Math.abs(distance) < swipeDistancePx) return;
-        moveImage(distance < 0 ? 1 : -1);
-    }, { passive: true });
     modal.addEventListener('hidden.bs.modal', () => {
         activeIndex = -1;
         image.src = '';

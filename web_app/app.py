@@ -2,7 +2,7 @@ import subprocess
 import time
 from datetime import timedelta
 from pathlib import Path
-from flask import Flask
+from flask import Flask, g
 from flask_bootstrap import Bootstrap5
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -25,13 +25,12 @@ def _compute_static_version() -> str:
     return str(int(time.time()))
 
 
-STATIC_VERSION = _compute_static_version()
-
-
 @app.url_defaults
 def _add_static_version(endpoint, values):
     if endpoint and endpoint.endswith('static') and 'v' not in values:
-        values['v'] = STATIC_VERSION
+        if not hasattr(g, 'static_version'):
+            g.static_version = _compute_static_version()
+        values['v'] = g.static_version
 
 # Session configuration for longer-lasting sessions
 # 30 days session lifetime - especially helpful for mobile/iOS users

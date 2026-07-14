@@ -7,7 +7,7 @@ import flask_login
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from web_app.app import app
+from web_app.app import app, _add_static_version
 from web_app.config import ConfigManager
 from web_app.users import User
 from web_app.errors import APIError, AuthenticationError
@@ -35,6 +35,19 @@ def app_context():
 
 
 class TestHelpers:
+    @patch('web_app.app._compute_static_version', return_value='fresh-build')
+    def test_static_version_refreshes_for_each_request(self, mock_compute_static_version):
+        with app.test_request_context():
+            first_values = {}
+            second_values = {}
+
+            _add_static_version('file_store.static', first_values)
+            _add_static_version('static', second_values)
+
+        assert first_values['v'] == 'fresh-build'
+        assert second_values['v'] == 'fresh-build'
+        mock_compute_static_version.assert_called_once()
+
     @patch('web_app.helpers.DataInterface')
     def test_authenticate_user_success(self, mock_data_interface):
         """Test successful user authentication"""

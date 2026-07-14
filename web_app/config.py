@@ -340,7 +340,6 @@ class FileStoreConfig:
     gallery_columns_max: int = 10
     gallery_columns_default: int = 5
     gallery_min_tile_px: int = 40
-    gallery_swipe_min_distance_px: int = 50
 
 
 @dataclass

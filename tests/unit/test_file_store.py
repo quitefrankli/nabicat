@@ -407,6 +407,7 @@ class TestFileStoreRoutes:
         assert b'id="modalImage"' in response.data
         assert b'modal-fullscreen-md-down' in response.data
         assert b'imageModalLabel' not in response.data
+        assert b'data-gallery-swipe-min-distance-px' not in response.data
         assert b'id="previousImage"' not in response.data
         assert b'id="nextImage"' not in response.data
         assert b'photo.jpg' in response.data
