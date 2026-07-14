@@ -109,13 +109,8 @@ def download_file(filename: str):
     file_path = DataInterface().get_file_path(filename, cur_user())
     response = send_file(file_path, as_attachment=True)
 
-    # Cache files (immutable, identified by CRC)
-    response.cache_control.max_age = ConfigManager().cache_max_age
-    response.cache_control.public = True
-
-    # ETag using CRC for cache validation
-    crc = file_path.name  # filename is the CRC
-    response.set_etag(crc)
+    response.cache_control.private = True
+    response.cache_control.no_store = True
 
     return response
 

@@ -73,54 +73,18 @@ class CacheManager {
     }
 
     /**
-     * Download file with caching
+     * Start a browser-managed download without buffering the response in memory.
      * @param {string} url - URL to download
      * @param {string} filename - Filename for saving
-     * @param {Function} onProgress - Progress callback (percent, loaded, total, speed)
-     * @returns {Promise<Blob>}
+     * @returns {Promise<void>}
      */
-    async downloadWithCache(url, filename, onProgress = null) {
-        const startTime = Date.now();
-
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Download failed');
-
-            const reader = response.body.getReader();
-            const contentLength = parseInt(response.headers.get('content-length') || '0');
-            const chunks = [];
-            let received = 0;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                chunks.push(value);
-                received += value.length;
-
-                if (onProgress && contentLength > 0) {
-                    const percent = Math.round((received / contentLength) * 100);
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = received / elapsed;
-                    onProgress(percent, received, contentLength, speed);
-                }
-            }
-
-            const blob = new Blob(chunks);
-
-            // Trigger download
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(blobUrl);
-
-            return blob;
-        } catch (error) {
-            console.error('[Cache] Download failed:', error);
-            throw error;
-        }
+    async downloadWithCache(url, filename) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
     }
 
     /**

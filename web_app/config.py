@@ -330,6 +330,7 @@ class HammockConfig:
 class FileStoreConfig:
     non_admin_quota_bytes: int = 30 * 1024 * 1024
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
+    upload_stream_chunk_bytes: int = 1024 * 1024
 
 
 @dataclass

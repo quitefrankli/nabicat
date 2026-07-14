@@ -1,5 +1,7 @@
 import binascii
 import logging
+import os
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -74,33 +76,49 @@ class DataInterface(BaseDataInterface):
 
     def save_file(self, file_storage: FileStorage, user: User) -> int:
         """Save a file and return its CRC."""
-        # Read file data
-        file_data = file_storage.read()
-        crc = binascii.crc32(file_data)
+        self.files_dir.mkdir(parents=True, exist_ok=True)
+        chunk_size = ConfigManager().file_store.upload_stream_chunk_bytes
+        crc = 0
+        file_size = 0
+
+        # Flask has already spooled the multipart upload; copy it in bounded chunks
+        # so large files are never loaded into the Gunicorn worker's memory.
+        with tempfile.NamedTemporaryFile(dir=self.files_dir, delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+            try:
+                while chunk := file_storage.stream.read(chunk_size):
+                    temp_file.write(chunk)
+                    crc = binascii.crc32(chunk, crc)
+                    file_size += len(chunk)
+            except Exception:
+                temp_path.unlink(missing_ok=True)
+                raise
 
         metadata = self.get_metadata()
         user_metadata = metadata.users.get(user.id, UserMetadata(user_id=user.id))
 
         # Ignore duplicate uploads for the same user when content matches.
         if any(existing_file.crc == crc for existing_file in user_metadata.files):
+            temp_path.unlink(missing_ok=True)
             return crc
 
         # Check if file content already exists on disk
         if crc not in metadata.files:
-            # Save the raw file with CRC as filename using atomic write
-            self.files_dir.mkdir(parents=True, exist_ok=True)
             file_path = self.files_dir / str(crc)
-            self.atomic_write(file_path, data=file_data, mode='wb')
+            os.replace(temp_path, file_path)
+            file_path.chmod(0o644)
 
             # Create file metadata (use first uploaded name as reference)
             file_metadata = FileMetadata(
                 crc=crc,
                 original_name=file_storage.filename,
-                size=len(file_data),
+                size=file_size,
                 upload_date=datetime.now().isoformat(),
                 mime_type=file_storage.content_type or 'application/octet-stream'
             )
             metadata.files[crc] = file_metadata
+        else:
+            temp_path.unlink(missing_ok=True)
 
         # Add to user's file list for new user content entry.
         user_file_entry = UserFileEntry(crc=crc, original_name=file_storage.filename)

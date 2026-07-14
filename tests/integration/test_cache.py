@@ -67,8 +67,8 @@ class TestCacheHeaders:
         # Restore original user_loader
         helpers.login_manager._user_callback = original_user_loader
 
-    def test_download_has_cache_headers(self, client, auth_mock, tmp_path, monkeypatch):
-        """Verify download endpoint sets cache headers"""
+    def test_download_is_not_cached(self, client, auth_mock, tmp_path, monkeypatch):
+        """Private file downloads must not enter shared browser caches."""
         from unittest.mock import patch, MagicMock
 
         # Create a test file
@@ -87,10 +87,10 @@ class TestCacheHeaders:
             assert response.status_code == 200
             # Check cache control headers
             assert 'Cache-Control' in response.headers
-            assert 'max-age=606461' in response.headers.get('Cache-Control', '')
-            assert 'public' in response.headers.get('Cache-Control', '')
-            # Check ETag
-            assert 'ETag' in response.headers
+            cache_control = response.headers.get('Cache-Control', '')
+            assert 'no-store' in cache_control
+            assert 'private' in cache_control
+            assert 'public' not in cache_control
 
     def test_thumbnail_has_cache_headers(self, client, auth_mock, tmp_path, monkeypatch):
         """Verify thumbnail endpoint sets cache headers"""

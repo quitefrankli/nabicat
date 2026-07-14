@@ -141,38 +141,15 @@ function setupAsyncUpload() {
 
 function setupAsyncDownload() {
     document.querySelectorAll('.download-btn').forEach(btn => {
-        btn.addEventListener('click', async function() {
+        btn.addEventListener('click', function() {
             const url = this.dataset.url;
             const filename = this.dataset.filename;
-            const expectedSize = parseInt(this.dataset.size);
-
-            const overlay = document.getElementById('downloadOverlay');
-            const progressBar = document.getElementById('downloadProgressBar');
-            const percentEl = document.getElementById('downloadPercent');
-            const statsEl = document.getElementById('downloadStats');
-            const filenameEl = document.getElementById('downloadFileName');
-
-            overlay.classList.remove('d-none');
-            filenameEl.textContent = filename;
-            progressBar.style.width = '0%';
-            percentEl.textContent = '0%';
-
-            try {
-                // Use cache manager if available
-                await window.cacheManager.downloadWithCache(
-                    url,
-                    filename,
-                    (percent, received, total, speed) => {
-                        progressBar.style.width = Math.min(percent, 100) + '%';
-                        percentEl.textContent = Math.min(percent, 100) + '%';
-                        statsEl.textContent = `${formatFileSize(received)} / ${formatFileSize(total)} · ${formatFileSize(speed)}/s`;
-                    }
-                );
-            } catch (err) {
-                alert('Download failed: ' + err.message);
-            } finally {
-                overlay.classList.add('d-none');
-            }
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
         });
     });
 }

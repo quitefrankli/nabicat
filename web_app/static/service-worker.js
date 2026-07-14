@@ -49,6 +49,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // File Store downloads are private and may be too large for Cache Storage.
+    if (url.pathname.startsWith('/file_store/download/')) {
+        return;
+    }
+
     // Skip SSE endpoints (text/event-stream)
     if (url.pathname.includes('/download_progress/')) {
         return;

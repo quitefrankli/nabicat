@@ -5,6 +5,7 @@ import io
 import binascii
 from datetime import datetime
 from unittest.mock import Mock, patch
+from werkzeug.datastructures import FileStorage
 
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
@@ -78,6 +79,28 @@ def data_interface(tmp_path):
 class TestDataInterface:
     """Tests for FileStoreDataInterface with metadata-based storage"""
 
+    def test_save_file_streams_large_upload_in_chunks(self, data_interface, test_user):
+        """Uploads are copied incrementally rather than buffered in memory."""
+        class ChunkOnlyStream(io.BytesIO):
+            def __init__(self, data):
+                super().__init__(data)
+                self.read_sizes = []
+
+            def read(self, size=-1):
+                assert size > 0
+                self.read_sizes.append(size)
+                return super().read(size)
+
+        file_data = b"a" * (ConfigManager().file_store.upload_stream_chunk_bytes * 2 + 1)
+        stream = ChunkOnlyStream(file_data)
+        file_storage = Mock(filename='large.bin', content_type='application/octet-stream', stream=stream)
+
+        crc = data_interface.save_file(file_storage, test_user)
+
+        assert crc == binascii.crc32(file_data)
+        assert (data_interface.files_dir / str(crc)).read_bytes() == file_data
+        assert stream.read_sizes == [ConfigManager().file_store.upload_stream_chunk_bytes] * 4
+
     def test_get_metadata_empty(self, data_interface):
         """Test getting metadata when file doesn't exist"""
         metadata = data_interface.get_metadata()
@@ -111,10 +134,7 @@ class TestDataInterface:
     def test_save_file_new(self, data_interface, test_user):
         """Test saving a new file"""
         file_data = b'test content'
-        file_storage = Mock()
-        file_storage.filename = 'test.txt'
-        file_storage.read.return_value = file_data
-        file_storage.content_type = 'text/plain'
+        file_storage = FileStorage(io.BytesIO(file_data), 'test.txt', content_type='text/plain')
 
         crc = data_interface.save_file(file_storage, test_user)
 
@@ -137,15 +157,8 @@ class TestDataInterface:
     def test_save_file_duplicate_dedup(self, data_interface, test_user):
         """Test that duplicate content upload is ignored for the same user"""
         file_data = b'exact same bytes for dedup check'
-        file_storage1 = Mock()
-        file_storage1.filename = 'first_name.txt'
-        file_storage1.read.return_value = file_data
-        file_storage1.content_type = 'text/plain'
-
-        file_storage2 = Mock()
-        file_storage2.filename = 'second_name.txt'
-        file_storage2.read.return_value = file_data
-        file_storage2.content_type = 'text/plain'
+        file_storage1 = FileStorage(io.BytesIO(file_data), 'first_name.txt', content_type='text/plain')
+        file_storage2 = FileStorage(io.BytesIO(file_data), 'second_name.txt', content_type='text/plain')
 
         crc1 = data_interface.save_file(file_storage1, test_user)
         crc2 = data_interface.save_file(file_storage2, test_user)
@@ -171,15 +184,8 @@ class TestDataInterface:
         """Test that different users can share the same file content"""
         file_data = b'shared content'
 
-        file_storage1 = Mock()
-        file_storage1.filename = 'user1.txt'
-        file_storage1.read.return_value = file_data
-        file_storage1.content_type = 'text/plain'
-
-        file_storage2 = Mock()
-        file_storage2.filename = 'user2.txt'
-        file_storage2.read.return_value = file_data
-        file_storage2.content_type = 'text/plain'
+        file_storage1 = FileStorage(io.BytesIO(file_data), 'user1.txt', content_type='text/plain')
+        file_storage2 = FileStorage(io.BytesIO(file_data), 'user2.txt', content_type='text/plain')
 
         crc1 = data_interface.save_file(file_storage1, test_user)
         crc2 = data_interface.save_file(file_storage2, test_user2)
@@ -197,10 +203,7 @@ class TestDataInterface:
     def test_get_file_path(self, data_interface, test_user):
         """Test getting file path by original filename"""
         file_data = b'test content'
-        file_storage = Mock()
-        file_storage.filename = 'myfile.txt'
-        file_storage.read.return_value = file_data
-        file_storage.content_type = 'text/plain'
+        file_storage = FileStorage(io.BytesIO(file_data), 'myfile.txt', content_type='text/plain')
 
         crc = data_interface.save_file(file_storage, test_user)
 
@@ -217,10 +220,7 @@ class TestDataInterface:
     def test_delete_file_single_user(self, data_interface, test_user):
         """Test deleting a file when only one user has it"""
         file_data = b'test content'
-        file_storage = Mock()
-        file_storage.filename = 'test.txt'
-        file_storage.read.return_value = file_data
-        file_storage.content_type = 'text/plain'
+        file_storage = FileStorage(io.BytesIO(file_data), 'test.txt', content_type='text/plain')
 
         crc = data_interface.save_file(file_storage, test_user)
         file_path = data_interface.files_dir / str(crc)
@@ -241,15 +241,8 @@ class TestDataInterface:
         """Test deleting file when multiple users have it"""
         file_data = b'shared content'
 
-        file_storage1 = Mock()
-        file_storage1.filename = 'file1.txt'
-        file_storage1.read.return_value = file_data
-        file_storage1.content_type = 'text/plain'
-
-        file_storage2 = Mock()
-        file_storage2.filename = 'file2.txt'
-        file_storage2.read.return_value = file_data
-        file_storage2.content_type = 'text/plain'
+        file_storage1 = FileStorage(io.BytesIO(file_data), 'file1.txt', content_type='text/plain')
+        file_storage2 = FileStorage(io.BytesIO(file_data), 'file2.txt', content_type='text/plain')
 
         crc = data_interface.save_file(file_storage1, test_user)
         data_interface.save_file(file_storage2, test_user2)
@@ -285,10 +278,7 @@ class TestDataInterface:
 
         # Add some files
         for filename in ['file1.txt', 'file2.txt']:
-            file_storage = Mock()
-            file_storage.filename = filename
-            file_storage.read.return_value = filename.encode()
-            file_storage.content_type = 'text/plain'
+            file_storage = FileStorage(io.BytesIO(filename.encode()), filename, content_type='text/plain')
             data_interface.save_file(file_storage, test_user)
 
         files = data_interface.list_files(test_user)
@@ -296,10 +286,7 @@ class TestDataInterface:
 
     def test_list_files_with_metadata(self, data_interface, test_user):
         """Test listing files with metadata"""
-        file_storage = Mock()
-        file_storage.filename = 'test.txt'
-        file_storage.read.return_value = b'test content'
-        file_storage.content_type = 'text/plain'
+        file_storage = FileStorage(io.BytesIO(b'test content'), 'test.txt', content_type='text/plain')
 
         data_interface.save_file(file_storage, test_user)
 
@@ -323,10 +310,7 @@ class TestDataInterface:
         file2_data = b'b' * 200
 
         for filename, data in [('file1.txt', file1_data), ('file2.txt', file2_data)]:
-            file_storage = Mock()
-            file_storage.filename = filename
-            file_storage.read.return_value = data
-            file_storage.content_type = 'text/plain'
+            file_storage = FileStorage(io.BytesIO(data), filename, content_type='text/plain')
             data_interface.save_file(file_storage, test_user)
 
         size = data_interface.get_total_storage_size(test_user)
