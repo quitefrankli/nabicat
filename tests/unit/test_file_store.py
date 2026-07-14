@@ -404,6 +404,11 @@ class TestFileStoreRoutes:
         assert b'min="2"' in response.data
         assert b'max="10"' in response.data
         assert b'value="5"' in response.data
+        assert b'id="modalImage"' in response.data
+        assert b'modal-fullscreen-md-down' in response.data
+        assert b'imageModalLabel' not in response.data
+        assert b'id="previousImage"' not in response.data
+        assert b'id="nextImage"' not in response.data
         assert b'photo.jpg' in response.data
         assert b'document.txt' not in response.data
         assert b'file-grid-actions' not in response.data

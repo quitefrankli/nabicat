@@ -384,16 +384,23 @@ input[type="file"].form-control:hover {
 }
 
 #imageModal .modal-content {
+  position: relative;
   background: rgba(0, 0, 0, 0.95);
 }
 
-#imageModal .modal-footer {
-  border-radius: 0 0 0.5rem 0.5rem;
+#imageModal .modal-body { display: flex; align-items: center; justify-content: center; }
+#imageModal #modalImage { max-width: 100%; max-height: 80vh; object-fit: contain; cursor: pointer; }
+
+.image-preview-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1;
+  padding: 0.75rem;
+  border-radius: var(--hw-radius-full);
+  background-color: rgba(0, 0, 0, 0.55);
 }
 
-#imageModal #modalImageName {
-  max-width: 80vw;
-}
 /* Directory browser */
 .file-store-shell { width: 100%; margin: 0; padding: 0 1.5rem; }
 .file-store-toolbar, .file-store-actions, .file-breadcrumb, .directory-item, .directory-actions, .gallery-density { display: flex; align-items: center; }
@@ -420,4 +427,4 @@ input[type="file"].form-control:hover {
 .file-empty-state { display: grid; justify-items: center; gap: 1rem; padding: 4rem 1rem; color: var(--hw-text-secondary); text-align: center; }
 .file-empty-state > i { font-size: 4rem; color: var(--hw-sage); opacity: .55; }
 .file-empty-state h2 { font: 600 1.25rem 'Playfair Display', serif; margin: 0; }
-@media (max-width: 768px) { .file-store-shell { padding: 0 1rem; } .file-store-toolbar { align-items: flex-start; flex-direction: column; } .gallery-density { width: 100%; margin-left: 0; } .gallery-density input { flex: 1; } .directory-item { padding: .65rem; } .directory-actions { gap: .3rem; } }
+@media (max-width: 768px) { .file-store-shell { padding: 0 1rem; } .file-store-toolbar { align-items: flex-start; flex-direction: column; } .gallery-density { width: 100%; margin-left: 0; } .gallery-density input { flex: 1; } .directory-item { padding: .65rem; } .directory-actions { gap: .3rem; } #imageModal .modal-content { height: 100vh; height: 100svh; border: 0; border-radius: 0; } #imageModal .modal-body { height: 100%; padding: 0; } #imageModal #modalImage { max-height: 100%; } .image-preview-close { top: calc(0.75rem + env(safe-area-inset-top)); right: calc(0.75rem + env(safe-area-inset-right)); } }

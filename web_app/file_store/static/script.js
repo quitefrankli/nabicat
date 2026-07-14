@@ -91,17 +91,55 @@ function setupMoveDialog() {
 
 function setupImageModal() {
     const modal = document.getElementById('imageModal');
-    if (!modal) return;
+    const shell = document.querySelector('.file-store-shell');
+    if (!modal || !shell) return;
     const image = document.getElementById('modalImage');
-    const label = document.getElementById('imageModalLabel');
-    document.querySelectorAll('.file-grid-item [data-bs-toggle="modal"]').forEach((preview) => {
-        preview.addEventListener('click', () => {
-            image.src = preview.dataset.imageUrl;
-            image.alt = preview.dataset.imageName;
-            label.textContent = preview.dataset.imageName;
-        });
+    const previews = Array.from(document.querySelectorAll('.file-grid-item [data-bs-toggle="modal"]'));
+    const swipeDistancePx = Number(shell.dataset.gallerySwipeMinDistancePx);
+    let activeIndex = -1;
+    let touchStartX = null;
+
+    const showImage = (index) => {
+        if (index < 0 || index >= previews.length) return;
+        activeIndex = index;
+        const preview = previews[activeIndex];
+        image.src = preview.dataset.imageUrl;
+        image.alt = preview.dataset.imageName;
+    };
+    const moveImage = (offset) => showImage(activeIndex + offset);
+
+    previews.forEach((preview, index) => {
+        preview.addEventListener('click', () => showImage(index));
     });
-    modal.addEventListener('hidden.bs.modal', () => { image.src = ''; });
+    image.addEventListener('pointerup', (event) => {
+        if (event.pointerType !== 'mouse' || event.button !== 0) return;
+        const imageBounds = image.getBoundingClientRect();
+        moveImage(event.clientX < imageBounds.left + imageBounds.width / 2 ? -1 : 1);
+    });
+    modal.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            moveImage(-1);
+        } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            moveImage(1);
+        }
+    });
+    modal.addEventListener('touchstart', (event) => {
+        touchStartX = event.changedTouches[0]?.screenX ?? null;
+    }, { passive: true });
+    modal.addEventListener('touchend', (event) => {
+        if (touchStartX === null) return;
+        const touchEndX = event.changedTouches[0]?.screenX;
+        const distance = touchEndX - touchStartX;
+        touchStartX = null;
+        if (Math.abs(distance) < swipeDistancePx) return;
+        moveImage(distance < 0 ? 1 : -1);
+    }, { passive: true });
+    modal.addEventListener('hidden.bs.modal', () => {
+        activeIndex = -1;
+        image.src = '';
+    });
 }
 
 function setupStaggeredThumbnails() {

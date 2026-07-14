@@ -26,7 +26,8 @@
      data-thumbnail-stagger-ms="{{ thumbnail_config.thumbnail_load_stagger_ms }}"
      data-thumbnail-max-retries="{{ thumbnail_config.thumbnail_load_max_retries }}"
      data-thumbnail-retry-delay-ms="{{ thumbnail_config.thumbnail_retry_delay_ms }}"
-     data-gallery-min-tile-px="{{ thumbnail_config.gallery_min_tile_px }}">
+     data-gallery-min-tile-px="{{ thumbnail_config.gallery_min_tile_px }}"
+     data-gallery-swipe-min-distance-px="{{ thumbnail_config.gallery_swipe_min_distance_px }}">
   <section class="file-store-toolbar">
     <h5 class="visually-hidden">Your Files</h5>
     <nav aria-label="Folder path" class="file-breadcrumb">
@@ -105,7 +106,7 @@
   </section>
 </div>
 
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 text-truncate" id="imageModalLabel"></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body text-center"><img id="modalImage" class="img-fluid" alt=""></div></div></div></div>
+<div class="modal fade" id="imageModal" tabindex="-1" aria-label="Image preview" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down"><div class="modal-content"><button type="button" class="btn-close btn-close-white image-preview-close" data-bs-dismiss="modal" aria-label="Close"></button><div class="modal-body text-center"><img id="modalImage" class="img-fluid" alt=""></div></div></div></div>
 
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
   <form id="uploadForm" action="{{ url_for('.upload_file') }}" enctype="multipart/form-data">
