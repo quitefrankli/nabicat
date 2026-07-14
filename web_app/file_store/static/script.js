@@ -89,7 +89,76 @@ function setupMoveDialog() {
     });
 }
 
+function setupImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (!modal) return;
+    const image = document.getElementById('modalImage');
+    const label = document.getElementById('imageModalLabel');
+    document.querySelectorAll('.file-grid-preview[data-bs-toggle="modal"]').forEach((preview) => {
+        preview.addEventListener('click', () => {
+            image.src = preview.dataset.imageUrl;
+            image.alt = preview.dataset.imageName;
+            label.textContent = preview.dataset.imageName;
+        });
+    });
+    modal.addEventListener('hidden.bs.modal', () => { image.src = ''; });
+}
+
+function setupStaggeredThumbnails() {
+    const shell = document.querySelector('.file-store-shell');
+    const images = Array.from(document.querySelectorAll('img[data-thumbnail-src]'));
+    if (!shell || !images.length) return;
+
+    const staggerMs = Number(shell.dataset.thumbnailStaggerMs);
+    const maxRetries = Number(shell.dataset.thumbnailMaxRetries);
+    const retryDelayMs = Number(shell.dataset.thumbnailRetryDelayMs);
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const load = (image, url) => new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+        image.src = url;
+    });
+    const loadWithRetries = async (image) => {
+        const source = image.dataset.thumbnailSrc;
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+            try {
+                const suffix = attempt ? `${source.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}` : '';
+                await load(image, `${source}${suffix}`);
+                return;
+            } catch (_) {
+                if (attempt < maxRetries) await delay(retryDelayMs);
+            }
+        }
+    };
+    const queue = [];
+    let processing = false;
+    const processQueue = async () => {
+        if (processing) return;
+        processing = true;
+        while (queue.length) {
+            await loadWithRetries(queue.shift());
+            await delay(staggerMs);
+        }
+        processing = false;
+    };
+    const enqueue = (image) => { queue.push(image); processQueue(); };
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                observer.unobserve(entry.target);
+                enqueue(entry.target);
+            });
+        }, { rootMargin: '200px 0px', threshold: 0.01 });
+        images.forEach((image) => observer.observe(image));
+    } else {
+        images.forEach(enqueue);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     setupFolderUpload();
     setupMoveDialog();
+    setupImageModal();
+    setupStaggeredThumbnails();
 });

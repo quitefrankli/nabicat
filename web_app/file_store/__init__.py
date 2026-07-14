@@ -60,6 +60,8 @@ def index():
     data_interface = DataInterface()
     base_path = request.form.get('base_path', '').strip('/')
     mode = request.args.get('mode', 'list')
+    if mode not in ('list', 'grid'):
+        mode = 'list'
     path = request.args.get('path', '')
     directory = data_interface.list_directory(path, user) if user else {'folders': [], 'files': []}
 
@@ -82,7 +84,7 @@ def index():
 
     return render_template(
         "file_store_index.html", directory=directory, current_path=path,
-        storage_info=storage_info, mode=mode,
+        storage_info=storage_info, mode=mode, thumbnail_config=ConfigManager().file_store,
     )
 
 
@@ -202,7 +204,7 @@ def download_folder(folder_path: str):
     return response
 
 
-@file_store_api.route('/thumbnail/<filename>')
+@file_store_api.route('/thumbnail/<path:filename>')
 @limiter.limit("30/second", key_func=lambda: flask_login.current_user.id)
 def thumbnail(filename: str):
     """Serve a thumbnail for an image file."""

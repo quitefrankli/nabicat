@@ -333,6 +333,9 @@ class FileStoreConfig:
     upload_stream_chunk_bytes: int = 1024 * 1024
     folder_upload_max_entries: int = 10_000
     archive_stream_queue_chunks: int = 8
+    thumbnail_load_stagger_ms: int = 200
+    thumbnail_load_max_retries: int = 3
+    thumbnail_retry_delay_ms: int = 1_000
 
 
 @dataclass

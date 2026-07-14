@@ -3,13 +3,29 @@
 {% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
 {% block navbar_brand %}File Store{% endblock %}
 
+{% block page_nav_items %}
+  <li class="nav-item mx-1">
+    <a class="nav-link {{ 'active' if mode == 'list' else '' }} d-flex align-items-center gap-2" href="{{ url_for('.index', path=current_path, mode='list') }}">
+      <i class="bi bi-list-ul"></i><span>List</span>
+    </a>
+  </li>
+  <li class="nav-item mx-1">
+    <a class="nav-link {{ 'active' if mode == 'grid' else '' }} d-flex align-items-center gap-2" href="{{ url_for('.index', path=current_path, mode='grid') }}">
+      <i class="bi bi-grid-3x3-gap"></i><span>Grid</span>
+    </a>
+  </li>
+{% endblock %}
+
 {% block page_actions %}
   <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-cloud-upload me-2"></i>Upload File</button></li>
   <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#folderModal"><i class="bi bi-folder-plus me-2"></i>New folder</button></li>
 {% endblock %}
 
 {% block page_content %}
-<div class="file-store-shell" data-current-path="{{ current_path }}">
+<div class="file-store-shell" data-current-path="{{ current_path }}"
+     data-thumbnail-stagger-ms="{{ thumbnail_config.thumbnail_load_stagger_ms }}"
+     data-thumbnail-max-retries="{{ thumbnail_config.thumbnail_load_max_retries }}"
+     data-thumbnail-retry-delay-ms="{{ thumbnail_config.thumbnail_retry_delay_ms }}">
   <section class="file-store-toolbar">
     <h5 class="visually-hidden">Your Files</h5>
     <nav aria-label="Folder path" class="file-breadcrumb">
@@ -20,10 +36,6 @@
         <i class="bi bi-chevron-right"></i><a href="{{ url_for('.index', path=partial, mode=mode) }}">{{ part }}</a>
       {% endfor %}
     </nav>
-    <div class="file-store-actions">
-      <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#folderModal" title="New folder"><i class="bi bi-folder-plus"></i></button>
-      <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-2"></i>Upload</button>
-    </div>
   </section>
 
   {% if storage_info %}
@@ -34,8 +46,43 @@
   </section>
   {% endif %}
 
-  <section class="file-directory list-group" aria-label="Files">
+  <section class="file-directory {% if mode == 'grid' %}file-grid{% else %}list-group{% endif %}" aria-label="Files">
     {% if directory.folders or directory.files %}
+      {% if mode == 'grid' %}
+      {% for folder in directory.folders %}
+      <article class="file-grid-item directory-folder">
+        <a class="file-grid-preview" href="{{ url_for('.index', path=folder.path, mode=mode) }}" aria-label="Open {{ folder.name }}">
+          <div class="file-thumbnail"><div class="file-icon-display"><i class="bi bi-folder-fill"></i></div></div>
+          <div class="file-grid-name text-truncate" title="{{ folder.name }}">{{ folder.name }}</div>
+          <div class="file-grid-meta">Folder</div>
+        </a>
+        <div class="file-grid-actions">
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_folder', folder_path=folder.path) }}" title="Download ZIP" aria-label="Download {{ folder.name }} as ZIP"><i class="bi bi-file-zip"></i></a>
+          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ folder.path }}" title="Move" aria-label="Move {{ folder.name }}"><i class="bi bi-arrows-move"></i></button>
+          <form method="post" action="{{ url_for('.delete_file', filename=folder.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete folder" aria-label="Delete {{ folder.name }}" onclick="return confirm('Delete this folder and everything in it?');"><i class="bi bi-trash"></i></button></form>
+        </div>
+      </article>
+      {% endfor %}
+      {% for file in directory.files %}
+      <article class="file-grid-item">
+        {% if file.mime_type.startswith('image/') %}
+        <button type="button" class="file-grid-preview" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-url="{{ url_for('.download_file', filename=file.path) }}" data-image-name="{{ file.name }}" aria-label="Preview {{ file.name }}">
+          <div class="file-thumbnail"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" data-thumbnail-src="{{ url_for('.thumbnail', filename=file.path) }}" alt="{{ file.name }}" loading="lazy"></div>
+        {% else %}
+        <div class="file-grid-preview">
+          <div class="file-thumbnail"><div class="file-icon-display"><i class="bi bi-file-earmark"></i></div></div>
+        {% endif %}
+          <div class="file-grid-name text-truncate" title="{{ file.name }}">{{ file.name }}</div>
+          <div class="file-grid-meta">{{ file.size_formatted }}</div>
+        {% if file.mime_type.startswith('image/') %}</button>{% else %}</div>{% endif %}
+        <div class="file-grid-actions">
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=file.path) }}" title="Download" aria-label="Download {{ file.name }}"><i class="bi bi-download"></i></a>
+          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ file.path }}" title="Move" aria-label="Move {{ file.name }}"><i class="bi bi-arrows-move"></i></button>
+          <form method="post" action="{{ url_for('.delete_file', filename=file.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete file" aria-label="Delete {{ file.name }}" onclick="return confirm('Delete this file?');"><i class="bi bi-trash"></i></button></form>
+        </div>
+      </article>
+      {% endfor %}
+      {% else %}
       {% for folder in directory.folders %}
       <article class="directory-item directory-folder">
         <a class="directory-link" href="{{ url_for('.index', path=folder.path, mode=mode) }}"><i class="bi bi-folder-fill"></i><span>{{ folder.name }}</span></a>
@@ -56,11 +103,14 @@
         </div>
       </article>
       {% endfor %}
+      {% endif %}
     {% else %}
       <div class="file-empty-state"><i class="bi bi-folder2-open"></i><h2>No files in this folder</h2><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-2"></i>Upload</button></div>
     {% endif %}
   </section>
 </div>
+
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 text-truncate" id="imageModalLabel"></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body text-center"><img id="modalImage" class="img-fluid" alt=""></div></div></div></div>
 
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
   <form id="uploadForm" action="{{ url_for('.upload_file') }}" enctype="multipart/form-data">

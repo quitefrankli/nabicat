@@ -372,6 +372,7 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 200
         assert b'file1.txt' in response.data
+        assert b'file-store-actions' not in response.data
 
     @patch('web_app.file_store.DataInterface')
     def test_index_grid_mode_shows_all_files(self, mock_di_class, client, auth_mock):
@@ -391,9 +392,27 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/?mode=grid')
 
         assert response.status_code == 200
-        # Grid mode should show both files
+        assert b'file-directory file-grid' in response.data
+        assert b'data-thumbnail-src=' in response.data
         assert b'photo.jpg' in response.data
         assert b'document.txt' in response.data
+
+    @patch('web_app.file_store.DataInterface')
+    def test_grid_mode_uses_nested_thumbnail_path(self, mock_di_class, client, auth_mock):
+        mock_di = mock_di_class.return_value
+        mock_di.list_directory.return_value = {'folders': [], 'files': [
+            {'name': 'photo.jpg', 'path': 'photos/photo.jpg', 'size': 100,
+             'size_formatted': '100.0 B', 'mime_type': 'image/jpeg'},
+        ]}
+        mock_di.get_total_storage_size.return_value = 100
+
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        response = client.get('/file_store/?mode=grid')
+
+        assert response.status_code == 200
+        assert b'/file_store/thumbnail/photos/photo.jpg' in response.data
 
     @patch('web_app.file_store.DataInterface')
     def test_upload_file_success(self, mock_di_class, client, auth_mock):
