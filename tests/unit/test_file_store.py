@@ -3,6 +3,7 @@
 import pytest
 import io
 import binascii
+import logging
 import zipfile
 from datetime import datetime
 from unittest.mock import Mock, patch
@@ -432,7 +433,7 @@ class TestFileStoreRoutes:
         assert b'/file_store/thumbnail/photos/photo.jpg' in response.data
 
     @patch('web_app.file_store.DataInterface')
-    def test_upload_file_success(self, mock_di_class, client, auth_mock):
+    def test_upload_file_success(self, mock_di_class, client, auth_mock, caplog):
         """Test successful file upload"""
         mock_di = mock_di_class.return_value
         mock_di.get_total_storage_size.return_value = 0
@@ -441,13 +442,27 @@ class TestFileStoreRoutes:
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
+        caplog.set_level(logging.INFO)
         data = {'file': (io.BytesIO(b'test content'), 'test.txt')}
         response = client.post('/file_store/upload', data=data, content_type='multipart/form-data')
 
         assert response.status_code == 302  # Redirect
+        assert 'file_store.upload user=' in caplog.text
+        assert 'files=1' in caplog.text
 
     @patch('web_app.file_store.DataInterface')
-    def test_download_file(self, mock_di_class, client, auth_mock, tmp_path):
+    def test_upload_file_rejection_is_logged(self, mock_di_class, client, auth_mock, caplog):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        caplog.set_level(logging.WARNING)
+        response = client.post('/file_store/upload', data={}, content_type='multipart/form-data')
+
+        assert response.status_code == 302
+        assert 'file_store.upload_rejected user=' in caplog.text
+
+    @patch('web_app.file_store.DataInterface')
+    def test_download_file(self, mock_di_class, client, auth_mock, tmp_path, caplog):
         """Test downloading a file"""
         mock_di = mock_di_class.return_value
 
@@ -459,12 +474,15 @@ class TestFileStoreRoutes:
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
+        caplog.set_level(logging.INFO)
         response = client.get('/file_store/download/test.txt')
 
         assert response.status_code == 200
+        assert 'file_store.download user=' in caplog.text
+        assert "path='test.txt'" in caplog.text
 
     @patch('web_app.file_store.DataInterface')
-    def test_download_folder_returns_nested_zip(self, mock_di_class, client, auth_mock, tmp_path):
+    def test_download_folder_returns_nested_zip(self, mock_di_class, client, auth_mock, tmp_path, caplog):
         stored_file = tmp_path / '123'
         stored_file.write_bytes(b'budget')
         mock_di_class.return_value.get_folder_files.return_value = [
@@ -473,14 +491,17 @@ class TestFileStoreRoutes:
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
+        caplog.set_level(logging.INFO)
         response = client.get('/file_store/download-folder/reports')
 
         assert response.status_code == 200
+        assert 'file_store.download_folder user=' in caplog.text
+        assert "path='reports'" in caplog.text
         with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
             assert archive.read('reports/2026/budget.csv') == b'budget'
 
     @patch('web_app.file_store.DataInterface')
-    def test_delete_all_files(self, mock_di_class, client, auth_mock):
+    def test_delete_all_files(self, mock_di_class, client, auth_mock, caplog):
         """Test deleting all files for current user"""
         mock_di = mock_di_class.return_value
         mock_di.list_files.return_value = ['file1.txt', 'file2.txt']
@@ -488,10 +509,13 @@ class TestFileStoreRoutes:
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
+        caplog.set_level(logging.INFO)
         response = client.post('/file_store/delete_all')
 
         assert response.status_code == 302
         assert mock_di.delete_file.call_count == 2
+        assert 'file_store.delete_all user=' in caplog.text
+        assert 'files=2' in caplog.text
 
 
 class TestFileStoreBlueprint:
