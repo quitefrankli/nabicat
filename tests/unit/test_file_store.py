@@ -3,6 +3,7 @@
 import pytest
 import io
 import binascii
+import zipfile
 from datetime import datetime
 from unittest.mock import Mock, patch
 from werkzeug.datastructures import FileStorage
@@ -78,6 +79,33 @@ def data_interface(tmp_path):
 
 class TestDataInterface:
     """Tests for FileStoreDataInterface with metadata-based storage"""
+
+    def test_nested_folder_file_can_be_moved_and_deleted(self, data_interface, test_user):
+        data_interface.create_folder('reports/2026', test_user)
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'budget'), 'budget.csv', content_type='text/csv'),
+            test_user,
+            relative_path='reports/2026/budget.csv',
+        )
+
+        directory = data_interface.list_directory('reports/2026', test_user)
+        assert [item['name'] for item in directory['files']] == ['budget.csv']
+
+        data_interface.move_path('reports/2026/budget.csv', 'reports/budget.csv', test_user)
+        assert data_interface.get_file_path('reports/budget.csv', test_user).exists()
+
+        data_interface.delete_path('reports', test_user)
+        assert data_interface.list_directory('', test_user) == {'folders': [], 'files': []}
+
+    def test_folder_import_rejects_file_folder_path_collision(self, data_interface, test_user):
+        data_interface.save_file(FileStorage(io.BytesIO(b'file'), 'reports'), test_user)
+
+        with pytest.raises(ValueError, match='folder path'):
+            data_interface.save_files(
+                [(FileStorage(io.BytesIO(b'budget'), 'budget.csv'), 'reports/budget.csv')],
+                [],
+                test_user,
+            )
 
     def test_save_file_streams_large_upload_in_chunks(self, data_interface, test_user):
         """Uploads are copied incrementally rather than buffered in memory."""
@@ -331,11 +359,10 @@ class TestFileStoreRoutes:
     def test_index_list_mode(self, mock_di_class, client, auth_mock):
         """Test index page in list mode"""
         mock_di = mock_di_class.return_value
-        mock_di.list_files_with_metadata.return_value = [
-            {'name': 'file1.txt', 'size': 100, 'size_formatted': '100.0 B',
-             'modified': None, 'modified_formatted': '2024-01-01 00:00',
-             'crc': 123, 'mime_type': 'text/plain'},
-        ]
+        mock_di.list_directory.return_value = {'folders': [], 'files': [
+            {'name': 'file1.txt', 'path': 'file1.txt', 'size': 100,
+             'size_formatted': '100.0 B', 'mime_type': 'text/plain'},
+        ]}
         mock_di.get_total_storage_size.return_value = 100
 
         with client.session_transaction() as sess:
@@ -344,20 +371,18 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/?mode=list')
 
         assert response.status_code == 200
-        assert b'List' in response.data
+        assert b'file1.txt' in response.data
 
     @patch('web_app.file_store.DataInterface')
     def test_index_grid_mode_shows_all_files(self, mock_di_class, client, auth_mock):
         """Test that grid mode shows all files (not just images)"""
         mock_di = mock_di_class.return_value
-        mock_di.list_files_with_metadata.return_value = [
-            {'name': 'photo.jpg', 'size': 100, 'size_formatted': '100.0 B',
-             'modified': None, 'modified_formatted': '2024-01-01 00:00',
-             'crc': 123, 'mime_type': 'image/jpeg'},
-            {'name': 'document.txt', 'size': 200, 'size_formatted': '200.0 B',
-             'modified': None, 'modified_formatted': '2024-01-01 00:00',
-             'crc': 456, 'mime_type': 'text/plain'},
-        ]
+        mock_di.list_directory.return_value = {'folders': [], 'files': [
+            {'name': 'photo.jpg', 'path': 'photo.jpg', 'size': 100,
+             'size_formatted': '100.0 B', 'mime_type': 'image/jpeg'},
+            {'name': 'document.txt', 'path': 'document.txt', 'size': 200,
+             'size_formatted': '200.0 B', 'mime_type': 'text/plain'},
+        ]}
         mock_di.get_total_storage_size.return_value = 300
 
         with client.session_transaction() as sess:
@@ -401,6 +426,22 @@ class TestFileStoreRoutes:
         response = client.get('/file_store/download/test.txt')
 
         assert response.status_code == 200
+
+    @patch('web_app.file_store.DataInterface')
+    def test_download_folder_returns_nested_zip(self, mock_di_class, client, auth_mock, tmp_path):
+        stored_file = tmp_path / '123'
+        stored_file.write_bytes(b'budget')
+        mock_di_class.return_value.get_folder_files.return_value = [
+            ('reports/2026/budget.csv', stored_file),
+        ]
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        response = client.get('/file_store/download-folder/reports')
+
+        assert response.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            assert archive.read('reports/2026/budget.csv') == b'budget'
 
     @patch('web_app.file_store.DataInterface')
     def test_delete_all_files(self, mock_di_class, client, auth_mock):

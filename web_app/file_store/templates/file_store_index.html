@@ -3,270 +3,90 @@
 {% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
 {% block navbar_brand %}File Store{% endblock %}
 
-{% block page_nav_items %}
-  <li class="nav-item mx-1">
-    <a class="nav-link {{'active' if mode == 'list' else ''}} d-flex align-items-center gap-2" href="{{ url_for('.index', mode='list') }}">
-      <i class="bi bi-list-ul"></i>
-      <span>List</span>
-    </a>
-  </li>
-  <li class="nav-item mx-1">
-    <a class="nav-link {{'active' if mode == 'grid' else ''}} d-flex align-items-center gap-2" href="{{ url_for('.index', mode='grid') }}">
-      <i class="bi bi-grid-3x3-gap"></i>
-      <span>Grid</span>
-    </a>
-  </li>
-{% endblock %}
-
 {% block page_actions %}
-  <li>
-    <button class="dropdown-item d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadModal">
-      <i class="bi bi-cloud-upload text-primary"></i>
-      <span>Upload File</span>
-    </button>
-  </li>
-  <li><hr class="dropdown-divider"></li>
-  <li>
-    <form method="post" action="{{ url_for('.delete_all_files') }}"
-          onsubmit="return confirm('Are you sure you want to delete all files? This cannot be undone.');">
-      <button type="submit" class="dropdown-item d-flex align-items-center gap-2 text-danger">
-        <i class="bi bi-trash3"></i>
-        <span>Delete All Files</span>
-      </button>
-    </form>
-  </li>
-{% endblock %}
-
-{% block actions_modal %}
-<!-- Image Preview Modal -->
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-xl">
-    <div class="modal-content border-0 bg-transparent">
-      <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="min-height: 70vh;">
-        <img src="" id="modalImage" class="img-fluid rounded-3" alt="" style="max-height: 85vh; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
-      </div>
-      <div class="modal-footer border-0 bg-dark bg-opacity-75 justify-content-center">
-        <p class="text-white mb-0 text-truncate" id="modalImageName"></p>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Upload Modal -->
-<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title d-flex align-items-center gap-2" id="uploadModalLabel">
-          <i class="bi bi-cloud-upload-fill text-sage fs-4"></i>
-          Upload File
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form method="post" action="{{ url_for('.upload_file') }}" enctype="multipart/form-data" id="uploadForm">
-        <div class="modal-body">
-          <div class="text-center mb-4" id="uploadIcon">
-            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
-                 style="width: 80px; height: 80px; background: rgba(135, 168, 120, 0.1);">
-              <i class="bi bi-cloud-arrow-up text-sage" style="font-size: 2.5rem;"></i>
-            </div>
-            <p class="text-muted mb-0">Select or drag and drop files to upload to your storage</p>
-          </div>
-          <input class="form-control form-control-lg" type="file" name="file" id="fileInput" required multiple
-                 data-max-size="{{ storage_info.remaining if storage_info else 0 }}"
-                 data-max-formatted="{{ storage_info.remaining_formatted if storage_info else '0 B' }}">
-          <div class="alert alert-danger mt-3 d-none" id="fileSizeError">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <span id="fileSizeErrorText"></span>
-          </div>
-          <!-- Upload Progress -->
-          <div class="d-none mt-4" id="uploadProgress">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="text-muted" id="uploadFileName"></span>
-              <span class="text-muted" id="uploadPercent">0%</span>
-            </div>
-            <div class="progress" style="height: 8px;">
-              <div class="progress-bar bg-sage progress-bar-striped progress-bar-animated"
-                   id="uploadProgressBar" role="progressbar" style="width: 0%"></div>
-            </div>
-            <div class="text-muted small mt-2" id="uploadStats"></div>
-          </div>
-        </div>
-        <div class="modal-footer border-0 pt-0">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="cancelBtn">Cancel</button>
-          <button class="btn btn-primary d-flex align-items-center gap-2" type="submit" id="uploadBtn">
-            <i class="bi bi-upload"></i>
-            Upload
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+  <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-cloud-upload me-2"></i>Upload File</button></li>
+  <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#folderModal"><i class="bi bi-folder-plus me-2"></i>New folder</button></li>
 {% endblock %}
 
 {% block page_content %}
-<!-- Download Progress Overlay -->
-<div class="position-fixed top-0 start-0 w-100 h-100 d-none" id="downloadOverlay"
-     style="background: rgba(0,0,0,0.5); z-index: 1060;">
-  <div class="position-absolute top-50 start-50 translate-middle bg-white rounded-3 p-4 shadow" style="min-width: 350px;">
-    <div class="text-center mb-3">
-      <i class="bi bi-cloud-download text-sage" style="font-size: 2.5rem;"></i>
+<div class="file-store-shell" data-current-path="{{ current_path }}">
+  <section class="file-store-toolbar">
+    <h5 class="visually-hidden">Your Files</h5>
+    <nav aria-label="Folder path" class="file-breadcrumb">
+      <a href="{{ url_for('.index', mode=mode) }}"><i class="bi bi-house-door"></i><span>Files</span></a>
+      {% set parts = current_path.split('/') if current_path else [] %}
+      {% for part in parts %}
+        {% set partial = parts[:loop.index]|join('/') %}
+        <i class="bi bi-chevron-right"></i><a href="{{ url_for('.index', path=partial, mode=mode) }}">{{ part }}</a>
+      {% endfor %}
+    </nav>
+    <div class="file-store-actions">
+      <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#folderModal" title="New folder"><i class="bi bi-folder-plus"></i></button>
+      <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-2"></i>Upload</button>
     </div>
-    <h6 class="text-center mb-3">Downloading</h6>
-    <div class="text-truncate text-muted small mb-2" id="downloadFileName"></div>
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="text-muted small" id="downloadStats"></span>
-      <span class="text-muted small" id="downloadPercent">0%</span>
-    </div>
-    <div class="progress" style="height: 8px;">
-      <div class="progress-bar bg-success progress-bar-striped progress-bar-animated"
-           id="downloadProgressBar" role="progressbar" style="width: 0%"></div>
-    </div>
-  </div>
+  </section>
+
+  {% if storage_info %}
+  <section class="storage-summary">
+    <div><strong>{{ storage_info.used_formatted }}</strong> of {{ storage_info.max_formatted }}</div>
+    <div class="storage-track"><div class="storage-fill" style="width: {{ storage_info.usage_percent }}%"></div></div>
+    <span>{{ storage_info.remaining_formatted }} remaining</span>
+  </section>
+  {% endif %}
+
+  <section class="file-directory list-group" aria-label="Files">
+    {% if directory.folders or directory.files %}
+      {% for folder in directory.folders %}
+      <article class="directory-item directory-folder">
+        <a class="directory-link" href="{{ url_for('.index', path=folder.path, mode=mode) }}"><i class="bi bi-folder-fill"></i><span>{{ folder.name }}</span></a>
+        <div class="directory-actions">
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_folder', folder_path=folder.path) }}" title="Download ZIP"><i class="bi bi-file-zip"></i></a>
+          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ folder.path }}" title="Move"><i class="bi bi-arrows-move"></i></button>
+          <form method="post" action="{{ url_for('.delete_file', filename=folder.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete folder" onclick="return confirm('Delete this folder and everything in it?');"><i class="bi bi-trash"></i></button></form>
+        </div>
+      </article>
+      {% endfor %}
+      {% for file in directory.files %}
+      <article class="directory-item">
+        <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ file.name }}</span><small>{{ file.size_formatted }}</small></div>
+        <div class="directory-actions">
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=file.path) }}" title="Download"><i class="bi bi-download"></i></a>
+          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ file.path }}" title="Move"><i class="bi bi-arrows-move"></i></button>
+          <form method="post" action="{{ url_for('.delete_file', filename=file.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete file" onclick="return confirm('Delete this file?');"><i class="bi bi-trash"></i></button></form>
+        </div>
+      </article>
+      {% endfor %}
+    {% else %}
+      <div class="file-empty-state"><i class="bi bi-folder2-open"></i><h2>No files in this folder</h2><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-2"></i>Upload</button></div>
+    {% endif %}
+  </section>
 </div>
 
-<div class="row justify-content-center">
-  <div class="col-12 {% if mode == 'grid' %}col-xl-11{% else %}col-lg-8{% endif %}">
-    <div class="card border-0 shadow-soft">
-      <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-4">
-        <h5 class="mb-0 d-flex align-items-center gap-2">
-          <i class="bi bi-{% if mode == 'grid' %}grid-fill{% else %}folder-fill{% endif %} text-sage"></i>
-          Your Files
-        </h5>
-        {% if files %}
-          <span class="badge bg-sage">{{ files|length }} file{{ 's' if files|length > 1 else '' }}</span>
-        {% endif %}
-      </div>
-      
-      {# Storage Usage Bar for Non-Admin Users #}
-      {% if storage_info %}
-      <div class="px-4 pb-3">
-        <div class="storage-usage-card">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="storage-label">
-              <i class="bi bi-hdd-fill me-1"></i>
-              Storage Usage
-            </span>
-            <span class="storage-text">
-              {{ storage_info.used_formatted }} / {{ storage_info.max_formatted }}
-            </span>
-          </div>
-          <div class="storage-bar-container">
-            <div class="storage-bar-fill" style="width: {{ storage_info.usage_percent }}%;"></div>
-          </div>
-          <div class="d-flex justify-content-between align-items-center mt-1">
-            <span class="storage-percentage">{{ "%.1f"|format(storage_info.usage_percent) }}% used</span>
-            <span class="storage-remaining">{{ storage_info.remaining_formatted }} remaining</span>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-      
-      <div class="card-body p-4 pt-2">
-        {% if files %}
-          {% if mode == 'list' %}
-          <div class="list-group list-group-flush">
-            {% for file in files %}
-            <div class="list-group-item file-list-item px-0 py-0 border-0 mb-3" style="border-radius: 12px; overflow: hidden;">
-              <div class="d-flex align-items-center gap-3 py-3 px-0 file-list-row">
-                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-                     style="width: 44px; height: 44px; background: rgba(135, 168, 120, 0.1);">
-                  <i class="bi bi-file-earmark text-sage"></i>
-                </div>
-                <button class="btn btn-link text-decoration-none flex-grow-1 text-start p-0 min-width-0 file-list-main"
-                        type="button"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#file-{{ loop.index }}"
-                        aria-expanded="false"
-                        aria-controls="file-{{ loop.index }}"
-                        style="color: var(--hw-text-primary);">
-                  <div class="text-truncate file-name">{{ file.name }}</div>
-                  <div class="file-meta">
-                    <span class="file-size">{{ file.size_formatted }}</span>
-                    <span class="file-meta-separator">•</span>
-                    <span class="file-date">{{ file.modified_formatted }}</span>
-                  </div>
-                </button>
-                <div class="d-flex gap-2 flex-shrink-0 file-list-actions">
-                  <button type="button"
-                     class="btn btn-success btn-sm d-flex align-items-center gap-1 download-btn"
-                     data-url="{{ url_for('.download_file', filename=file.name) }}"
-                     data-filename="{{ file.name }}"
-                     data-size="{{ file.size }}"
-                     title="Download">
-                    <i class="bi bi-download"></i>
-                  </button>
-                  <form method="post" action="{{ url_for('.delete_file', filename=file.name) }}"
-                        class="d-inline" onsubmit="return confirm('Are you sure you want to delete this file?');">
-                    <button type="submit" class="btn btn-danger btn-sm" title="Delete">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </div>
-              </div>
-              <div id="file-{{ loop.index }}" class="collapse">
-                <div class="px-3 pb-3" style="background: rgba(135, 168, 120, 0.05); border-top: 1px solid var(--hw-border);">
-                  <div class="pt-3">
-                    <h6 class="mb-2 text-muted small">Full Filename:</h6>
-                    <p class="mb-0" style="word-break: break-all;">{{ file.name }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          {% else %}
-          <!-- Grid View -->
-          <div class="file-grid">
-            {% for file in files %}
-            <div class="file-grid-item"
-                 {% if file.mime_type.startswith('image/') %}
-                 data-bs-toggle="modal"
-                 data-bs-target="#imageModal"
-                 data-image-url="{{ url_for('.download_file', filename=file.name) }}"
-                 data-image-name="{{ file.name }}"
-                 style="cursor: pointer;"
-                 {% endif %}>
-              <div class="file-thumbnail">
-                {% if file.mime_type.startswith('image/') %}
-                  <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-                       data-thumbnail-src="{{ url_for('.thumbnail', filename=file.name) }}"
-                       alt="{{ file.name }}"
-                       loading="lazy">
-                {% else %}
-                  <div class="file-icon-display">
-                    <i class="bi bi-file-earmark text-sage" style="font-size: 3rem;"></i>
-                  </div>
-                {% endif %}
-              </div>
-              <div class="file-grid-name text-truncate" title="{{ file.name }}">{{ file.name }}</div>
-              <div class="file-grid-meta">{{ file.size_formatted }}</div>
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-        {% else %}
-          <!-- Empty State -->
-          <div class="text-center py-5">
-            <div class="mb-4">
-              <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
-                   style="width: 100px; height: 100px; background: rgba(135, 168, 120, 0.1);">
-                <i class="bi bi-folder2-open text-sage" style="font-size: 3rem;"></i>
-              </div>
-            </div>
-            <h5 class="text-muted mb-2">No files yet</h5>
-            <p class="text-muted mb-4">Upload your first file to get started</p>
-            <button class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadModal">
-              <i class="bi bi-plus-lg"></i>
-              Upload File
-            </button>
-          </div>
-        {% endif %}
-      </div>
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <form id="uploadForm" action="{{ url_for('.upload_file') }}" enctype="multipart/form-data">
+    <div class="modal-header"><h2 class="modal-title fs-5">Upload to {{ current_path or 'Files' }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <label class="form-label" for="fileInput">Files</label><input class="form-control" id="fileInput" type="file" multiple>
+      <label class="form-label mt-3" for="folderInput">Folder</label><input class="form-control" id="folderInput" type="file" webkitdirectory multiple>
+      <div class="folder-zip-fallback mt-3"><label class="form-label" for="archiveInput">Folder ZIP</label><input class="form-control" id="archiveInput" type="file" accept=".zip,application/zip"></div>
+      <div class="progress d-none mt-3" id="uploadProgress"><div class="progress-bar bg-sage" id="uploadProgressBar" role="progressbar"></div></div>
+      <p class="small text-muted mt-2 mb-0" id="uploadStatus"></p>
     </div>
-  </div>
-</div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" id="uploadBtn"><i class="bi bi-upload me-2"></i>Upload</button></div>
+  </form>
+</div></div></div>
+
+<div class="modal fade" id="folderModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.create_folder') }}">
+  <div class="modal-header"><h2 class="modal-title fs-5">New folder</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" name="parent" value="{{ current_path }}"><label class="form-label" for="newFolderName">Folder name</label><input class="form-control" id="newFolderName" name="path" required pattern="[^/\\]+" autocomplete="off"></div>
+  <div class="modal-footer"><button class="btn btn-primary">Create folder</button></div>
+</form></div></div></div>
+
+<div class="modal fade" id="moveModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.move_path') }}">
+  <div class="modal-header"><h2 class="modal-title fs-5">Move item</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" name="source" id="moveSource"><input type="hidden" name="parent" value="{{ current_path }}"><label class="form-label" for="moveDestination">New path</label><input class="form-control" id="moveDestination" name="destination" required></div>
+  <div class="modal-footer"><button class="btn btn-primary">Move</button></div>
+</form></div></div></div>
 {% endblock %}
 
 {% block scripts %}
