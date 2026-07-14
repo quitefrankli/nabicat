@@ -94,7 +94,7 @@ function setupImageModal() {
     if (!modal) return;
     const image = document.getElementById('modalImage');
     const label = document.getElementById('imageModalLabel');
-    document.querySelectorAll('.file-grid-preview[data-bs-toggle="modal"]').forEach((preview) => {
+    document.querySelectorAll('.file-grid-item [data-bs-toggle="modal"]').forEach((preview) => {
         preview.addEventListener('click', () => {
             image.src = preview.dataset.imageUrl;
             image.alt = preview.dataset.imageName;
@@ -156,9 +156,44 @@ function setupStaggeredThumbnails() {
     }
 }
 
+function setupGalleryDensity() {
+    const shell = document.querySelector('.file-store-shell');
+    const gallery = document.querySelector('.file-directory.file-grid');
+    const slider = document.getElementById('galleryColumns');
+    const value = document.getElementById('galleryColumnsValue');
+    if (!shell || !gallery || !slider || !value) return;
+
+    const minColumns = Number(slider.min);
+    const maxColumns = Number(slider.max);
+    const minTilePx = Number(shell.dataset.galleryMinTilePx);
+    let preferredColumns = Number(slider.value);
+
+    const applyColumns = () => {
+        const gapPx = Number.parseFloat(getComputedStyle(gallery).gap) || 0;
+        const viewportMaximum = Math.floor((gallery.clientWidth + gapPx) / (minTilePx + gapPx));
+        const availableMaximum = Math.max(minColumns, Math.min(maxColumns, viewportMaximum));
+        const columns = Math.min(preferredColumns, availableMaximum);
+
+        gallery.style.setProperty('--file-grid-columns', columns);
+        slider.max = availableMaximum;
+        slider.value = columns;
+        value.value = `${columns} columns`;
+        value.textContent = `${columns} columns`;
+        slider.setAttribute('aria-valuetext', `${columns} columns`);
+    };
+
+    slider.addEventListener('input', () => {
+        preferredColumns = Number(slider.value);
+        applyColumns();
+    });
+    window.addEventListener('resize', applyColumns);
+    applyColumns();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     setupFolderUpload();
     setupMoveDialog();
     setupImageModal();
     setupStaggeredThumbnails();
+    setupGalleryDensity();
 });

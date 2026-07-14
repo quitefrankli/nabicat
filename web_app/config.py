@@ -336,6 +336,10 @@ class FileStoreConfig:
     thumbnail_load_stagger_ms: int = 200
     thumbnail_load_max_retries: int = 3
     thumbnail_retry_delay_ms: int = 1_000
+    gallery_columns_min: int = 2
+    gallery_columns_max: int = 10
+    gallery_columns_default: int = 5
+    gallery_min_tile_px: int = 40
 
 
 @dataclass

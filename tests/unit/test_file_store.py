@@ -373,12 +373,15 @@ class TestFileStoreRoutes:
         assert response.status_code == 200
         assert b'file1.txt' in response.data
         assert b'file-store-actions' not in response.data
+        assert b'id="galleryColumns"' not in response.data
 
     @patch('web_app.file_store.DataInterface')
-    def test_index_grid_mode_shows_all_files(self, mock_di_class, client, auth_mock):
-        """Test that grid mode shows all files (not just images)"""
+    def test_index_grid_mode_shows_folders_and_images_only(self, mock_di_class, client, auth_mock):
+        """Grid mode is a visual gallery, not a second file list."""
         mock_di = mock_di_class.return_value
-        mock_di.list_directory.return_value = {'folders': [], 'files': [
+        mock_di.list_directory.return_value = {'folders': [
+            {'name': 'Photos', 'path': 'photos'},
+        ], 'files': [
             {'name': 'photo.jpg', 'path': 'photo.jpg', 'size': 100,
              'size_formatted': '100.0 B', 'mime_type': 'image/jpeg'},
             {'name': 'document.txt', 'path': 'document.txt', 'size': 200,
@@ -393,9 +396,17 @@ class TestFileStoreRoutes:
 
         assert response.status_code == 200
         assert b'file-directory file-grid' in response.data
+        assert b'file-grid-folder' in response.data
+        assert b'file-grid-folder-name' in response.data
+        assert b'Photos' in response.data
         assert b'data-thumbnail-src=' in response.data
+        assert b'id="galleryColumns"' in response.data
+        assert b'min="2"' in response.data
+        assert b'max="10"' in response.data
+        assert b'value="5"' in response.data
         assert b'photo.jpg' in response.data
-        assert b'document.txt' in response.data
+        assert b'document.txt' not in response.data
+        assert b'file-grid-actions' not in response.data
 
     @patch('web_app.file_store.DataInterface')
     def test_grid_mode_uses_nested_thumbnail_path(self, mock_di_class, client, auth_mock):
