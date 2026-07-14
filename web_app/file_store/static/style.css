@@ -372,3 +372,26 @@ input[type="file"].form-control:hover {
 #imageModal #modalImageName {
   max-width: 80vw;
 }
+/* Directory browser */
+.file-store-shell { max-width: 960px; margin: 0 auto; }
+.file-store-toolbar, .file-store-actions, .file-breadcrumb, .directory-item, .directory-actions { display: flex; align-items: center; }
+.file-store-toolbar { justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.file-store-actions, .directory-actions { gap: .5rem; }
+.file-breadcrumb { gap: .5rem; flex-wrap: wrap; color: var(--hw-text-secondary); }
+.file-breadcrumb a { color: var(--hw-forest); text-decoration: none; }
+.storage-summary { display: grid; gap: .4rem; margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--hw-border); border-radius: var(--hw-radius-md); background: rgba(255,255,255,.8); }
+.storage-summary span { color: var(--hw-text-secondary); font-size: .9rem; }
+.storage-track { height: .5rem; overflow: hidden; border-radius: var(--hw-radius-full); background: var(--hw-bg-cream); }
+.storage-fill { height: 100%; background: var(--hw-gradient-sage); }
+.file-directory { overflow: hidden; border: 1px solid var(--hw-border); border-radius: var(--hw-radius-lg); background: rgba(255,255,255,.9); box-shadow: var(--hw-shadow-sm); }
+.directory-item { justify-content: space-between; gap: 1rem; min-height: 3.5rem; padding: .65rem 1rem; border-bottom: 1px solid var(--hw-border); }
+.directory-item:last-child { border-bottom: 0; }
+.directory-link { display: flex; min-width: 0; align-items: center; gap: .75rem; color: var(--hw-text-primary); text-decoration: none; }
+.directory-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.directory-link i { color: var(--hw-sage-dark); font-size: 1.25rem; }
+.directory-link small { color: var(--hw-text-muted); }
+.directory-item form { margin: 0; }
+.file-empty-state { display: grid; justify-items: center; gap: 1rem; padding: 4rem 1rem; color: var(--hw-text-secondary); text-align: center; }
+.file-empty-state > i { font-size: 4rem; color: var(--hw-sage); opacity: .55; }
+.file-empty-state h2 { font: 600 1.25rem 'Playfair Display', serif; margin: 0; }
+@media (max-width: 768px) { .file-store-toolbar { align-items: flex-start; flex-direction: column; } .file-store-actions { width: 100%; } .file-store-actions .btn-primary { flex: 1; } .directory-item { padding: .65rem; } .directory-actions { gap: .3rem; } }

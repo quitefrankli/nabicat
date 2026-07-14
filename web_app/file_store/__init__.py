@@ -1,7 +1,13 @@
 import logging
+import mimetypes
+import queue
+import stat
+import threading
+import zipfile
+from pathlib import PurePosixPath
 
 from werkzeug.datastructures import FileStorage
-from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash
+from flask import Blueprint, Response, render_template, request, send_file, redirect, stream_with_context, url_for, flash
 import flask_login
 
 from web_app.helpers import cur_user, register_app_name, require_login_blueprint
@@ -23,12 +29,39 @@ require_login_blueprint(file_store_api)
 register_app_name(file_store_api, 'File Store')
 
 
+class _ZipQueue:
+    def __init__(self, output: queue.Queue) -> None:
+        self.output = output
+        self.position = 0
+
+    def write(self, data: bytes) -> int:
+        if data:
+            self.output.put(data)
+            self.position += len(data)
+        return len(data)
+
+    def tell(self) -> int:
+        return self.position
+
+    def flush(self) -> None:
+        pass
+
+
+def _file_size(file: FileStorage) -> int:
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    return size
+
+
 @file_store_api.route('/')
 def index():
     user = cur_user()
     data_interface = DataInterface()
+    base_path = request.form.get('base_path', '').strip('/')
     mode = request.args.get('mode', 'list')
-    files = data_interface.list_files_with_metadata(user) if user else []
+    path = request.args.get('path', '')
+    directory = data_interface.list_directory(path, user) if user else {'folders': [], 'files': []}
 
     # Calculate storage info for all users
     storage_info = None
@@ -47,7 +80,10 @@ def index():
             'remaining_formatted': format_file_size(max(0, max_storage - total_used))
         }
 
-    return render_template("file_store_index.html", files=files, storage_info=storage_info, mode=mode)
+    return render_template(
+        "file_store_index.html", directory=directory, current_path=path,
+        storage_info=storage_info, mode=mode,
+    )
 
 
 @file_store_api.route('/upload', methods=['POST'])
@@ -59,13 +95,14 @@ def index():
 def upload_file():
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
-    if 'file' not in request.files:
+    files = request.files.getlist('file')
+    archive = request.files.get('folder_archive')
+    if not files and not archive:
         if is_ajax:
             return {'error': 'No file part'}, 400
         flash('No file part', 'error')
         return redirect(url_for('.index'))
-    file: FileStorage = request.files['file']
-    if not file.filename:
+    if files and any(not file.filename for file in files):
         if is_ajax:
             return {'error': 'No selected file'}, 400
         flash('No selected file', 'error')
@@ -74,28 +111,50 @@ def upload_file():
     user = cur_user()
     data_interface = DataInterface()
     
-    # Check storage limit for all users
-    current_size = data_interface.get_total_storage_size(user)
-    # Get file size from the stream
-    file.seek(0, 2)  # Seek to end
-    file_size = file.tell()
-    file.seek(0)  # Reset to beginning
-    
-    fs_cfg = ConfigManager().file_store
-    max_storage = fs_cfg.admin_quota_bytes if user.has_elevated_access() else fs_cfg.non_admin_quota_bytes
-
-    if current_size + file_size > max_storage:
-        max_label = f'{max_storage / (1024*1024*1024):.0f}GB' if user.has_elevated_access() else f'{max_storage / (1024*1024):.0f}MB'
-        error_msg = (f'Upload failed: Storage limit of {max_label} exceeded. '
-                     f'Current usage: {format_file_size(current_size)}, '
-                     f'File size: {format_file_size(file_size)}')
+    try:
+        if archive:
+            if files:
+                raise ValueError('Upload either files or one folder archive')
+            with zipfile.ZipFile(archive.stream) as zip_file:
+                entries = zip_file.infolist()
+                if len(entries) > ConfigManager().file_store.folder_upload_max_entries:
+                    raise ValueError('Too many files in folder archive')
+                folders, file_entries = [], []
+                for entry in entries:
+                    entry_path = entry.filename.rstrip('/')
+                    path = data_interface._normalise_path(
+                        f'{base_path}/{entry_path}' if base_path else entry_path,
+                    )
+                    if stat.S_ISLNK(entry.external_attr >> 16):
+                        raise ValueError('Folder archive cannot contain links')
+                    if entry.is_dir():
+                        folders.append(path)
+                    else:
+                        file_entries.append((entry, path))
+                paths = [path for _, path in file_entries]
+                data_interface.validate_batch_quota(paths, sum(entry.file_size for entry, _ in file_entries), user)
+                uploads = [
+                    (
+                        FileStorage(
+                            stream=zip_file.open(entry), filename=entry.filename,
+                            content_type=mimetypes.guess_type(entry.filename)[0] or 'application/octet-stream',
+                        ),
+                        path,
+                    )
+                    for entry, path in file_entries
+                ]
+                data_interface.save_files(uploads, folders, user)
+        else:
+            paths = [file.filename for file in files]
+            data_interface.validate_batch_quota(paths, sum(_file_size(file) for file in files), user)
+            data_interface.save_files([(file, file.filename) for file in files], [], user)
+    except (ValueError, zipfile.BadZipFile) as error:
         if is_ajax:
-            return {'error': error_msg}, 413
-        flash(error_msg, 'error')
+            return {'error': str(error)}, 413
+        flash(f'Upload failed: {error}', 'error')
         return redirect(url_for('.index'))
-    
-    data_interface.save_file(file, user)
-    logging.info(f"user {user.id} uploaded file: {file.filename}")
+
+    logging.info(f"user {user.id} uploaded {len(files)} file(s)")
 
     if is_ajax:
         return {'ok': True}, 200
@@ -104,7 +163,7 @@ def upload_file():
     return redirect(url_for('.index'))
 
 
-@file_store_api.route('/download/<filename>')
+@file_store_api.route('/download/<path:filename>')
 def download_file(filename: str):
     file_path = DataInterface().get_file_path(filename, cur_user())
     response = send_file(file_path, as_attachment=True)
@@ -112,6 +171,34 @@ def download_file(filename: str):
     response.cache_control.private = True
     response.cache_control.no_store = True
 
+    return response
+
+
+@file_store_api.route('/download-folder/<path:folder_path>')
+def download_folder(folder_path: str):
+    files = DataInterface().get_folder_files(folder_path, cur_user())
+    output: queue.Queue[bytes | None] = queue.Queue(
+        maxsize=ConfigManager().file_store.archive_stream_queue_chunks,
+    )
+
+    def stream_zip():
+        def write_zip() -> None:
+            try:
+                with zipfile.ZipFile(_ZipQueue(output), 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                    for archive_path, file_path in files:
+                        archive.write(file_path, archive_path)
+            finally:
+                output.put(None)
+
+        threading.Thread(target=write_zip, daemon=True).start()
+        while (chunk := output.get()) is not None:
+            yield chunk
+
+    filename = f'{PurePosixPath(folder_path).name}.zip'
+    response = Response(stream_with_context(stream_zip()), mimetype='application/zip')
+    response.headers.set('Content-Disposition', 'attachment', filename=filename)
+    response.cache_control.private = True
+    response.cache_control.no_store = True
     return response
 
 
@@ -141,7 +228,7 @@ def files_list():
     return {'files': files}
 
 
-@file_store_api.route('/delete/<filename>', methods=['POST'])
+@file_store_api.route('/delete/<path:filename>', methods=['POST'])
 def delete_file(filename):
     try:
         DataInterface().delete_file(filename, cur_user())
@@ -152,6 +239,26 @@ def delete_file(filename):
     flash('File deleted successfully!', 'success')
 
     return redirect(url_for('.index'))
+
+
+@file_store_api.route('/folder', methods=['POST'])
+def create_folder():
+    try:
+        parent = request.form.get('parent', '').strip('/')
+        name = request.form.get('path', '').strip('/')
+        DataInterface().create_folder(f'{parent}/{name}' if parent else name, cur_user())
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('.index', path=request.form.get('parent', '')))
+
+
+@file_store_api.route('/move', methods=['POST'])
+def move_path():
+    try:
+        DataInterface().move_path(request.form.get('source', ''), request.form.get('destination', ''), cur_user())
+    except (ValueError, FileNotFoundError) as error:
+        flash(str(error), 'error')
+    return redirect(url_for('.index', path=request.form.get('parent', '')))
 
 
 @file_store_api.route('/delete_all', methods=['POST'])
