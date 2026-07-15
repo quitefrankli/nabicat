@@ -189,7 +189,7 @@ def download_file(filename: str):
     user = cur_user()
     file_path = DataInterface().get_file_path(filename, user)
     _log_event(logging.INFO, 'download', user, bytes=file_path.stat().st_size, path=filename)
-    response = send_file(file_path, as_attachment=True)
+    response = send_file(file_path, as_attachment=True, download_name=PurePosixPath(filename).name)
 
     response.cache_control.private = True
     response.cache_control.no_store = True
@@ -300,6 +300,37 @@ def move_path():
     else:
         _log_event(logging.INFO, 'move', user, destination=destination, source=source)
     return redirect(url_for('.index', path=request.form.get('parent', '')))
+
+
+@file_store_api.route('/move-selected', methods=['POST'])
+def move_selected():
+    user = cur_user()
+    paths = request.form.getlist('paths')
+    destination = request.form.get('destination', '')
+    try:
+        DataInterface().move_paths(paths, destination, user)
+    except (ValueError, FileNotFoundError) as error:
+        _log_event(logging.WARNING, 'bulk_move_rejected', user, destination=destination, files=len(paths), reason=str(error))
+        flash(str(error), 'error')
+    else:
+        _log_event(logging.INFO, 'bulk_move', user, destination=destination or '/', files=len(paths))
+        flash(f'Moved {len(paths)} item(s) successfully!', 'success')
+    return redirect(url_for('.index', path=request.form.get('parent', ''), mode='list'))
+
+
+@file_store_api.route('/delete-selected', methods=['POST'])
+def delete_selected():
+    user = cur_user()
+    paths = request.form.getlist('paths')
+    try:
+        DataInterface().delete_paths(paths, user)
+    except (ValueError, FileNotFoundError) as error:
+        _log_event(logging.WARNING, 'bulk_delete_rejected', user, files=len(paths), reason=str(error))
+        flash(str(error), 'error')
+    else:
+        _log_event(logging.INFO, 'bulk_delete', user, files=len(paths))
+        flash(f'Deleted {len(paths)} item(s) successfully!', 'success')
+    return redirect(url_for('.index', path=request.form.get('parent', ''), mode='list'))
 
 
 @file_store_api.route('/delete_all', methods=['POST'])

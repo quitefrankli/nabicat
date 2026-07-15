@@ -76,17 +76,49 @@ function setupFolderUpload() {
     });
 }
 
-function setupMoveDialog() {
-    const source = document.getElementById('moveSource');
-    const destination = document.getElementById('moveDestination');
-    const modal = document.getElementById('moveModal');
-    document.querySelectorAll('.move-button').forEach((button) => {
-        button.addEventListener('click', () => {
-            source.value = button.dataset.path;
-            destination.value = button.dataset.path;
-            bootstrap.Modal.getOrCreateInstance(modal).show();
-        });
+function setupBulkActions() {
+    const selectAll = document.getElementById('selectAllFiles');
+    const actions = document.getElementById('fileBulkActions');
+    const checkboxes = Array.from(document.querySelectorAll('.file-selection-checkbox'));
+    if (!selectAll || !actions || !checkboxes.length) return;
+
+    const count = document.getElementById('selectedFileCount');
+    const move = document.getElementById('moveSelectedFiles');
+    const remove = document.getElementById('deleteSelectedFiles');
+    const selectedPaths = () => checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value);
+    const update = () => {
+        const selected = selectedPaths();
+        actions.hidden = selected.length === 0;
+        count.textContent = `${selected.length} selected`;
+        selectAll.checked = selected.length === checkboxes.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+    };
+    const setPaths = (container, paths) => {
+        container.replaceChildren(...paths.map((path) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'paths';
+            input.value = path;
+            return input;
+        }));
+    };
+
+    selectAll.addEventListener('change', () => {
+        checkboxes.forEach((checkbox) => { checkbox.checked = selectAll.checked; });
+        update();
     });
+    checkboxes.forEach((checkbox) => checkbox.addEventListener('change', update));
+    move.addEventListener('click', () => {
+        setPaths(document.getElementById('bulkMovePaths'), selectedPaths());
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkMoveModal')).show();
+    });
+    remove.addEventListener('click', () => {
+        const paths = selectedPaths();
+        setPaths(document.getElementById('bulkDeletePaths'), paths);
+        document.getElementById('bulkDeleteMessage').textContent = `Permanently delete ${paths.length} selected item(s)? This cannot be undone.`;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkDeleteModal')).show();
+    });
+    update();
 }
 
 function setupImageModal() {
@@ -216,7 +248,7 @@ function setupGalleryDensity() {
 
 document.addEventListener('DOMContentLoaded', () => {
     setupFolderUpload();
-    setupMoveDialog();
+    setupBulkActions();
     setupImageModal();
     setupStaggeredThumbnails();
     setupGalleryDensity();

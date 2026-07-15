@@ -1,14 +1,6 @@
 * Minimise token usage - this directly affects cost and speed:
 
-* Don't poll or re-read: For background tasks, wait for completion once rather than repeatedly reading output files.
-
-* Skip redundant verification: After a tool succeeds without error, don't re-read the result to confirm.
-
-* Match verbosity to task complexity: Routine ops (merge, deploy, simple file edits) need minimal commentary. Save detailed explanations for complex logic, architectural decisions, or when asked.
-
 * One tool call, not three: Prefer a single well-constructed command over multiple incremental checks.
-
-* Don't narrate tool use: Skip "Let me read the file" or "Let me check the status" ? just do it.
 
 * Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why.
 
@@ -18,9 +10,11 @@
 
 * Do test driven development, when unit/integration tests are appropriate, first write the test that defines the expected behavior, then implement the code to pass the test.
 
-* DO NOT write superfluous tests, add 1-2 USEFUL tests only per feature
+* DO NOT write superfluous tests (ie. constructors), prefer fewer but higher quality tests, the more end-2-end the better
 
 * Constants belong in `config.py`: any named constant (limits, counts, timeouts, feature flags, model names, etc.) must be defined as an attribute of `ConfigManager` in `web_app/config.py`, not hardcoded at call sites.
+
+* A debug server is usually available for debugging at 127.0.0.1:12345 its data can be found under ~/.nabicat_debug/...
 
 * Project Architecture:
     - this project contains a collection of smaller subapps/subpages under web_app/ all of which share a similar ui/ux theme and share the same domain and host

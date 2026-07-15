@@ -101,6 +101,21 @@ class DataInterface(BaseDataInterface):
             if folder not in user_metadata.folders:
                 user_metadata.folders.append(folder)
 
+    def _folder_paths(self, user_metadata: UserMetadata) -> set[str]:
+        folders = set(user_metadata.folders)
+        for entry in user_metadata.files:
+            folders.update(self._parent_folders(self._entry_path(entry)))
+        return folders
+
+    def _normalise_batch_paths(self, paths: list[str]) -> list[str]:
+        normalised = list(dict.fromkeys(self._normalise_path(path) for path in paths if path.strip()))
+        if not normalised:
+            raise ValueError('Select at least one item')
+        return [
+            path for path in normalised
+            if not any(path.startswith(f'{parent}/') for parent in normalised if parent != path)
+        ]
+
     def _cleanup_unreferenced(self, metadata: Metadata) -> None:
         referenced = {
             entry.crc
@@ -304,6 +319,39 @@ class DataInterface(BaseDataInterface):
         self._cleanup_unreferenced(metadata)
         self.save_metadata(metadata)
 
+    def delete_paths(self, paths: list[str], user: User) -> None:
+        """Delete multiple files or folders in one metadata update."""
+        target_paths = self._normalise_batch_paths(paths)
+        metadata = self.get_metadata()
+        user_metadata = metadata.users.get(user.id)
+        if not user_metadata:
+            raise FileNotFoundError('Selected items were not found')
+
+        folder_paths = self._folder_paths(user_metadata)
+        for target_path in target_paths:
+            exists = target_path in folder_paths or any(
+                self._entry_path(entry) == target_path
+                or self._entry_path(entry).startswith(f'{target_path}/')
+                for entry in user_metadata.files
+            )
+            if not exists:
+                raise FileNotFoundError(f'{target_path} not found')
+
+        user_metadata.files = [
+            entry for entry in user_metadata.files
+            if not any(
+                self._entry_path(entry) == target_path
+                or self._entry_path(entry).startswith(f'{target_path}/')
+                for target_path in target_paths
+            )
+        ]
+        user_metadata.folders = [
+            folder for folder in user_metadata.folders
+            if not any(folder == target_path or folder.startswith(f'{target_path}/') for target_path in target_paths)
+        ]
+        self._cleanup_unreferenced(metadata)
+        self.save_metadata(metadata)
+
     def create_folder(self, path: str, user: User) -> None:
         folder_path = self._normalise_path(path)
         metadata = self.get_metadata()
@@ -383,6 +431,90 @@ class DataInterface(BaseDataInterface):
                 user_metadata.folders.append(destination_path + folder[len(source_path):])
         self._ensure_parent_folders(user_metadata, destination_path)
         user_metadata.folders = list(dict.fromkeys(user_metadata.folders))
+        self.save_metadata(metadata)
+
+    def move_paths(self, paths: list[str], destination: str, user: User) -> None:
+        """Move multiple files or folders into one destination folder atomically."""
+        source_paths = self._normalise_batch_paths(paths)
+        destination_path = self._normalise_path(destination, allow_root=True)
+        metadata = self.get_metadata()
+        user_metadata = metadata.users.get(user.id)
+        if not user_metadata:
+            raise FileNotFoundError('Selected items were not found')
+
+        file_paths = {self._entry_path(entry) for entry in user_metadata.files}
+        folder_paths = self._folder_paths(user_metadata)
+        source_is_folder = {}
+        for source_path in source_paths:
+            has_files = any(
+                file_path == source_path or file_path.startswith(f'{source_path}/')
+                for file_path in file_paths
+            )
+            source_is_folder[source_path] = source_path in folder_paths or any(
+                file_path.startswith(f'{source_path}/') for file_path in file_paths
+            )
+            if not has_files and not source_is_folder[source_path]:
+                raise FileNotFoundError(f'{source_path} not found')
+            if source_is_folder[source_path] and (
+                destination_path == source_path or destination_path.startswith(f'{source_path}/')
+            ):
+                raise ValueError('Invalid destination')
+
+        if destination_path and (
+            destination_path in file_paths
+            or any(destination_path.startswith(f'{file_path}/') for file_path in file_paths)
+        ):
+            raise ValueError('Destination must be a folder')
+
+        destinations = {
+            source_path: (
+                f'{destination_path}/{PurePosixPath(source_path).name}'
+                if destination_path else PurePosixPath(source_path).name
+            )
+            for source_path in source_paths
+        }
+        if len(set(destinations.values())) != len(destinations):
+            raise ValueError('Destination already exists')
+        if any(destinations[source_path] == source_path for source_path in source_paths):
+            raise ValueError('Invalid destination')
+
+        affected_files = {
+            file_path for file_path in file_paths
+            if any(file_path == source_path or file_path.startswith(f'{source_path}/') for source_path in source_paths)
+        }
+        affected_folders = {
+            folder_path for folder_path in folder_paths
+            if any(folder_path == source_path or folder_path.startswith(f'{source_path}/') for source_path in source_paths)
+        }
+        unaffected_paths = (file_paths | folder_paths) - affected_files - affected_folders
+        projected_paths = set()
+        for source_path, target_path in destinations.items():
+            for file_path in affected_files | affected_folders:
+                if file_path == source_path or file_path.startswith(f'{source_path}/'):
+                    projected_path = target_path + file_path[len(source_path):]
+                    if projected_path in unaffected_paths or projected_path in projected_paths:
+                        raise ValueError('Destination already exists')
+                    projected_paths.add(projected_path)
+
+        for entry in user_metadata.files:
+            current_path = self._entry_path(entry)
+            for source_path, target_path in destinations.items():
+                if current_path == source_path or current_path.startswith(f'{source_path}/'):
+                    entry.path = target_path + current_path[len(source_path):]
+                    entry.original_name = PurePosixPath(entry.path).name
+                    break
+
+        updated_folders = [folder for folder in user_metadata.folders if folder not in affected_folders]
+        updated_folders.extend(
+            destinations[source_path] + folder_path[len(source_path):]
+            for source_path, target_path in destinations.items()
+            for folder_path in affected_folders
+            if folder_path == source_path or folder_path.startswith(f'{source_path}/')
+        )
+        if destination_path:
+            updated_folders.append(destination_path)
+        user_metadata.folders = list(dict.fromkeys(updated_folders))
+        self._ensure_parent_folders(user_metadata, destination_path)
         self.save_metadata(metadata)
 
     def list_files(self, user: User) -> List[str]:

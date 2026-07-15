@@ -98,6 +98,40 @@ class TestDataInterface:
         data_interface.delete_path('reports', test_user)
         assert data_interface.list_directory('', test_user) == {'folders': [], 'files': []}
 
+    def test_batch_operations_move_and_delete_nested_selections(self, data_interface, test_user):
+        data_interface.create_folder('reports/2026', test_user)
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'budget'), 'budget.csv', content_type='text/csv'),
+            test_user,
+            relative_path='reports/2026/budget.csv',
+        )
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'notes'), 'notes.txt', content_type='text/plain'),
+            test_user,
+        )
+
+        data_interface.move_paths(
+            ['reports', 'reports/2026/budget.csv', 'notes.txt'], 'archive', test_user,
+        )
+
+        assert data_interface.list_directory('', test_user)['folders'] == [{'name': 'archive', 'path': 'archive'}]
+        assert [item['name'] for item in data_interface.list_directory('archive', test_user)['files']] == ['notes.txt']
+        assert data_interface.get_file_path('archive/reports/2026/budget.csv', test_user).exists()
+
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'existing'), 'notes.txt', content_type='text/plain'),
+            test_user,
+            relative_path='target/notes.txt',
+        )
+        with pytest.raises(ValueError, match='Destination already exists'):
+            data_interface.move_paths(['archive/notes.txt'], 'target', test_user)
+        assert data_interface.get_file_path('archive/notes.txt', test_user).exists()
+
+        data_interface.delete_paths(['archive/reports', 'archive/reports/2026/budget.csv'], test_user)
+
+        assert data_interface.list_directory('archive', test_user)['files'][0]['name'] == 'notes.txt'
+        assert data_interface.list_directory('archive/reports', test_user) == {'folders': [], 'files': []}
+
     def test_folder_import_rejects_file_folder_path_collision(self, data_interface, test_user):
         data_interface.save_file(FileStorage(io.BytesIO(b'file'), 'reports'), test_user)
 
@@ -374,6 +408,8 @@ class TestFileStoreRoutes:
         assert response.status_code == 200
         assert b'file1.txt' in response.data
         assert b'file-store-actions' not in response.data
+        assert b'class="btn btn-outline-secondary btn-sm move-button"' not in response.data
+        assert b'Delete file' not in response.data
         assert b'id="galleryColumns"' not in response.data
 
     @patch('web_app.file_store.DataInterface')
@@ -480,6 +516,38 @@ class TestFileStoreRoutes:
         assert response.status_code == 200
         assert 'file_store.download user=' in caplog.text
         assert "path='test.txt'" in caplog.text
+
+    @patch('web_app.file_store.DataInterface')
+    def test_download_file_uses_display_filename(self, mock_di_class, client, auth_mock, tmp_path):
+        stored_file = tmp_path / '123'
+        stored_file.write_text('download test content')
+        mock_di_class.return_value.get_file_path.return_value = stored_file
+
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        response = client.get('/file_store/download/report.csv')
+
+        assert response.status_code == 200
+        assert 'filename=report.csv' in response.headers['Content-Disposition']
+
+    @patch('web_app.file_store.DataInterface')
+    def test_bulk_routes_submit_all_selected_paths(self, mock_di_class, client, auth_mock):
+        mock_di = mock_di_class.return_value
+        with client.session_transaction() as sess:
+            sess['_user_id'] = auth_mock.id
+
+        move_response = client.post('/file_store/move-selected', data={
+            'paths': ['reports', 'notes.txt'], 'destination': 'archive', 'parent': 'inbox',
+        })
+        delete_response = client.post('/file_store/delete-selected', data={
+            'paths': ['reports', 'notes.txt'], 'parent': 'inbox',
+        })
+
+        assert move_response.status_code == 302
+        assert delete_response.status_code == 302
+        mock_di.move_paths.assert_called_once_with(['reports', 'notes.txt'], 'archive', auth_mock)
+        mock_di.delete_paths.assert_called_once_with(['reports', 'notes.txt'], auth_mock)
 
     @patch('web_app.file_store.DataInterface')
     def test_download_folder_returns_nested_zip(self, mock_di_class, client, auth_mock, tmp_path, caplog):

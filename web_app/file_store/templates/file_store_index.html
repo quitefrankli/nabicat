@@ -59,6 +59,17 @@
   </section>
   {% endif %}
 
+  {% if mode == 'list' and (directory.folders or directory.files) %}
+  <section class="file-selection-toolbar" aria-label="File selection">
+    <label class="form-check mb-0"><input class="form-check-input" id="selectAllFiles" type="checkbox"><span>Select all</span></label>
+    <div class="file-bulk-actions" id="fileBulkActions" hidden>
+      <span id="selectedFileCount" aria-live="polite"></span>
+      <button class="btn btn-primary btn-sm" id="moveSelectedFiles" type="button"><i class="bi bi-arrows-move me-1"></i>Move selected</button>
+      <button class="btn btn-outline-danger btn-sm" id="deleteSelectedFiles" type="button"><i class="bi bi-trash me-1"></i>Delete selected</button>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="file-directory {% if mode == 'grid' %}file-grid{% else %}list-group{% endif %}" aria-label="Files">
     {% if directory.folders or directory.files %}
       {% if mode == 'grid' %}
@@ -80,21 +91,19 @@
       {% else %}
       {% for folder in directory.folders %}
       <article class="directory-item directory-folder">
+        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ folder.path }}" aria-label="Select {{ folder.name }}"></label>
         <a class="directory-link" href="{{ url_for('.index', path=folder.path, mode=mode) }}"><i class="bi bi-folder-fill"></i><span>{{ folder.name }}</span></a>
         <div class="directory-actions">
           <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_folder', folder_path=folder.path) }}" title="Download ZIP"><i class="bi bi-file-zip"></i></a>
-          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ folder.path }}" title="Move"><i class="bi bi-arrows-move"></i></button>
-          <form method="post" action="{{ url_for('.delete_file', filename=folder.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete folder" onclick="return confirm('Delete this folder and everything in it?');"><i class="bi bi-trash"></i></button></form>
         </div>
       </article>
       {% endfor %}
       {% for file in directory.files %}
       <article class="directory-item">
+        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ file.path }}" aria-label="Select {{ file.name }}"></label>
         <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ file.name }}</span><small>{{ file.size_formatted }}</small></div>
         <div class="directory-actions">
           <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=file.path) }}" title="Download"><i class="bi bi-download"></i></a>
-          <button class="btn btn-outline-secondary btn-sm move-button" data-path="{{ file.path }}" title="Move"><i class="bi bi-arrows-move"></i></button>
-          <form method="post" action="{{ url_for('.delete_file', filename=file.path) }}"><button class="btn btn-outline-danger btn-sm" title="Delete file" onclick="return confirm('Delete this file?');"><i class="bi bi-trash"></i></button></form>
         </div>
       </article>
       {% endfor %}
@@ -127,10 +136,16 @@
   <div class="modal-footer"><button class="btn btn-primary">Create folder</button></div>
 </form></div></div></div>
 
-<div class="modal fade" id="moveModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.move_path') }}">
-  <div class="modal-header"><h2 class="modal-title fs-5">Move item</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body"><input type="hidden" name="source" id="moveSource"><input type="hidden" name="parent" value="{{ current_path }}"><label class="form-label" for="moveDestination">New path</label><input class="form-control" id="moveDestination" name="destination" required></div>
+<div class="modal fade" id="bulkMoveModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.move_selected') }}">
+  <div class="modal-header"><h2 class="modal-title fs-5">Move selected items</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" name="parent" value="{{ current_path }}"><div id="bulkMovePaths"></div><label class="form-label" for="bulkMoveDestination">Destination folder</label><input class="form-control" id="bulkMoveDestination" name="destination" placeholder="Leave blank for Files root" autocomplete="off"></div>
   <div class="modal-footer"><button class="btn btn-primary">Move</button></div>
+</form></div></div></div>
+
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.delete_selected') }}">
+  <div class="modal-header"><h2 class="modal-title fs-5">Delete selected items</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" name="parent" value="{{ current_path }}"><div id="bulkDeletePaths"></div><p class="mb-0" id="bulkDeleteMessage"></p></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger">Delete permanently</button></div>
 </form></div></div></div>
 {% endblock %}
 
