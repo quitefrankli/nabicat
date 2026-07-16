@@ -68,7 +68,7 @@ def new_post():
         title = (request.form.get('title') or '').strip()
 
         if not project_input:
-            return fail("Project is required")
+            return fail("Topic is required")
         if template not in ('markdown', 'gallery'):
             return fail("Pick a template")
         if not title:

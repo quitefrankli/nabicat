@@ -310,7 +310,7 @@ class DataInterface(BaseDataInterface):
 
     def create_markdown_post(self, user: User, project_input: str, title: str, source_md: str) -> tuple[str, str]:
         cfg = ConfigManager()
-        self._validate_text(project_input, "Project name", cfg.hammock.project_slug_max_chars)
+        self._validate_text(project_input, "Topic name", cfg.hammock.project_slug_max_chars)
         title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
         source_md = self._validate_text(source_md, "Markdown", cfg.hammock.markdown_max_chars)
         project_slug = slugify(project_input)
@@ -354,7 +354,7 @@ class DataInterface(BaseDataInterface):
 
     def create_gallery_post(self, user: User, project_input: str, title: str, description: str) -> tuple[str, str]:
         cfg = ConfigManager()
-        self._validate_text(project_input, "Project name", cfg.hammock.project_slug_max_chars)
+        self._validate_text(project_input, "Topic name", cfg.hammock.project_slug_max_chars)
         title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
         description = self._validate_text(description, "Description", cfg.hammock.description_max_chars)
         project_slug = slugify(project_input)

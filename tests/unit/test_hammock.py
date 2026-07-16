@@ -449,6 +449,10 @@ class TestGalleryEditRoute:
         assert b"data-gallery-upload-form" in new_response.data
         assert b"data-gallery-upload-progress" in new_response.data
         assert b"looping 720p MP4" in new_response.data
+        assert b"Topics" in new_response.data
+        assert b"Pick an existing topic" in new_response.data
+        assert b"new topic name" in new_response.data
+        assert b"Projects" not in new_response.data
 
         response = client.post(
             "/hammock/new",

@@ -22,8 +22,8 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="hammock-field">
-                        <label class="hammock-label">Project</label>
-                        <div class="hammock-field-hint">Pick an existing project <strong>or</strong> name a new one — not both.</div>
+                        <label class="hammock-label">Topic</label>
+                        <div class="hammock-field-hint">Pick an existing topic <strong>or</strong> name a new one — not both.</div>
                         <select id="project-existing" name="project_existing" class="hammock-input">
                             <option value="">— choose existing —</option>
                             {% for project in posts_by_project %}
@@ -32,7 +32,7 @@
                         </select>
                         <div class="hammock-project-or">or</div>
                         <input id="project-new" type="text" name="project_new" class="hammock-input"
-                               placeholder="new project name" maxlength="64">
+                               placeholder="new topic name" maxlength="64">
                     </div>
 
                     <div class="hammock-field">
