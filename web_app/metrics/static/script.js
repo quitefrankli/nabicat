@@ -1,28 +1,48 @@
-function toggleGoalState(switchElement, goalId) {
-	const state = switchElement.checked;
+async function refreshMetricsPage(url, options = {}) {
+	const expandedIds = [...document.querySelectorAll('#app-main-content .accordion-collapse.show')].map(el => el.id);
+	const response = await fetch(url, options);
+	if (!response.ok) throw new Error('The metric update could not be saved.');
 
-	const data = {
-		"goal_id": goalId,
-		"state": state
-	};
+	const nextDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
+	const nextMain = nextDocument.getElementById('app-main-content');
+	const nextModals = nextDocument.getElementById('app-actions-modals');
+	const nextFlash = nextDocument.getElementById('app-flash-messages');
+	if (!nextMain || !nextModals || !nextFlash) throw new Error('The updated metrics could not be displayed.');
 
-	fetch("/todoist/goal/toggle_state", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json"
-		},
-		body: JSON.stringify(data)
-	})
-	.then(response => response.json())
-	.then(data => {
-		if (data["success"]) {
-			console.log("Goal state toggled successfully");
-		} else {
-			console.error("Failed to toggle goal state");
-		}
-	})
-	.catch((error) => {
-		console.error("Failed to toggle goal state", error);
-        switchElement.checked = !state; // Revert the switch state on error
+	document.getElementById('app-main-content').replaceWith(nextMain);
+	document.getElementById('app-actions-modals').replaceWith(nextModals);
+	document.getElementById('app-flash-messages').replaceWith(nextFlash);
+	document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+	document.body.classList.remove('modal-open');
+	document.body.style.removeProperty('padding-right');
+	document.body.style.removeProperty('overflow');
+	expandedIds.forEach(id => {
+		const collapse = document.getElementById(id);
+		if (collapse) bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
 	});
 }
+
+document.addEventListener('submit', async event => {
+	const form = event.target.closest('form[data-async-mutation]');
+	if (!form) return;
+	event.preventDefault();
+	const submitButton = event.submitter;
+	if (submitButton) submitButton.disabled = true;
+	try {
+		await refreshMetricsPage(form.action, { method: form.method, body: new FormData(form) });
+	} catch (error) {
+		if (submitButton) submitButton.disabled = false;
+		alert(error.message);
+	}
+});
+
+document.addEventListener('click', async event => {
+	const link = event.target.closest('a[data-async-mutation]');
+	if (!link) return;
+	event.preventDefault();
+	try {
+		await refreshMetricsPage(link.href);
+	} catch (error) {
+		alert(error.message);
+	}
+});

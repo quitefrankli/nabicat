@@ -199,6 +199,15 @@ class TestMetricsLastModified:
         assert metric.data[0].value == 75.5
 
 
+def test_metrics_mutations_use_partial_page_updates():
+    template = open('web_app/metrics/templates/metrics_page.html').read()
+    script = open('web_app/metrics/static/script.js').read()
+
+    assert 'data-async-mutation' in template
+    assert 'refreshMetricsPage' in script
+    assert 'window.location.reload' not in script
+
+
 class TestMetricsDataMigration:
     """Tests for metrics data migration"""
 

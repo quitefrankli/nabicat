@@ -21,7 +21,7 @@
                 </h1>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('.new_metric') }}" method="post">
+            <form action="{{ url_for('.new_metric') }}" method="post" data-async-mutation>
                 <div class="modal-body metric-modal-body">
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" name="name" id="name" placeholder="Enter metric name" required>
@@ -50,7 +50,7 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
-                    <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Creating...'; this.form.submit();">
+                    <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-circle me-1"></i>Create Metric
                     </button>
                 </div>
@@ -70,7 +70,7 @@
                     </h1>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form action="{{ url_for('.edit_metric', metric_id=metric.id) }}" method="post">
+                <form action="{{ url_for('.edit_metric', metric_id=metric.id) }}" method="post" data-async-mutation>
                     <div class="modal-body metric-modal-body">
                         <div class="form-floating mb-3">
                             <input type="text" class="form-control" name="name" id="editName{{ metric.id }}" value="{{ metric.name }}" required>
@@ -98,7 +98,7 @@
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
-                        <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Updating...'; this.form.submit();">
+                        <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-circle me-1"></i>Update Metric
                         </button>
                     </div>
@@ -128,7 +128,7 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle me-1"></i>Cancel
                     </button>
-                    <a href="{{ url_for('.delete_metric', metric_id=metric.id) }}" class="btn btn-danger">
+                    <a href="{{ url_for('.delete_metric', metric_id=metric.id) }}" class="btn btn-danger" data-async-mutation>
                         <i class="bi bi-trash me-1"></i>Delete Metric
                     </a>
                 </div>
@@ -146,7 +146,7 @@
                     </h1>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form action="{{ url_for('.log_metric', metric_id=metric.id) }}" method="post">
+                <form action="{{ url_for('.log_metric', metric_id=metric.id) }}" method="post" data-async-mutation>
                     <div class="modal-body metric-modal-body">
                         <div class="form-floating mb-3">
                             <input type="number" step="any" class="form-control" name="value" id="logValue{{ metric.id }}" placeholder="Enter value" required>
@@ -165,7 +165,7 @@
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="bi bi-x-circle me-1"></i>Cancel
                         </button>
-                        <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.innerHTML='<i class=&quot;bi bi-hourglass-split me-1&quot;></i>Logging...'; this.form.submit();">
+                        <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-circle me-1"></i>Log Value
                         </button>
                     </div>
