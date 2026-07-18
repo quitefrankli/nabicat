@@ -236,6 +236,17 @@ class TestSubgoalDeletion:
         assert tld.goals == {}
 
 
+def test_goal_mutations_use_partial_page_updates():
+    summary_template = open('web_app/todoist/templates/summary_goals.html').read()
+    page_template = open('web_app/todoist/templates/summary_goals_page.html').read()
+    script = open('web_app/todoist/static/script.js').read()
+
+    assert 'data-async-mutation' in summary_template
+    assert 'data-async-mutation' in page_template
+    assert 'refreshTodoistPage' in script
+    assert 'window.location.reload' not in script
+
+
 class TestGoalReparenting:
     """Tests for changing goal hierarchy"""
 

@@ -52,10 +52,14 @@
   </head>
   <body class="animate-fade-in">
     
-    {% include "flash_handler.html" %}
+    <div id="app-flash-messages">
+      {% include "flash_handler.html" %}
+    </div>
 
     <div class="p-3 p-lg-4">
-      {% block actions_modal %}{% endblock %}
+      <div id="app-actions-modals">
+        {% block actions_modal %}{% endblock %}
+      </div>
       
       <!-- Navigation -->
       <nav class="navbar navbar-expand-lg">
@@ -111,7 +115,7 @@
       </nav>
 
       <!-- Main Content -->
-      <main class="container-fluid px-0">
+      <main class="container-fluid px-0" id="app-main-content">
         {% block content %}{% endblock %}
       </main>
       
