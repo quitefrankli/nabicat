@@ -105,12 +105,6 @@ class TodoistConfig:
 
 
 @dataclass
-class DiaryConfig:
-    default_tags: list[str] = field(default_factory=lambda: ["personal", "work", "reflection"])
-    tag_dropdown_limit: int = 5
-
-
-@dataclass
 class DevConfig:
     terminal_shell: str = "/bin/bash"
     terminal_max_sessions: int = 4
@@ -404,7 +398,6 @@ class ConfigManager:
         self.llm = LLMConfig()
         self.tubio = TubioConfig(lambda: self.save_data_path)
         self.todoist = TodoistConfig()
-        self.diary = DiaryConfig()
         self.dev = DevConfig()
         self.crosswords = CrosswordsConfig()
         self.sentinel = SentinelConfig()

@@ -35,20 +35,6 @@ class Goals(BaseModel):
     goals: Dict[int, Goal] = {}
 
 
-class Entry(BaseModel):
-    id: int
-    title: str = ""
-    body: str = ""
-    mood_rating: float = 0.0
-    tags: List[str] = []
-    creation_date: datetime = Field(default_factory=lambda: datetime.now())
-    last_modified: datetime = Field(default_factory=lambda: datetime.now())
-
-
-class Entries(BaseModel):
-    entries: Dict[int, Entry] = {}
-
-
 class DataInterface(BaseDataInterface):
     def __init__(self) -> None:
         super().__init__()
@@ -63,13 +49,6 @@ class DataInterface(BaseDataInterface):
         # valid but does not serialize overlapping requests.
         self.save_model(self._get_goals_file(user), data, exclude_none=True)
 
-    def load_diary(self, user: User) -> Entries:
-        return self.load_model(self._get_diary_file(user), Entries) or Entries(entries={})
-
-    def save_diary(self, data: Entries, user: User) -> None:
-        # See save_goals: whole-blob write, last-writer-wins under concurrency.
-        self.save_model(self._get_diary_file(user), data)
-
     def backup_data(self, backup_dir: Path) -> None:
         self._backup_subtree(self.todoist_data_directory, backup_dir, "todoist")
 
@@ -78,6 +57,3 @@ class DataInterface(BaseDataInterface):
 
     def _get_goals_file(self, user: User) -> Path:
         return self.todoist_data_directory / user.folder / "goals.json"
-
-    def _get_diary_file(self, user: User) -> Path:
-        return self.todoist_data_directory / user.folder / "diary.json"
