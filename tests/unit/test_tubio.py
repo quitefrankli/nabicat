@@ -6,6 +6,17 @@ from yt_dlp.utils import DownloadError
 
 from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress
 from web_app.tubio.data_interface import UserMetadata
+from web_app.users import User
+import web_app.helpers as helpers
+
+
+@pytest.fixture
+def auth_mock():
+    user = User(username='tubio-user', password='testpass', folder='test_folder', is_admin=False)
+    original_user_loader = helpers.login_manager._user_callback
+    helpers.login_manager._user_callback = lambda username: user if username == user.id else None
+    yield user
+    helpers.login_manager._user_callback = original_user_loader
 
 
 class TestExtractVideoId:
@@ -368,6 +379,8 @@ class TestTrimAudio:
             'Favourites': Mock(audio_crcs=[123]),
         }
         di.edit_metadata.return_value.__enter__.return_value = metadata
+        with client.session_transaction() as session:
+            session['_user_id'] = auth_mock.id
 
         response = client.post('/tubio/audio/123/trim', data={
             'trim_start_s': '1.5',
@@ -383,6 +396,9 @@ class TestTrimAudio:
     def test_rejects_negative_playback_boundary(
         self, mock_di_class, client, auth_mock
     ):
+        with client.session_transaction() as session:
+            session['_user_id'] = auth_mock.id
+
         response = client.post('/tubio/audio/123/trim', data={
             'trim_start_s': '-1',
             'trim_end_s': '0',

@@ -98,6 +98,36 @@ class TestDataInterface:
         data_interface.delete_path('reports', test_user)
         assert data_interface.list_directory('', test_user) == {'folders': [], 'files': []}
 
+    def test_list_directory_recent_combines_files_and_folders_newest_first(
+        self, data_interface, test_user
+    ):
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'old'), 'old.txt'), test_user,
+        )
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'nested'), 'nested.txt'), test_user,
+            relative_path='recent-folder/nested.txt',
+        )
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'new'), 'new.txt'), test_user,
+        )
+        with data_interface.edit_metadata() as metadata:
+            dates = {
+                'old.txt': '2026-01-01T10:00:00',
+                'recent-folder/nested.txt': '2026-03-01T10:00:00',
+                'new.txt': '2026-02-01T10:00:00',
+            }
+            for entry in metadata.users[test_user.id].files:
+                entry.uploaded_at = dates[data_interface._entry_path(entry)]
+
+        directory = data_interface.list_directory('', test_user, recent=True)
+
+        assert [(item['kind'], item['name']) for item in directory['items']] == [
+            ('folder', 'recent-folder'),
+            ('file', 'new.txt'),
+            ('file', 'old.txt'),
+        ]
+
     def test_batch_operations_move_and_delete_nested_selections(self, data_interface, test_user):
         data_interface.create_folder('reports/2026', test_user)
         data_interface.save_file(
@@ -394,10 +424,13 @@ class TestFileStoreRoutes:
     def test_index_list_mode(self, mock_di_class, client, auth_mock):
         """Test index page in list mode"""
         mock_di = mock_di_class.return_value
-        mock_di.list_directory.return_value = {'folders': [], 'files': [
-            {'name': 'file1.txt', 'path': 'file1.txt', 'size': 100,
-             'size_formatted': '100.0 B', 'mime_type': 'text/plain'},
-        ]}
+        file_item = {
+            'name': 'file1.txt', 'path': 'file1.txt', 'size': 100,
+            'size_formatted': '100.0 B', 'mime_type': 'text/plain', 'kind': 'file',
+        }
+        mock_di.list_directory.return_value = {
+            'folders': [], 'files': [file_item], 'items': [file_item],
+        }
         mock_di.get_total_storage_size.return_value = 100
 
         with client.session_transaction() as sess:

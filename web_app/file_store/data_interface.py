@@ -37,6 +37,7 @@ class UserFileEntry(BaseModel):
     crc: int
     original_name: str  # User's name for this file
     path: str = ""
+    uploaded_at: str = ""
 
 
 class UserMetadata(BaseModel):
@@ -228,6 +229,7 @@ class DataInterface(BaseDataInterface):
             crc=crc,
             original_name=PurePosixPath(stored_path).name,
             path=stored_path,
+            uploaded_at=datetime.now().isoformat(),
         )
         user_metadata.files.append(user_file_entry)
         self._ensure_parent_folders(user_metadata, stored_path)
@@ -392,7 +394,9 @@ class DataInterface(BaseDataInterface):
             if folder_path not in user_metadata.folders:
                 user_metadata.folders.append(folder_path)
 
-    def list_directory(self, path: str, user: User) -> dict[str, list[dict]]:
+    def list_directory(
+        self, path: str, user: User, *, recent: bool = False
+    ) -> dict[str, list[dict]]:
         directory = self._normalise_path(path, allow_root=True)
         metadata = self.get_metadata()
         user_metadata = metadata.users.get(user.id)
@@ -423,7 +427,39 @@ class DataInterface(BaseDataInterface):
                     'name': entry_path[len(prefix):], 'path': entry_path, 'size': file_meta.size,
                     'size_formatted': format_file_size(file_meta.size), 'mime_type': file_meta.mime_type,
                 })
-        return {'folders': direct_folders, 'files': sorted(files, key=lambda item: item['name'].lower())}
+        result = {
+            'folders': direct_folders,
+            'files': sorted(files, key=lambda item: item['name'].lower()),
+        }
+        if not recent:
+            return result
+
+        upload_times = {
+            self._entry_path(entry): datetime.fromisoformat(
+                entry.uploaded_at or metadata.files[entry.crc].upload_date
+            ).timestamp()
+            for entry in user_metadata.files
+            if entry.crc in metadata.files
+        }
+        items = []
+        for folder in direct_folders:
+            folder_prefix = f"{folder['path']}/"
+            modified = max(
+                (uploaded for entry_path, uploaded in upload_times.items() if entry_path.startswith(folder_prefix)),
+                default=float('-inf'),
+            )
+            items.append({**folder, 'kind': 'folder', '_modified': modified})
+        for file in result['files']:
+            items.append({
+                **file,
+                'kind': 'file',
+                '_modified': upload_times.get(file['path'], float('-inf')),
+            })
+        result['items'] = sorted(
+            items,
+            key=lambda item: (-item['_modified'], item['name'].lower()),
+        )
+        return result
 
     def move_path(self, source: str, destination: str, user: User) -> None:
         source_path = self._normalise_path(source)
@@ -572,7 +608,7 @@ class DataInterface(BaseDataInterface):
         for user_file in user_metadata.files:
             file_meta = metadata.files.get(user_file.crc)
             if file_meta:
-                upload_date = datetime.fromisoformat(file_meta.upload_date)
+                upload_date = datetime.fromisoformat(user_file.uploaded_at or file_meta.upload_date)
                 files.append({
                     'name': self._entry_path(user_file),
                     'size': file_meta.size,

@@ -68,7 +68,10 @@ def index():
     if mode not in ('list', 'grid'):
         mode = 'list'
     path = request.args.get('path', '')
-    directory = data_interface.list_directory(path, user) if user else {'folders': [], 'files': []}
+    directory = (
+        data_interface.list_directory(path, user, recent=mode == 'list')
+        if user else {'folders': [], 'files': []}
+    )
 
     # Calculate storage info for all users
     storage_info = None

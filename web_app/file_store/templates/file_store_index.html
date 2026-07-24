@@ -89,23 +89,24 @@
       {% endif %}
       {% endfor %}
       {% else %}
-      {% for folder in directory.folders %}
+      {% for item in directory.get('items', []) %}
+      {% if item.kind == 'folder' %}
       <article class="directory-item directory-folder">
-        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ folder.path }}" aria-label="Select {{ folder.name }}"></label>
-        <a class="directory-link" href="{{ url_for('.index', path=folder.path, mode=mode) }}"><i class="bi bi-folder-fill"></i><span>{{ folder.name }}</span></a>
+        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ item.path }}" aria-label="Select {{ item.name }}"></label>
+        <a class="directory-link" href="{{ url_for('.index', path=item.path, mode=mode) }}"><i class="bi bi-folder-fill"></i><span>{{ item.name }}</span></a>
         <div class="directory-actions">
-          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_folder', folder_path=folder.path) }}" title="Download ZIP"><i class="bi bi-file-zip"></i></a>
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_folder', folder_path=item.path) }}" title="Download ZIP"><i class="bi bi-file-zip"></i></a>
         </div>
       </article>
-      {% endfor %}
-      {% for file in directory.files %}
+      {% else %}
       <article class="directory-item">
-        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ file.path }}" aria-label="Select {{ file.name }}"></label>
-        <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ file.name }}</span><small>{{ file.size_formatted }}</small></div>
+        <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ item.path }}" aria-label="Select {{ item.name }}"></label>
+        <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ item.name }}</span><small>{{ item.size_formatted }}</small></div>
         <div class="directory-actions">
-          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=file.path) }}" title="Download"><i class="bi bi-download"></i></a>
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=item.path) }}" title="Download"><i class="bi bi-download"></i></a>
         </div>
       </article>
+      {% endif %}
       {% endfor %}
       {% endif %}
     {% else %}
