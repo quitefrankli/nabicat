@@ -16,9 +16,14 @@ class Playlist(BaseModel):
     name: str
     audio_crcs: list[int] = []
 
+class PlaybackTrim(BaseModel):
+    start_s: float = 0
+    end_s: float = 0
+
 class UserMetadata(BaseModel):
     user_id: str
     playlists: dict[str, Playlist] = {}
+    playback_trims: dict[int, PlaybackTrim] = {}
 
     def add_to_playlist(self, audio_crc: int, playlist_name: str = "Favourites") -> None:
         playlist = self.get_playlist(playlist_name)
@@ -43,6 +48,15 @@ class UserMetadata(BaseModel):
     
     def get_playlists(self) -> list[Playlist]:
         return list(self.playlists.values())
+
+    def set_playback_trim(self, audio_crc: int, start_s: float, end_s: float) -> None:
+        if start_s == 0 and end_s == 0:
+            self.playback_trims.pop(audio_crc, None)
+        else:
+            self.playback_trims[audio_crc] = PlaybackTrim(start_s=start_s, end_s=end_s)
+
+    def get_playback_trim(self, audio_crc: int) -> PlaybackTrim:
+        return self.playback_trims.get(audio_crc, PlaybackTrim())
 
 class AudioMetadata(BaseModel):
     # this is also the filename to be saved on disk

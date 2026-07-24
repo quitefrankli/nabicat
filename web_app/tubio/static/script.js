@@ -566,6 +566,7 @@ async function updateContent(data) {
                 initializeAudioEventListeners();
                 initializeLazyThumbnails();
                 initializeTooltips();
+                initializeTrimForm();
                 initializeSidebar();
                 initializeTrackbarVolume();
                 updateTrackbar(null);
@@ -750,6 +751,7 @@ function togglePlayTrack(crc) {
         if (audioElement.readyState === 0) {
             audioElement.load();
         }
+        applyPlaybackStart(audioElement);
         audioElement.play().catch(err => {
             console.error('Error playing audio:', err);
             showNotification('Error playing audio. Please try again.', 'error');
@@ -772,7 +774,7 @@ function togglePlayTrack(crc) {
 
         // Handle single track looping for individual track play
         if (loopMode === 'single') {
-            audioElement.currentTime = 0;
+            audioElement.currentTime = getPlaybackBounds(audioElement).start;
             audioElement.play().catch(err => console.error('Error replaying audio:', err));
             return;
         }
@@ -847,10 +849,12 @@ function seekTrack(crc, value) {
         audio.load();
         audio.addEventListener('loadedmetadata', function onMeta() {
             audio.removeEventListener('loadedmetadata', onMeta);
-            audio.currentTime = (value / 100) * audio.duration;
+            const bounds = getPlaybackBounds(audio);
+            audio.currentTime = bounds.start + ((value / 100) * (bounds.end - bounds.start));
         }, { once: true });
     } else if (audio.duration && isFinite(audio.duration)) {
-        audio.currentTime = (value / 100) * audio.duration;
+        const bounds = getPlaybackBounds(audio);
+        audio.currentTime = bounds.start + ((value / 100) * (bounds.end - bounds.start));
     }
 }
 
@@ -909,6 +913,7 @@ function resumePlaylist() {
         if (audioElement.readyState === 0) {
             audioElement.load();
         }
+        applyPlaybackStart(audioElement);
         audioElement.play().catch(err => {
             console.error('Error resuming audio:', err);
             showNotification('Error resuming playback', 'error');
@@ -1047,7 +1052,7 @@ function playNextInQueue() {
     if (audioElement.readyState === 0) {
         audioElement.load();
     }
-    audioElement.currentTime = 0;
+    audioElement.currentTime = getPlaybackBounds(audioElement).start;
     audioElement.play().catch(err => {
         console.error('Error playing audio:', err);
         currentPlaylistIndex++;
@@ -1074,7 +1079,7 @@ function playNextInQueue() {
 
         // Handle single track looping
         if (loopMode === 'single') {
-            audioElement.currentTime = 0;
+            audioElement.currentTime = getPlaybackBounds(audioElement).start;
             audioElement.play().catch(err => console.error('Error replaying audio:', err));
             return;
         }
@@ -1154,6 +1159,7 @@ function initializeAudioEventListeners() {
 
         // Create and store handlers
         audio._playHandler = () => {
+            applyPlaybackStart(audio);
             currentTrackCrc = crc;
             syncAudioButtonUI(crc);
             updateMediaSessionMetadata(crc);
@@ -1166,6 +1172,13 @@ function initializeAudioEventListeners() {
             if (crc === currentTrackCrc) updateTrackbarPlayPauseUI(false);
         };
         audio._timeHandler = () => {
+            const bounds = getPlaybackBounds(audio);
+            if (!audio.paused && audio.currentTime >= bounds.end && !audio._trimEnded) {
+                audio._trimEnded = true;
+                audio.pause();
+                audio.dispatchEvent(new Event('ended'));
+                return;
+            }
             if (crc === currentTrackCrc) updateTrackbarScrubber();
         };
         audio._metaHandler = () => {
@@ -1236,21 +1249,22 @@ function prevTrack() {
     if (isPlayingPlaylist && currentPlaylistQueue.length > 0) {
         const crc = currentPlaylistQueue[currentPlaylistIndex];
         const audio = document.getElementById(`audio-${crc}`);
-        if (audio && audio.currentTime > 3) {
-            audio.currentTime = 0;
+        const playbackStart = audio ? getPlaybackBounds(audio).start : 0;
+        if (audio && audio.currentTime > playbackStart + 3) {
+            audio.currentTime = playbackStart;
         } else if (currentPlaylistIndex > 0) {
             if (audio) audio.pause();
             resetTrackPlayingUI(crc);
             currentPlaylistIndex--;
             playNextInQueue();
         } else if (audio) {
-            audio.currentTime = 0;
+            audio.currentTime = playbackStart;
         }
     } else {
         const crc = currentTrackCrc;
         if (crc) {
             const audio = document.getElementById(`audio-${crc}`);
-            if (audio) audio.currentTime = 0;
+            if (audio) audio.currentTime = getPlaybackBounds(audio).start;
         }
     }
 }
@@ -1324,9 +1338,12 @@ function updateTrackbarScrubber() {
     if (!audio) return;
 
     if (audio.duration && isFinite(audio.duration)) {
-        range.value = (audio.currentTime / audio.duration) * 100;
-        if (currEl) currEl.textContent = formatTime(audio.currentTime);
-        if (durEl) durEl.textContent = formatTime(audio.duration);
+        const bounds = getPlaybackBounds(audio);
+        const playableDuration = bounds.end - bounds.start;
+        const playbackTime = Math.max(0, audio.currentTime - bounds.start);
+        range.value = playableDuration > 0 ? (playbackTime / playableDuration) * 100 : 0;
+        if (currEl) currEl.textContent = formatTime(playbackTime);
+        if (durEl) durEl.textContent = formatTime(playableDuration);
     }
 }
 
@@ -1365,7 +1382,7 @@ function initializeMediaSession() {
             const crc = getCurrentlyPlayingTrack();
             if (crc) {
                 const audio = document.getElementById(`audio-${crc}`);
-                if (audio) audio.currentTime = 0;
+                if (audio) audio.currentTime = getPlaybackBounds(audio).start;
             }
         }
     });
@@ -1413,6 +1430,90 @@ async function resyncTrack(crc, buttonElement) {
     }
 }
 
+function openTrimModal(crc, title, trimStart, trimEnd) {
+    document.getElementById('trim-audio-crc').value = crc;
+    document.getElementById('trim-audio-title').textContent = title;
+    document.getElementById('trim-start-seconds').value = String(trimStart);
+    document.getElementById('trim-end-seconds').value = String(trimEnd);
+    document.getElementById('trim-audio-error').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('trimAudioModal')).show();
+}
+
+async function submitAudioTrim(event) {
+    event.preventDefault();
+    const crc = document.getElementById('trim-audio-crc').value;
+    const submitButton = document.getElementById('trim-audio-submit');
+    const errorElement = document.getElementById('trim-audio-error');
+    const trimStart = Number(document.getElementById('trim-start-seconds').value);
+    const trimEnd = Number(document.getElementById('trim-end-seconds').value);
+    const audio = document.getElementById(`audio-${crc}`);
+    if (audio && Number.isFinite(audio.duration) && trimStart + trimEnd >= audio.duration) {
+        errorElement.textContent = 'The start and end trims must leave some audio to play.';
+        errorElement.classList.remove('d-none');
+        return;
+    }
+
+    const originalHtml = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving...';
+    errorElement.classList.add('d-none');
+
+    try {
+        const response = await jsonPost(`/tubio/audio/${crc}/trim`, {
+            trim_start_s: String(trimStart),
+            trim_end_s: String(trimEnd)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not trim audio');
+
+        bootstrap.Modal.getInstance(document.getElementById('trimAudioModal')).hide();
+        showNotification(data.message, 'success');
+        await updateContent(data);
+    } catch (error) {
+        errorElement.textContent = error.message;
+        errorElement.classList.remove('d-none');
+    } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalHtml;
+    }
+}
+
+function initializeTrimForm() {
+    const form = document.getElementById('trim-audio-form');
+    if (!form || form.dataset.initialized === 'true') return;
+    form.addEventListener('submit', submitAudioTrim);
+    form.dataset.initialized = 'true';
+}
+
+function getPlaybackBounds(audio) {
+    const start = Math.max(0, Number(audio.dataset.trimStart) || 0);
+    const trimEnd = Math.max(0, Number(audio.dataset.trimEnd) || 0);
+    const naturalEnd = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+    return { start, end: Math.max(start, naturalEnd - trimEnd) };
+}
+
+function applyPlaybackStart(audio) {
+    if (!Number.isFinite(audio.duration)) {
+        if (!audio._trimWaitingForMetadata) {
+            audio._trimWaitingForMetadata = true;
+            audio.addEventListener('loadedmetadata', () => {
+                audio._trimWaitingForMetadata = false;
+                applyPlaybackStart(audio);
+                audio.play().catch(err => console.error('Error starting trimmed audio:', err));
+            }, { once: true });
+        }
+        audio.pause();
+        return false;
+    }
+
+    const bounds = getPlaybackBounds(audio);
+    if (audio.currentTime < bounds.start || audio.currentTime >= bounds.end) {
+        audio.currentTime = bounds.start;
+    }
+    audio._trimEnded = false;
+    return true;
+}
+
 function initializeTooltips() {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
         if (!bootstrap.Tooltip.getInstance(el)) {
@@ -1452,6 +1553,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSidebar();
     initializeTrackbarVolume();
     initializeTrackbarVolumePopover();
+    initializeTrimForm();
     updateTrackbar(null);
     updateTrackbarScrubber();
 

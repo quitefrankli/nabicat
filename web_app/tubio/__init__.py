@@ -1,5 +1,6 @@
 import logging
 import json
+import math
 import time
 
 from typing import *
@@ -50,7 +51,7 @@ def get_cached_yt_vid_ids(user: User|None = None) -> Set[str]:
         user_metadata = DataInterface().get_user_metadata(user)
         return {metadata.audios[crc].yt_video_id for crc in user_metadata.get_playlist().audio_crcs}
 
-def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool, str]]]]:
+def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool, str, float, float]]]]:
     user_metadata = DataInterface().get_user_metadata(user)
     playlists = []
     metadata = DataInterface().get_metadata()
@@ -60,7 +61,11 @@ def get_playlists_data(user: User) -> list[tuple[str, list[tuple[int, str, bool,
             if crc in metadata.audios:
                 audio = metadata.audios[crc]
                 has_thumbnail = DataInterface().has_thumbnail(crc)
-                playlist_data.append((crc, audio.title, has_thumbnail, audio.source_url))
+                playback_trim = user_metadata.get_playback_trim(crc)
+                playlist_data.append((
+                    crc, audio.title, has_thumbnail, audio.source_url,
+                    playback_trim.start_s, playback_trim.end_s,
+                ))
         playlists.append((playlist.name, playlist_data))
 
     return playlists
@@ -336,6 +341,40 @@ def download_audio(crc: int):
     file_path = DataInterface().get_audio_path(crc)
     safe_title = "".join(c for c in metadata.title if c.isalnum() or c in " _-").strip() or str(crc)
     return send_file(file_path, mimetype='audio/mp4', as_attachment=True, download_name=f"{safe_title}.m4a")
+
+
+@tubio_api.route('/audio/<int:crc>/trim', methods=['POST'])
+def trim_audio(crc: int):
+    try:
+        trim_start_s = float(request.form.get('trim_start_s', 0))
+        trim_end_s = float(request.form.get('trim_end_s', 0))
+    except (TypeError, ValueError):
+        return {'error': 'Trim values must be valid numbers'}, 400
+
+    if not math.isfinite(trim_start_s) or not math.isfinite(trim_end_s):
+        return {'error': 'Trim values must be finite numbers'}, 400
+    if trim_start_s < 0 or trim_end_s < 0:
+        return {'error': 'Trim values cannot be negative'}, 400
+    data_interface = DataInterface()
+    try:
+        with data_interface.edit_metadata() as metadata:
+            if crc not in metadata.audios:
+                return {'error': 'Audio not found'}, 404
+            audio_metadata = metadata.audios[crc]
+            user_metadata = metadata.get_user(cur_user().id)
+            if not any(crc in playlist.audio_crcs for playlist in user_metadata.playlists.values()):
+                return {'error': 'Audio not found in your playlists'}, 404
+            user_metadata.set_playback_trim(crc, trim_start_s, trim_end_s)
+    except Exception:
+        logging.exception("Error saving audio playback boundaries")
+        return {'error': 'Could not save playback boundaries'}, 500
+
+    return {
+        'success': True,
+        'trim_start_s': trim_start_s,
+        'trim_end_s': trim_end_s,
+        'message': f'Updated playback range: {audio_metadata.title}',
+    }
 
 
 @tubio_api.route('/thumbnail/<int:crc>')

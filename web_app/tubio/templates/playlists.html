@@ -70,3 +70,46 @@
         </div>
     </div>
 {% endif %}
+
+<div class="modal fade" id="trimAudioModal" tabindex="-1" aria-labelledby="trimAudioModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content trim-audio-modal">
+            <form id="trim-audio-form">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="trimAudioModalLabel">
+                        <i class="bi bi-scissors me-2"></i>Trim audio
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="trim-audio-title" id="trim-audio-title"></p>
+                    <p class="text-muted small">The original file stays unchanged. These sections will be skipped during playback.</p>
+                    <input type="hidden" id="trim-audio-crc">
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6">
+                            <label for="trim-start-seconds" class="form-label">Remove from start</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="trim-start-seconds" min="0" step="0.1" value="0" inputmode="decimal" required>
+                                <span class="input-group-text">seconds</span>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label for="trim-end-seconds" class="form-label">Remove from end</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="trim-end-seconds" min="0" step="0.1" value="0" inputmode="decimal" required>
+                                <span class="input-group-text">seconds</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-danger d-none mt-3 mb-0" id="trim-audio-error" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="trim-audio-submit">
+                        <i class="bi bi-scissors me-1"></i>Save playback range
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

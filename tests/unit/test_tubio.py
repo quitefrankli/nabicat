@@ -5,6 +5,7 @@ from datetime import timedelta
 from yt_dlp.utils import DownloadError
 
 from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress
+from web_app.tubio.data_interface import UserMetadata
 
 
 class TestExtractVideoId:
@@ -339,6 +340,57 @@ class TestDownloadProgress:
 
         clear_download_progress('test123')
         assert get_download_progress('test123') is None
+
+
+class TestTrimAudio:
+    def test_playback_trim_is_user_specific_and_zero_resets_it(self):
+        user_metadata = UserMetadata(user_id='listener')
+
+        user_metadata.set_playback_trim(123, 1.5, 2)
+        assert user_metadata.get_playback_trim(123).model_dump() == {
+            'start_s': 1.5,
+            'end_s': 2,
+        }
+
+        user_metadata.set_playback_trim(123, 0, 0)
+        assert 123 not in user_metadata.playback_trims
+
+    @patch('web_app.tubio.DataInterface')
+    def test_updates_playback_boundaries_without_writing_audio(
+        self, mock_di_class, client, auth_mock
+    ):
+        di = mock_di_class.return_value
+        metadata = MagicMock()
+        audio_metadata = Mock(title='Original')
+        metadata.audios = {123: audio_metadata}
+        user_metadata = metadata.get_user.return_value
+        user_metadata.playlists = {
+            'Favourites': Mock(audio_crcs=[123]),
+        }
+        di.edit_metadata.return_value.__enter__.return_value = metadata
+
+        response = client.post('/tubio/audio/123/trim', data={
+            'trim_start_s': '1.5',
+            'trim_end_s': '2',
+        }, headers={'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
+
+        assert response.status_code == 200
+        assert response.get_json()['trim_start_s'] == 1.5
+        user_metadata.set_playback_trim.assert_called_once_with(123, 1.5, 2)
+        di.save_audio.assert_not_called()
+
+    @patch('web_app.tubio.DataInterface')
+    def test_rejects_negative_playback_boundary(
+        self, mock_di_class, client, auth_mock
+    ):
+        response = client.post('/tubio/audio/123/trim', data={
+            'trim_start_s': '-1',
+            'trim_end_s': '0',
+        }, headers={'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
+
+        assert response.status_code == 400
+        assert 'negative' in response.get_json()['error']
+        mock_di_class.return_value.edit_metadata.assert_not_called()
 
 
 if __name__ == '__main__':

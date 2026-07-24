@@ -34,7 +34,7 @@
         </div>
         {% else %}
         <div class="accordion" id="audioAccordion-{{ playlist_name|replace(' ', '-') }}" data-playlist-name="{{ playlist_name }}">
-            {% for crc, title, has_thumbnail, source_url in playlist_data %}
+            {% for crc, title, has_thumbnail, source_url, trim_start_s, trim_end_s in playlist_data %}
             <div class="accordion-item mb-2 border-0 shadow-sm" data-audio-crc="{{ crc }}" data-playlist="{{ playlist_name }}" data-title="{{ title }}" data-has-thumbnail="{{ has_thumbnail|lower }}" style="border-radius: 12px; overflow: hidden;">
                 <h2 class="accordion-header">
                     <div class="d-flex align-items-center gap-2 px-2">
@@ -84,13 +84,19 @@
                                     <a href="{{ url_for('.download_audio', crc=crc) }}" class="btn btn-sm btn-outline-success track-action-btn" data-bs-toggle="tooltip" data-bs-title="Download audio file to your device">
                                         <i class="bi bi-download me-1"></i>Download
                                     </a>
+                                    <button class="btn btn-sm btn-outline-primary track-action-btn"
+                                            onclick='openTrimModal("{{ crc }}", {{ title|tojson }}, {{ trim_start_s }}, {{ trim_end_s }})'
+                                            data-bs-toggle="tooltip"
+                                            data-bs-title="Create a copy with audio removed from the start or end">
+                                        <i class="bi bi-scissors me-1"></i>Trim
+                                    </button>
                                     <button class="btn btn-sm btn-outline-danger track-action-btn" onclick="removeTrack('{{ crc }}', this)" data-bs-toggle="tooltip" data-bs-title="Remove track from your playlists">
                                         <i class="bi bi-trash me-1"></i>Remove
                                     </button>
                                 </div>
                             </div>
                         </div>
-                        <audio hidden controls preload="none" id="audio-{{ crc }}">
+                        <audio hidden controls preload="none" id="audio-{{ crc }}" data-trim-start="{{ trim_start_s }}" data-trim-end="{{ trim_end_s }}">
                             <source src="{{ url_for('.serve_audio', crc=crc) }}" type="audio/mp4">
                             Your browser does not support the audio element.
                         </audio>
