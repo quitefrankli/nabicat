@@ -32,6 +32,25 @@
 
 * start every new session with "AGENTS.md read!"
 
+## Concurrency & multi-worker (Redis)
+
+The app runs under gunicorn with multiple sync worker **processes** (`-w`, set via `WORKERS` in `update_server.sh`, default 4). Each worker is a separate OS process, so anything that must be shared across requests lives in **Redis**, not module-level globals. Redis is a hard runtime dependency (`redis_url` in `ConfigManager`, default `redis://127.0.0.1:6379/0`); `update_server.sh` installs/enables `redis-server`, and `ensure_local_redis()` auto-starts one for local `python -m web_app` runs.
+
+- **`web_app/redis_client.py`** is the hub: `get_redis()` (process-cached client), `run_once(job_id)` (scheduler decorator — each APScheduler job fires in every worker but a Redis `SET NX EX` ensures the body runs once), and `rmw_lock(name)` (the distributed mutex).
+- **Rate limiter** (`helpers.py`) and **ephemeral RSA handshake keys** are Redis-backed so limits and the handshake work across workers. Sessions are signed cookies (stateless — fine). **Sentinel cancel flags** and **Tubio download progress** are Redis keys, not in-process dicts.
+
+### rmw_lock + edit_model (the read-modify-write pattern)
+
+JSON data files are read → mutated → written back within a request. Two workers doing this concurrently would clobber each other (last-write-wins). The fix is a **path-keyed distributed lock** that wraps the whole load→mutate→save span:
+
+- **`rmw_lock(name)`** (`redis_client.py`) — a context manager implemented with `SET NX EX` + a token-checked release (works on real Redis *and* fakeredis, which has no Lua scripting). It is **reentrant per-thread** (a request is one thread), so a caller can wrap a span whose inner save re-locks the same name without deadlocking. Hold times are bounded by `rmw_lock_timeout_s` (auto-expire if a holder crashes) and `rmw_lock_blocking_timeout_s` (raise rather than hang forever). **Never hold the lock across slow I/O** (uploads, ffmpeg transcodes) — do the heavy work first, then lock only the metadata mutation.
+- **`DataInterface.edit_model(path, Model)`** (`data_interface.py`) is the preferred API and wraps `rmw_lock` for you: it derives the lock name from the file path, loads the model *inside* the lock, yields it for mutation, and saves on clean exit — **only if the serialized model actually changed** (no-op edits skip the write). An exception in the block discards the mutation. This bundles the three things manual locking gets wrong: forgetting to lock, locking the save but not the read, and inconsistent lock names.
+- Every subapp exposes a typed thin wrapper over `edit_model`: `edit_users` (account), `edit_goals` (todoist), `edit_data` (metrics), `edit_metadata` (tubio + file_store), `edit_meta` (hammock). Use these for **all writes**; use the plain `load_*`/`get_*` methods only for read-only paths. Do **not** call the bare `save_*` methods for read-modify-write.
+- **Gotcha — no nested `edit_*` on the same file**: a nested call re-loads from disk and would miss the outer block's uncommitted mutations. Mutate the already-yielded model directly instead of calling another `edit_*`/`write_*` inside the block.
+- On-disk formats are preserved by Pydantic field aliases + `serialize_by_alias=True` (e.g. `User.id` ↔ `username`, `PostMeta.template_data` ↔ `template-data`), so no data migration was needed.
+
+**Single-worker-only feature:** the **dev terminal** (`web_app/dev/terminal.py`) holds live PTY subprocesses in a module-level `_sessions` dict — these are file descriptors that cannot move to Redis. Under multiple workers a terminal request can land on a worker that doesn't hold the session. It's an admin-only debug tool; if it must work reliably under `-w >1`, add nginx sticky-session affinity, otherwise run a single worker when using it.
+
 ## Sentinel subapp
 
 - Admin-only blueprint (`web_app/sentinel/__init__.py`): every route is gated by `current_user.is_admin`.

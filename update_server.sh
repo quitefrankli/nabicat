@@ -40,6 +40,11 @@ USER_NAME=$(whoami)
 GUNICORN_BIN=$(which gunicorn)
 MERIDIAN_BIN=$(which meridian)
 
+# Number of gunicorn worker processes. Override at deploy time: WORKERS=8 ./update_server.sh
+# Cross-worker shared state (scheduler, rate limiter, sessions, per-file data)
+# is Redis-backed; the dev terminal is the one single-worker-only feature (see CLAUDE.md).
+WORKERS=${WORKERS:-4}
+
 sudo tee /etc/systemd/system/nabicat.service >/dev/null <<EOF
 [Unit]
 Description=Nabicat web app
@@ -51,7 +56,7 @@ StartLimitIntervalSec=60
 Type=simple
 User=${USER_NAME}
 WorkingDirectory=${PROJ_DIR}
-ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 --timeout 300 'web_app.__main__:prod_entry()'
+ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 -w ${WORKERS} --timeout 300 'web_app.__main__:prod_entry()'
 Restart=always
 RestartSec=3
 
