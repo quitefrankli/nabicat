@@ -2,7 +2,7 @@
 
 * One tool call, not three: Prefer a single well-constructed command over multiple incremental checks.
 
-* Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why.
+* Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why. When making a commit, use the dedicated commit agent: Claude Code via the `commit` subagent (`.claude/agents/commit.md`), Codex via the `commit` agent (`.codex/agents/commit.toml`).
 
 * Context preservation: Background tasks return completion notifications with `<result>` tags containing only the final message. Do NOT call `TaskOutput` to check results. `TaskOutput` returns the full conversation transcript (every tool call, file read, and intermediate message), which wastes massive amounts of context. Wait for each task's completion notification and use the `<result>` tag content directly.
 
