@@ -82,6 +82,10 @@ class TubioConfig:
     test_video_id: str = "dQw4w9WgXcQ"
     upload_allowed_extensions: tuple = ("mp3", "mp4", "m4a")
     download_progress_poll_interval_s: float = 0.3
+    # TTL for the Redis download-progress record. Outlives a normal download so
+    # the SSE client (possibly on another gunicorn worker) can read it; expires
+    # on its own if a download dies without clearing the key.
+    download_progress_ttl_s: int = 3600
     youtube_403_fallback_player_client: str = "web"
     default_playlist_name: str = "Favourites"
     trackbar_volume_min_percent: int = 0
@@ -145,6 +149,10 @@ class SentinelConfig:
     default_limit_mins: int = 5
     min_limit_mins: int = 1
     max_limit_mins: int = 10
+    # TTL for the Redis cancel flag. Must exceed the longest possible run
+    # (max_limit_mins) so a cancel request on any gunicorn worker still reaches
+    # the run loop's worker before the flag expires.
+    cancel_flag_ttl_s: int = 3600
     max_steps: int = 50
     max_screenshots: int = 50
     # If the agent emits a malformed/non-JSON response, retry once before

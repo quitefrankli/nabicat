@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from web_app.config import ConfigManager
+from web_app.redis_client import get_redis
 from web_app.sentinel.actions import ActionValidationError, AgentAction, parse_agent_action
 from web_app.sentinel.data_interface import DataInterface, utc_now_iso
 from web_app.sentinel.models import (
@@ -26,8 +27,9 @@ from web_app.sentinel.target_policy import ValidatedTarget, validate_public_web_
 
 
 _active_runs: dict[str, Report] = {}
-_cancel_events: dict[str, threading.Event] = {}
 _active_lock = threading.RLock()
+
+_CANCEL_PREFIX = "nabicat:sentinel:cancel:"
 
 
 def render_report_pdf(html: str) -> bytes:
@@ -69,22 +71,29 @@ def render_report_pdf(html: str) -> bytes:
 
 
 def request_cancel(run_id: str) -> bool:
-    with _active_lock:
-        event = _cancel_events.get(run_id)
-    if event is None:
+    """Signal a run to cancel.
+
+    Redis-backed so the cancel request can be served by a different gunicorn
+    worker than the one running the browser thread. Only flags runs that are
+    still active (their cancel key was armed by start_run); returns False for
+    unknown/finished runs. Fails safe (returns False) if Redis is unreachable.
+    """
+    try:
+        # Only set if the run is still active — start_run arms the key with a
+        # sentinel value; NX-less set would resurrect a cleared/expired run.
+        updated = get_redis().set(_CANCEL_PREFIX + run_id, b"1", xx=True, keepttl=True)
+    except Exception:
+        logging.exception("request_cancel: Redis unavailable for run %s", run_id)
         return False
-    event.set()
-    return True
-
-
-def _cancel_event(run_id: str) -> threading.Event | None:
-    with _active_lock:
-        return _cancel_events.get(run_id)
+    return bool(updated)
 
 
 def _is_cancelled(run_id: str) -> bool:
-    event = _cancel_event(run_id)
-    return event is not None and event.is_set()
+    try:
+        return get_redis().get(_CANCEL_PREFIX + run_id) == b"1"
+    except Exception:
+        logging.exception("_is_cancelled: Redis unavailable for run %s", run_id)
+        return False
 
 
 _ACTIVE_STATUSES = {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.SUMMARIZING}
@@ -122,7 +131,7 @@ def delete_run(run_id: str) -> bool:
     if deleted:
         with _active_lock:
             _active_runs.pop(run_id, None)
-            _cancel_events.pop(run_id, None)
+        get_redis().delete(_CANCEL_PREFIX + run_id)
     return deleted
 
 
@@ -188,8 +197,11 @@ def start_run(
             extras=dict(account_credentials.get("extras") or {}),
         )
     _save(report)
-    with _active_lock:
-        _cancel_events[run_id] = threading.Event()
+    # Arm the cancel flag as "not cancelled" so request_cancel (SET XX) can flip
+    # it. TTL outlives the longest run and self-cleans if the process dies.
+    get_redis().set(
+        _CANCEL_PREFIX + run_id, b"0", ex=ConfigManager().sentinel.cancel_flag_ttl_s
+    )
     thread = threading.Thread(target=_run_background, args=(report,), daemon=True)
     thread.start()
     return {"run_id": run_id, "status": "queued"}
@@ -231,8 +243,7 @@ def _run_background(report: Report) -> None:
     finally:
         report.finished_at = utc_now_iso()
         _save(report)
-        with _active_lock:
-            _cancel_events.pop(report.run_id, None)
+        get_redis().delete(_CANCEL_PREFIX + report.run_id)
         DataInterface().prune_reports()
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from web_app.config import ConfigManager
+from web_app.redis_client import get_redis
 from web_app.tubio.data_interface import Metadata, UserMetadata, AudioMetadata, DataInterface
 from web_app.users import User
 
@@ -26,24 +27,59 @@ class VideoTooLongError(Exception):
         )
 
 
+_PROGRESS_PREFIX = "nabicat:tubio:progress:"
+
+
 class DownloadProgress:
-    """Tracks download progress for a specific video."""
-    def __init__(self):
-        self.percent: float = 0
-        self.status: str = "starting"
-        self.error: str | None = None
+    """Tracks download progress for a specific video.
 
+    State lives in Redis (keyed by video_id) so the SSE progress stream can be
+    served by a different gunicorn worker than the one running the download.
+    Every attribute assignment write-throughs to Redis.
+    """
+    def __init__(self, video_id: str):
+        # Bypass __setattr__ during init so the write-through sees a complete
+        # object.
+        object.__setattr__(self, "video_id", video_id)
+        object.__setattr__(self, "percent", 0.0)
+        object.__setattr__(self, "status", "starting")
+        object.__setattr__(self, "error", None)
+        self._persist()
 
-# Global dict to track active downloads by video_id
-_active_downloads: dict[str, DownloadProgress] = {}
+    def __setattr__(self, name, value):
+        object.__setattr__(self, name, value)
+        if name in ("percent", "status", "error"):
+            self._persist()
+
+    def _persist(self) -> None:
+        payload = json.dumps({
+            "percent": self.percent,
+            "status": self.status,
+            "error": self.error,
+        })
+        get_redis().set(
+            _PROGRESS_PREFIX + self.video_id,
+            payload,
+            ex=ConfigManager().tubio.download_progress_ttl_s,
+        )
 
 
 def get_download_progress(video_id: str) -> DownloadProgress | None:
-    return _active_downloads.get(video_id)
+    raw = get_redis().get(_PROGRESS_PREFIX + video_id)
+    if raw is None:
+        return None
+    data = json.loads(raw)
+    # Rebuild without re-persisting: construct bare, then set fields directly.
+    progress = object.__new__(DownloadProgress)
+    object.__setattr__(progress, "video_id", video_id)
+    object.__setattr__(progress, "percent", data.get("percent", 0.0))
+    object.__setattr__(progress, "status", data.get("status", "starting"))
+    object.__setattr__(progress, "error", data.get("error"))
+    return progress
 
 
 def clear_download_progress(video_id: str) -> None:
-    _active_downloads.pop(video_id, None)
+    get_redis().delete(_PROGRESS_PREFIX + video_id)
 
 
 class AudioDownloader:
@@ -310,8 +346,7 @@ class AudioDownloader:
         temp_file = DataInterface().find_avail_temp_file_path(ext=".%(ext)s")
         temp_file.parent.mkdir(parents=True, exist_ok=True)
 
-        progress = DownloadProgress()
-        _active_downloads[video_id] = progress
+        progress = DownloadProgress(video_id)
 
         def progress_hook(d):
             if d['status'] == 'downloading':

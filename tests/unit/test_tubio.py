@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch, MagicMock
 from datetime import timedelta
 from yt_dlp.utils import DownloadError
 
-from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress, _active_downloads
+from web_app.tubio.audio_downloader import AudioDownloader, VideoTooLongError, DownloadProgress, get_download_progress, clear_download_progress
 
 
 class TestExtractVideoId:
@@ -319,17 +319,23 @@ class TestSearchYoutubeWithDirectUrl:
 
 class TestDownloadProgress:
     def test_progress_tracking(self):
-        _active_downloads.clear()
-        _active_downloads['test123'] = DownloadProgress()
+        clear_download_progress('test123')
 
+        # Construction write-throughs to Redis; a fresh read (as a separate
+        # gunicorn worker's SSE stream would do) sees the initial state.
+        DownloadProgress('test123')
         progress = get_download_progress('test123')
         assert progress is not None
         assert progress.percent == 0
         assert progress.status == "starting"
 
-        progress.percent = 50
-        progress.status = "downloading"
-        assert get_download_progress('test123').percent == 50
+        # Mutations on the writer object propagate to independent readers.
+        writer = DownloadProgress('test123')
+        writer.percent = 50
+        writer.status = "downloading"
+        reader = get_download_progress('test123')
+        assert reader.percent == 50
+        assert reader.status == "downloading"
 
         clear_download_progress('test123')
         assert get_download_progress('test123') is None

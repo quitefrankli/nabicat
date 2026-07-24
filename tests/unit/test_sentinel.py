@@ -1513,3 +1513,29 @@ def test_create_batch_rejects_invalid_item_url(client):
             )
     assert res.status_code == 400
     assert "bad url" in res.get_json()["error"]
+
+
+def test_request_cancel_is_redis_backed_and_cross_worker():
+    """The cancel signal round-trips through Redis so a cancel served by one
+    gunicorn worker is observed by the run loop on another. Simulated by
+    arming/flipping/reading via the module functions, which all share Redis."""
+    from web_app.sentinel import runner
+    from web_app.redis_client import get_redis
+
+    run_id = "c" * 32
+    key = runner._CANCEL_PREFIX + run_id
+    get_redis().delete(key)
+
+    # Unknown run: cannot cancel (no armed key).
+    assert runner.request_cancel(run_id) is False
+    assert runner._is_cancelled(run_id) is False
+
+    # start_run arms the flag as "not cancelled".
+    get_redis().set(key, b"0", ex=ConfigManager().sentinel.cancel_flag_ttl_s)
+    assert runner._is_cancelled(run_id) is False
+
+    # A cancel request (possibly on another worker) flips it.
+    assert runner.request_cancel(run_id) is True
+    assert runner._is_cancelled(run_id) is True
+
+    get_redis().delete(key)
