@@ -364,6 +364,11 @@ class ConfigManager:
         self.use_offline_syncer = True
         self.debug_mode = False
         self.site_url = getenv("SITE_URL") or "https://nabicat.site"
+        self.redis_url = getenv("REDIS_URL") or "redis://127.0.0.1:6379/0"
+        # TTL for the per-job exactly-once lock guarding scheduled cron jobs so
+        # they run once across gunicorn workers. Must exceed the longest job
+        # runtime and matches the jobs' misfire_grace_time.
+        self.scheduler_lock_ttl_s = 3600
         self.backup_max_count = 8
         # Requests matching these prefixes are silently dropped (404, no log) — automated bots/scanners probing for common vulnerabilities
         self.known_bot_prefixes = {

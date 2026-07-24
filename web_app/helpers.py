@@ -1,8 +1,6 @@
 import base64
 import gzip
 import json
-import time
-import threading
 import subprocess
 import tempfile
 import flask
@@ -22,6 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from web_app.app import app
 from web_app.config import ConfigManager
+from web_app.redis_client import get_redis
 from web_app.data_interface import DataInterface
 from web_app.users import User
 from web_app.errors import *
@@ -80,60 +79,37 @@ def register_all_blueprints(app):
         app.register_blueprint(blueprint)
 
 
-class TimedDict:
-    """Thread-safe dict with TTL for ephemeral key storage."""
-    
-    def __init__(self, default_ttl_seconds: int = 300):
-        self._data = {}
-        self._lock = threading.RLock()
-        self._default_ttl = default_ttl_seconds
-        self._last_cleanup = time.time()
-    
-    def _cleanup_expired(self):
-        """Remove expired entries."""
-        now = time.time()
-        # Run cleanup at most once every 60 seconds
-        if now - self._last_cleanup < 60:
-            return
-        
-        expired_keys = [
-            k for k, v in self._data.items()
-            if v['expires'] < now
-        ]
-        for k in expired_keys:
-            del self._data[k]
-        self._last_cleanup = now
-    
-    def set(self, key: str, value, ttl: int = None):
-        """Store value with TTL."""
-        with self._lock:
-            self._cleanup_expired()
-            self._data[key] = {
-                'value': value,
-                'expires': time.time() + (ttl or self._default_ttl)
-            }
-    
-    def get(self, key: str):
-        """Get value if not expired, else return None and delete."""
-        with self._lock:
-            self._cleanup_expired()
-            entry = self._data.get(key)
-            if not entry:
-                return None
-            if entry['expires'] < time.time():
-                del self._data[key]
-                return None
-            return entry['value']
-    
-    def delete(self, key: str):
-        """Delete a key."""
-        with self._lock:
-            if key in self._data:
-                del self._data[key]
+_EPHEMERAL_KEY_PREFIX = "nabicat:ephkey:"
 
 
-# Ephemeral RSA key storage (session_id -> private_key)
-_ephemeral_keys = TimedDict(default_ttl_seconds=ConfigManager().ephemeral_key_ttl_s)
+def _store_ephemeral_key(session_id: str, private_key) -> None:
+    """Persist an ephemeral RSA private key in Redis with a TTL.
+
+    Redis-backed (not in-process) so the handshake and the follow-up encrypted
+    request can be served by different gunicorn workers.
+    """
+    der = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    get_redis().set(
+        _EPHEMERAL_KEY_PREFIX + session_id,
+        der,
+        ex=ConfigManager().ephemeral_key_ttl_s,
+    )
+
+
+def _load_ephemeral_key(session_id: str):
+    """Return the stored RSA private key for session_id, or None if absent/expired."""
+    der = get_redis().get(_EPHEMERAL_KEY_PREFIX + session_id)
+    if not der:
+        return None
+    return serialization.load_der_private_key(der, password=None)
+
+
+def _delete_ephemeral_key(session_id: str) -> None:
+    get_redis().delete(_EPHEMERAL_KEY_PREFIX + session_id)
 
 
 login_manager = flask_login.LoginManager()
@@ -161,7 +137,7 @@ limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["3 per second"],
-    storage_uri="memory://",
+    storage_uri=ConfigManager().redis_url,
     strategy="fixed-window", # or "moving-window"
 )
 
@@ -265,8 +241,8 @@ def generate_ephemeral_keypair() -> tuple[str, str]:
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     ).decode('utf-8')
     
-    # Store private key in memory (TTL from config)
-    _ephemeral_keys.set(session_id, private_key, ttl=ConfigManager().ephemeral_key_ttl_s)
+    # Store private key in Redis (TTL from config)
+    _store_ephemeral_key(session_id, private_key)
     
     logging.debug(f"Generated ephemeral keypair, session_id: {session_id}")
     return session_id, public_pem
@@ -293,7 +269,7 @@ def decode_decrypt_decompress(encrypted_payload: dict) -> dict:
         raise APIError(f"Missing required field in encrypted payload: {e}")
     
     # Retrieve ephemeral private key
-    private_key = _ephemeral_keys.get(session_id)
+    private_key = _load_ephemeral_key(session_id)
     if not private_key:
         raise AuthenticationError("Invalid or expired session ID")
     
@@ -322,7 +298,7 @@ def decode_decrypt_decompress(encrypted_payload: dict) -> dict:
             json_data = gz.read()
         
         # Clean up: delete the ephemeral key after successful decryption
-        _ephemeral_keys.delete(session_id)
+        _delete_ephemeral_key(session_id)
         
         return json.loads(json_data.decode('utf-8'))
         

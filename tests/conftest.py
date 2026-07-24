@@ -7,6 +7,23 @@ from web_app.app import app as flask_app
 flask_app.secret_key = "test-secret-key"
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _redis_backend():
+    """Back get_redis() with fakeredis and disable the rate limiter for tests.
+
+    Redis is a hard runtime dependency (scheduler run_once, ephemeral keys,
+    rate limiting), but the test environment has no live server. fakeredis
+    faithfully implements the SET NX EX semantics those paths rely on.
+    """
+    import fakeredis
+    import web_app.redis_client as redis_client
+    from web_app.helpers import limiter
+
+    redis_client._client = fakeredis.FakeRedis()
+    limiter.enabled = False
+    yield
+
+
 @pytest.fixture
 def app():
     """Create application for testing."""

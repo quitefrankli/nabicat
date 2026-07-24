@@ -21,6 +21,7 @@ from xml.sax.saxutils import escape as xml_escape
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.helpers import get_ip, get_all_data_interfaces, register_all_blueprints
+from web_app.redis_client import run_once, ensure_local_redis
 from web_app.hammock.data_interface import DataInterface as HammockDataInterface
 from web_app.tubio.audio_downloader import AudioDownloader
 from web_app.app import app
@@ -45,6 +46,7 @@ scheduler = APScheduler()
 
 
 @scheduler.task('cron', id='scheduled_backup', day_of_week='sun', hour=0, minute=0, misfire_grace_time=3600)
+@run_once('scheduled_backup')
 def scheduled_backup():
     logging.info("Running scheduled backup")
     backup_dir = DataInterface().generate_backup_dir()
@@ -55,6 +57,7 @@ def scheduled_backup():
 
 
 @scheduler.task('cron', id='scheduled_cookie_keepalive', day='*', hour=4, minute=0, misfire_grace_time=3600)
+@run_once('scheduled_cookie_keepalive')
 def run_cookie_keepalive() -> None:
     logging.info("Running scheduled cookie keepalive")
     cookie_path = ConfigManager().tubio.cookie_path
@@ -116,6 +119,7 @@ def _check_and_update_ytdlp() -> None:
 
 
 @scheduler.task('cron', id='scheduled_download_health_check', day='*', hour=4, minute=10, misfire_grace_time=3600)
+@run_once('scheduled_download_health_check')
 def run_download_health_check() -> None:
     logging.info("Running download health check")
 
@@ -272,6 +276,8 @@ def cli_start(debug: bool, port: int, llm_source: str | None):
     if llm_source:
         cfg.llm.api_source = llm_source
     app.secret_key = cfg.flask_secret_key
+
+    ensure_local_redis()
 
     logging.info("Starting server (llm_source=%s)", cfg.llm.api_source)
     app.run(host='0.0.0.0', port=port, debug=debug)
