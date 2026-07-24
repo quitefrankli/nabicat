@@ -2,9 +2,12 @@ import atexit
 import logging
 import shutil
 import subprocess
+import threading
 import time
+import uuid
 import redis
 
+from contextlib import contextmanager
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -12,6 +15,12 @@ from web_app.config import ConfigManager
 
 _client: redis.Redis | None = None
 _local_server: subprocess.Popen | None = None
+
+# Per-thread reentrancy: a thread already holding lock <name> can re-enter it
+# (e.g. a caller wraps a get->mutate->save span and the DI save method locks
+# the same name). Each request runs in one thread, so thread-local depth
+# tracking is the correct scope.
+_lock_depth = threading.local()
 
 
 def ensure_local_redis() -> None:
@@ -89,6 +98,65 @@ def get_redis() -> redis.Redis:
     if _client is None:
         _client = redis.Redis.from_url(ConfigManager().redis_url, decode_responses=False)
     return _client
+
+
+_LOCK_PREFIX = "nabicat:lock:"
+
+
+@contextmanager
+def rmw_lock(name: str, timeout_s: int | None = None, blocking_timeout_s: float | None = None):
+    """Distributed mutex for cross-worker read-modify-write spans.
+
+    Guards JSON files (users.json, tubio metadata) that are read, mutated, and
+    written back across a request: without this two gunicorn workers can
+    interleave and lose one update. Implemented with SET NX EX + a token-checked
+    release (rather than redis-py's Lua-based Lock) so it works on both real
+    Redis and fakeredis, which has no scripting support.
+
+    `timeout_s` bounds how long the lock is held before auto-expiring (guards
+    against a crashed holder). `blocking_timeout_s` bounds how long we wait to
+    acquire before raising TimeoutError — so a wedged lock can't hang a worker
+    forever.
+    """
+    cfg = ConfigManager()
+    timeout_s = timeout_s if timeout_s is not None else cfg.rmw_lock_timeout_s
+    blocking_timeout_s = (
+        blocking_timeout_s if blocking_timeout_s is not None else cfg.rmw_lock_blocking_timeout_s
+    )
+    depths = _lock_depth.__dict__
+    if depths.get(name, 0) > 0:
+        # Already held by this thread — re-enter without touching Redis.
+        depths[name] += 1
+        try:
+            yield
+        finally:
+            depths[name] -= 1
+        return
+
+    key = _LOCK_PREFIX + name
+    token = uuid.uuid4().hex.encode()
+    client = get_redis()
+
+    deadline = time.monotonic() + blocking_timeout_s
+    while True:
+        if client.set(key, token, nx=True, ex=timeout_s):
+            break
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Could not acquire redis lock {name!r} within {blocking_timeout_s}s")
+        time.sleep(0.05)
+
+    depths[name] = 1
+    try:
+        yield
+    finally:
+        depths[name] = 0
+        # Only release if we still own it (our token) — a lock that expired and
+        # was re-acquired by another worker must not be deleted by us.
+        try:
+            if client.get(key) == token:
+                client.delete(key)
+        except Exception:
+            logging.exception("rmw_lock: failed to release lock %s", name)
 
 
 def run_once(job_id: str):

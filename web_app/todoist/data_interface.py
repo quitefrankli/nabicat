@@ -41,13 +41,16 @@ class DataInterface(BaseDataInterface):
         self.todoist_data_directory = ConfigManager().save_data_path / "todoist"
 
     def load_goals(self, user: User) -> Goals:
+        """Read-only load. For mutations use edit_goals() so the write is locked."""
         return self.load_model(self._get_goals_file(user), Goals) or Goals(goals={})
 
-    def save_goals(self, data: Goals, user: User) -> None:
-        # Whole-blob read-modify-write: concurrent saves for the same user can
-        # clobber each other (last write wins). Atomic write keeps the file
-        # valid but does not serialize overlapping requests.
-        self.save_model(self._get_goals_file(user), data, exclude_none=True)
+    def edit_goals(self, user: User):
+        """Transactional edit: `with di.edit_goals(user) as goals: goals...`.
+
+        Locks the user's goals.json, loads it fresh, and saves on clean exit
+        (only if changed). Callers perform just the in-memory mutation.
+        """
+        return self.edit_model(self._get_goals_file(user), Goals, exclude_none=True)
 
     def backup_data(self, backup_dir: Path) -> None:
         self._backup_subtree(self.todoist_data_directory, backup_dir, "todoist")

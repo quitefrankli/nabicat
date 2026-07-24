@@ -11,6 +11,7 @@ from web_app.todoist.data_interface import DataInterface, GoalState, Goal, Goals
 
 goals_api = Blueprint('goals_api', __name__, url_prefix='/goal')
 
+
 @goals_api.before_request
 @flask_login.login_required
 def require_login():
@@ -75,20 +76,18 @@ def new_goal():
     description = from_req('description')
     parent_id = request.form.get('parent_id')
 
-    tld = DataInterface().load_goals(cur_user())
-    goal_id = 0 if not tld.goals else max(tld.goals.keys()) + 1
-    goal = Goal(id=goal_id,
-                name=name,
-                state=GoalState.ACTIVE,
-                description=description,
-                creation_date=datetime.now(),
-                parent=int(parent_id) if parent_id else None)
-    tld.goals[goal_id] = goal
+    with DataInterface().edit_goals(cur_user()) as tld:
+        goal_id = 0 if not tld.goals else max(tld.goals.keys()) + 1
+        goal = Goal(id=goal_id,
+                    name=name,
+                    state=GoalState.ACTIVE,
+                    description=description,
+                    creation_date=datetime.now(),
+                    parent=int(parent_id) if parent_id else None)
+        tld.goals[goal_id] = goal
 
-    if parent_id:
-        tld.goals[int(parent_id)].children.append(goal_id)
-
-    DataInterface().save_goals(tld, cur_user())
+        if parent_id:
+            tld.goals[int(parent_id)].children.append(goal_id)
 
     return get_default_redirect()
 
@@ -98,9 +97,8 @@ def fail_goal():
     req_data = request.args
 
     goal_id = int(req_data['goal_id'])
-    tld = DataInterface().load_goals(cur_user())
-    tld.goals[goal_id].state = GoalState.FAILED
-    DataInterface().save_goals(tld, cur_user())
+    with DataInterface().edit_goals(cur_user()) as tld:
+        tld.goals[goal_id].state = GoalState.FAILED
 
     return get_default_redirect()
 
@@ -109,13 +107,12 @@ def fail_goal():
 def log_goal():
     goal_id = int(request.args['goal_id'])
 
-    tld = DataInterface().load_goals(cur_user())
-    goal = tld.goals[goal_id]
-    today_date = datetime.now().date()
-    today_date = today_date.strftime("%d/%m/%Y")
-    goal.description += f"\n\n{'-'*10}\n{today_date}\n{from_req('log')}\n{'-'*10}"
-    goal.last_modified = datetime.now()
-    DataInterface().save_goals(tld, cur_user())
+    with DataInterface().edit_goals(cur_user()) as tld:
+        goal = tld.goals[goal_id]
+        today_date = datetime.now().date()
+        today_date = today_date.strftime("%d/%m/%Y")
+        goal.description += f"\n\n{'-'*10}\n{today_date}\n{from_req('log')}\n{'-'*10}"
+        goal.last_modified = datetime.now()
 
     return get_default_redirect()
 
@@ -124,18 +121,16 @@ def log_goal():
 def toggle_goal_state():
     req_data = request.get_json()
 
-    tld = DataInterface().load_goals(cur_user())
-    goal = tld.goals[req_data['goal_id']]
-    if goal.state == GoalState.ACTIVE:
-        goal.state = GoalState.COMPLETED
-        goal.completion_date = datetime.now()
-    elif goal.state == GoalState.COMPLETED:
-        goal.state = GoalState.ACTIVE
-        goal.completion_date = None
-    else:
-        raise ValueError(f"Cannot toggle goal state for goal in state {goal.state}")
-
-    DataInterface().save_goals(tld, cur_user())
+    with DataInterface().edit_goals(cur_user()) as tld:
+        goal = tld.goals[req_data['goal_id']]
+        if goal.state == GoalState.ACTIVE:
+            goal.state = GoalState.COMPLETED
+            goal.completion_date = datetime.now()
+        elif goal.state == GoalState.COMPLETED:
+            goal.state = GoalState.ACTIVE
+            goal.completion_date = None
+        else:
+            raise ValueError(f"Cannot toggle goal state for goal in state {goal.state}")
 
     return flask.jsonify(success=True)
 
@@ -151,14 +146,12 @@ def reparent_goal():
     except (KeyError, TypeError, ValueError):
         return flask.jsonify(success=False, error="Invalid goal move request"), 400
 
-    tld = DataInterface().load_goals(cur_user())
-    try:
-        changed = reparent_goal_in_tree(tld, goal_id, parent_id)
-    except (KeyError, ValueError) as exc:
-        return flask.jsonify(success=False, error=str(exc)), 400
-
-    if changed:
-        DataInterface().save_goals(tld, cur_user())
+    with DataInterface().edit_goals(cur_user()) as tld:
+        try:
+            # edit_model skips the write automatically when nothing changed.
+            changed = reparent_goal_in_tree(tld, goal_id, parent_id)
+        except (KeyError, ValueError) as exc:
+            return flask.jsonify(success=False, error=str(exc)), 400
 
     return flask.jsonify(success=True, changed=changed)
 
@@ -173,12 +166,11 @@ def edit_goal():
 
     goal_id = int(request.args['goal_id'])
 
-    tld = DataInterface().load_goals(cur_user())
-    goal = tld.goals[goal_id]
-    goal.name = name
-    goal.description = description
-    goal.last_modified = datetime.now()
-    DataInterface().save_goals(tld, cur_user())
+    with DataInterface().edit_goals(cur_user()) as tld:
+        goal = tld.goals[goal_id]
+        goal.name = name
+        goal.description = description
+        goal.last_modified = datetime.now()
 
     return get_default_redirect()
 
@@ -188,24 +180,23 @@ def delete_goal():
     req_data = request.args
 
     goal_id = int(req_data['goal_id'])
-    tld = DataInterface().load_goals(cur_user())
-    goal = tld.goals[goal_id]
+    with DataInterface().edit_goals(cur_user()) as tld:
+        goal = tld.goals[goal_id]
 
-    # Remove from parent's children list
-    if goal.parent is not None and goal.parent in tld.goals:
-        parent = tld.goals[goal.parent]
-        if goal_id in parent.children:
-            parent.children.remove(goal_id)
+        # Remove from parent's children list
+        if goal.parent is not None and goal.parent in tld.goals:
+            parent = tld.goals[goal.parent]
+            if goal_id in parent.children:
+                parent.children.remove(goal_id)
 
-    # Recursively delete all descendants
-    def delete_descendants(gid):
-        if gid not in tld.goals:
-            return
-        for child_id in list(tld.goals[gid].children):
-            delete_descendants(child_id)
-        tld.goals.pop(gid)
+        # Recursively delete all descendants
+        def delete_descendants(gid):
+            if gid not in tld.goals:
+                return
+            for child_id in list(tld.goals[gid].children):
+                delete_descendants(child_id)
+            tld.goals.pop(gid)
 
-    delete_descendants(goal_id)
-    DataInterface().save_goals(tld, cur_user())
+        delete_descendants(goal_id)
 
     return get_default_redirect()

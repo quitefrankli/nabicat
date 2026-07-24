@@ -377,6 +377,11 @@ class ConfigManager:
         # they run once across gunicorn workers. Must exceed the longest job
         # runtime and matches the jobs' misfire_grace_time.
         self.scheduler_lock_ttl_s = 3600
+        # rmw_lock: how long a held lock auto-expires (guards a crashed
+        # holder) and how long a waiter blocks before giving up. RMW spans are
+        # short, so both are small.
+        self.rmw_lock_timeout_s = 10
+        self.rmw_lock_blocking_timeout_s = 5.0
         self.backup_max_count = 8
         # Requests matching these prefixes are silently dropped (404, no log) — automated bots/scanners probing for common vulnerabilities
         self.known_bot_prefixes = {

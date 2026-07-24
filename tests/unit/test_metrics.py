@@ -1,9 +1,20 @@
 """Unit tests for metrics module"""
 
 import pytest
+from contextlib import contextmanager
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
 from flask import Flask
+
+
+def _mock_edit_data(metrics):
+    """Return a context manager standing in for DataInterface.edit_data, yielding
+    the given Metrics object so the route mutates it in place (and the test can
+    assert on it)."""
+    @contextmanager
+    def _cm(user):
+        yield metrics
+    return _cm
 
 # Import app from __main__ where blueprints are registered
 import web_app.__main__ as main_module
@@ -149,7 +160,7 @@ class TestMetricsLastModified:
         metrics = Metrics(metrics={1: metric})
 
         mock_di = mock_di_class.return_value
-        mock_di.load_data.return_value = metrics
+        mock_di.edit_data = _mock_edit_data(metrics)
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
@@ -180,7 +191,7 @@ class TestMetricsLastModified:
         metrics = Metrics(metrics={1: metric})
 
         mock_di = mock_di_class.return_value
-        mock_di.load_data.return_value = metrics
+        mock_di.edit_data = _mock_edit_data(metrics)
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id

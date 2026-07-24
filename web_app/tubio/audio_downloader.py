@@ -376,13 +376,12 @@ class AudioDownloader:
         # Download and cache thumbnail
         AudioDownloader.download_thumbnail(video_id, crc)
 
-        DataInterface().save_audio_metadata(AudioMetadata(
-            crc=crc, title=title, yt_video_id=video_id, is_cached=True,
-            source_url=f"https://www.youtube.com/watch?v={video_id}"
-        ))
-        user_metadata = DataInterface().get_user_metadata(user)
-        user_metadata.add_to_playlist(crc)
-        DataInterface().save_user_metadata(user, user_metadata)
+        with DataInterface().edit_metadata() as metadata:
+            metadata.audios[crc] = AudioMetadata(
+                crc=crc, title=title, yt_video_id=video_id, is_cached=True,
+                source_url=f"https://www.youtube.com/watch?v={video_id}"
+            )
+            metadata.get_user(user.id).add_to_playlist(crc)
         output_file = DataInterface().get_audio_path(crc)
         output_file.parent.mkdir(parents=True, exist_ok=True)
         os.rename(temp_file, output_file)

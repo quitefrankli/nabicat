@@ -50,26 +50,26 @@ def delete_account():
         return render_template('account_delete.html')
 
     password = request.form.get('password', '')
-    existing_users = DataInterface().load_users()
     current_user_id = flask_login.current_user.id
 
-    if current_user_id not in existing_users:
-        flask_login.logout_user()
-        flask.flash('Account not found', category='error')
-        return get_default_redirect()
+    with DataInterface().edit_users() as users:
+        user = users.get(current_user_id)
+        if user is None:
+            flask_login.logout_user()
+            flask.flash('Account not found', category='error')
+            return get_default_redirect()
 
-    user = existing_users[current_user_id]
-    if password != user.password:
-        flask.flash('Password is incorrect', category='error')
-        return flask.redirect(flask.url_for('.delete_account'))
+        if password != user.password:
+            flask.flash('Password is incorrect', category='error')
+            return flask.redirect(flask.url_for('.delete_account'))
 
-    admin_count = sum(1 for existing_user in existing_users.values() if existing_user.is_admin)
-    if user.is_admin and admin_count <= 1:
-        flask.flash('Cannot delete the last admin account', category='error')
-        return flask.redirect(flask.url_for('.delete_account'))
+        admin_count = sum(1 for existing_user in users.root if existing_user.is_admin)
+        if user.is_admin and admin_count <= 1:
+            flask.flash('Cannot delete the last admin account', category='error')
+            return flask.redirect(flask.url_for('.delete_account'))
 
-    del existing_users[current_user_id]
-    DataInterface().save_users(list(existing_users.values()))
+        users.remove(current_user_id)
+
     for data_interface_class in get_all_data_interfaces():
         data_interface_class().delete_user_data(user)
 
@@ -93,14 +93,13 @@ def register():
         flask.flash('Username and password must only contain visible ascii characters', category='error')
         return get_default_redirect()
 
-    existing_users = DataInterface().load_users()
-    if username in existing_users:
-        flask.flash('User already exists', category='error')
-        return get_default_redirect()
+    with DataInterface().edit_users() as users:
+        if username in users:
+            flask.flash('User already exists', category='error')
+            return get_default_redirect()
 
-    new_user = DataInterface().generate_new_user(username, password)
-    existing_users[username] = new_user
-    DataInterface().save_users(list(existing_users.values()))
+        new_user = DataInterface().generate_new_user(username, password)
+        users.add(new_user)
     logging.info(f"Registered new user: {username}")
 
     flask_login.login_user(new_user, remember=True)

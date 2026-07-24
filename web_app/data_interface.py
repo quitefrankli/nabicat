@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 _M = TypeVar("_M", bound=BaseModel)
 
-from web_app.users import User
+from web_app.users import User, UsersFile
 from web_app.config import ConfigManager
 
 
@@ -108,20 +108,22 @@ class DataInterface:
             shutil.copytree(src_dir, backup_dir / name, dirs_exist_ok=True)
 
     def load_users(self) -> Dict[str, User]:
+        """Read-only load. For mutations use edit_users() so the write is locked."""
         self.data_syncer.download_file(self.users_file)
-
-        if not self.users_file.exists():
-            return {}
-
-        with open(self.users_file, 'r') as file:
-            users_data: list = json.load(file)
-            users = [User.from_dict(user) for user in users_data]
-
-        return {user.id: user for user in users}
+        users_file = self.load_model(self.users_file, UsersFile, sync=False) or UsersFile()
+        return users_file.as_dict()
 
     def save_users(self, users: List[User]) -> None:
-        json_str = json.dumps([user.to_dict() for user in users], indent=4)
-        self.atomic_write(self.users_file, data=json_str, mode='w', encoding='utf-8')
+        self.save_model(self.users_file, UsersFile(root=list(users)))
+
+    def edit_users(self):
+        """Transactional edit of users.json.
+
+        `with di.edit_users() as users: users.add(...)` — locks the file, loads
+        fresh, saves on clean exit (only if changed). `users` is a UsersFile
+        with dict-style helpers (get/contains/add/remove).
+        """
+        return self.edit_model(self.users_file, UsersFile)
 
     @staticmethod
     def generate_random_string(length: int = 10) -> str:
@@ -195,6 +197,48 @@ class DataInterface:
             mode="w",
             encoding="utf-8",
         )
+
+    @contextmanager
+    def edit_model(self, path: Path, model: Type[_M], *, exclude_none: bool = False):
+        """Transactional read-modify-write of a JSON model file.
+
+        Yields a freshly-loaded (mutable) model inside a Redis lock keyed by the
+        file path, then saves it back when the block exits cleanly. This bundles
+        the three things a manual rmw_lock leaves to the caller:
+          - the lock name is derived from the path (no inconsistent strings),
+          - the load happens INSIDE the lock (no stale-read clobber),
+          - the save is automatic and cannot be forgotten.
+
+        Do NOT put slow work (uploads, transcodes) inside this block — it holds
+        the lock. Do the heavy work first, then edit_model() the metadata.
+
+        On an exception the block does not save (the mutation is discarded),
+        matching normal request-abort semantics.
+
+        Skips the disk write entirely when the block leaves the model unchanged
+        (e.g. a toggle that was a no-op, or a read-only inspection), avoiding a
+        needless atomic rewrite.
+        """
+        from web_app.redis_client import rmw_lock
+
+        with rmw_lock(self._model_lock_name(path)):
+            obj = self.load_model(path, model, sync=False) or model()
+            before = obj.model_dump_json(exclude_none=exclude_none)
+            yield obj
+            if obj.model_dump_json(exclude_none=exclude_none) != before:
+                self.save_model(path, obj, exclude_none=exclude_none)
+
+    def _model_lock_name(self, path: Path) -> str:
+        """Stable lock name for a data file: its path relative to the data root.
+
+        Using the on-disk path means every caller editing the same file gets the
+        same lock automatically, and different users' per-user files (whose paths
+        embed user.folder) get distinct locks.
+        """
+        try:
+            return f"model:{path.relative_to(ConfigManager().save_data_path)}"
+        except ValueError:
+            return f"model:{path}"
 
     def atomic_delete(self, file_path: Path) -> None:
         if file_path.exists():

@@ -183,13 +183,13 @@ def before_request():
     # Auto-login as admin in debug mode
     if ConfigManager().debug_mode and not flask_login.current_user.is_authenticated:
         di = DataInterface()
-        users = di.load_users()
-        user = users.get("admin")
-        if user is None:
-            user = di.generate_new_user("admin", "admin")
-            user.is_admin = True
-            di.save_users(list(users.values()) + [user])
-            logging.info("Debug mode: created admin user")
+        with di.edit_users() as users:
+            user = users.get("admin")
+            if user is None:
+                user = di.generate_new_user("admin", "admin")
+                user.is_admin = True
+                users.add(user)
+                logging.info("Debug mode: created admin user")
         flask_login.login_user(user, remember=True)
 
     if _skip_request_log(request.path, request.method, config):

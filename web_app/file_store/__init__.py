@@ -337,11 +337,16 @@ def delete_selected():
 def delete_all_files():
     user = cur_user()
     data_interface = DataInterface()
-    filenames = data_interface.list_files(user)
+    # One transaction: clear the user's entries in a single locked read-modify-
+    # write rather than N racy cycles.
+    with data_interface.edit_metadata() as metadata:
+        user_metadata = metadata.users.get(user.id)
+        file_count = len(user_metadata.files) if user_metadata else 0
+        if user_metadata:
+            user_metadata.files = []
+            user_metadata.folders = []
+            data_interface._cleanup_unreferenced(metadata)
 
-    for filename in filenames:
-        data_interface.delete_file(filename, user)
-
-    _log_event(logging.INFO, 'delete_all', user, files=len(filenames))
+    _log_event(logging.INFO, 'delete_all', user, files=file_count)
     flash('All files deleted successfully!', 'success')
     return redirect(url_for('.index'))

@@ -15,10 +15,16 @@ class DataInterface(BaseDataInterface):
         self.metrics_data_directory = ConfigManager().save_data_path / "metrics"
 
     def load_data(self, user: User) -> Metrics:
+        """Read-only load. For mutations use edit_data() so the write is locked."""
         return self.load_model(self._get_data_file(user), Metrics) or Metrics(metrics={})
 
-    def save_data(self, data: Metrics, user: User) -> None:
-        self.save_model(self._get_data_file(user), data)
+    def edit_data(self, user: User):
+        """Transactional edit: `with di.edit_data(user) as metrics: metrics...`.
+
+        Locks the user's data.json, loads it fresh, and saves on clean exit.
+        Callers only perform the in-memory mutation — no explicit save/lock.
+        """
+        return self.edit_model(self._get_data_file(user), Metrics)
 
     def backup_data(self, backup_dir: Path) -> None:
         self._backup_subtree(self.metrics_data_directory, backup_dir, "metrics")

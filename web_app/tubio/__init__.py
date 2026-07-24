@@ -130,10 +130,9 @@ def youtube_download():
     if video_id in get_cached_yt_vid_ids():
         # check if audio is already downloaded on the server but not in user's playlists
         existing_audio_metadata = DataInterface().get_audio_metadata(yt_video_id=video_id)
-        user_metadata = DataInterface().get_user_metadata(cur_user())
-        user_metadata.add_to_playlist(existing_audio_metadata.crc)
-        DataInterface().save_user_metadata(cur_user(), user_metadata)
-        
+        with DataInterface().edit_metadata() as metadata:
+            metadata.get_user(cur_user().id).add_to_playlist(existing_audio_metadata.crc)
+
         return {
             'success': True,
             'message': f'Added {existing_audio_metadata.title} to playlist',
@@ -209,9 +208,8 @@ def upload_audio():
         
         crc = DataInterface().save_audio(title, file.read(), file_ext)
         audio_metadata = DataInterface().get_audio_metadata(crc=crc)
-        user_metadata = DataInterface().get_user_metadata(cur_user())
-        user_metadata.add_to_playlist(audio_metadata.crc)
-        DataInterface().save_user_metadata(cur_user(), user_metadata)
+        with DataInterface().edit_metadata() as metadata:
+            metadata.get_user(cur_user().id).add_to_playlist(audio_metadata.crc)
         
         flash(f'Successfully uploaded: {title}', 'success')
         
@@ -395,30 +393,31 @@ def resync_audio(crc: int):
 def delete_audio(crc: int):
     try:
         user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        # Check if user has this audio in their playlists
-        if crc not in user_metadata.get_playlist().audio_crcs:
-            flash('Audio not found in your playlists.', 'error')
-            return redirect(url_for('.index'))
-        
-        # Remove from user's playlists
-        user_metadata.remove_from_playlist(crc)
-        DataInterface().save_user_metadata(user, user_metadata)
-        
-        # Check if any other users have this audio in their playlists
-        metadata = DataInterface().get_metadata()
-        other_users_have_audio = any(
-            crc in user_metadata.get_playlist().audio_crcs 
-            for user_metadata in metadata.users.values() 
-        )
-        
-        # If no other users have this audio, delete it completely
+        with DataInterface().edit_metadata() as metadata:
+            user_metadata = metadata.get_user(user.id)
+
+            # Check if user has this audio in their playlists
+            if crc not in user_metadata.get_playlist().audio_crcs:
+                flash('Audio not found in your playlists.', 'error')
+                return redirect(url_for('.index'))
+
+            # Remove from user's playlists
+            user_metadata.remove_from_playlist(crc)
+
+            # Check if any other users have this audio in their playlists
+            other_users_have_audio = any(
+                crc in other.get_playlist().audio_crcs
+                for other in metadata.users.values()
+            )
+
+            # If no other users have this audio, delete it completely
+            if not other_users_have_audio:
+                metadata.audios.pop(crc, None)
+                flash('Audio deleted successfully.', 'success')
+            else:
+                flash('Audio removed from your playlists.', 'info')
         if not other_users_have_audio:
-            DataInterface().delete_audio(crc)
-            flash('Audio deleted successfully.', 'success')
-        else:
-            flash('Audio removed from your playlists.', 'info')
+            DataInterface().atomic_delete(DataInterface().app_audio_dir / f"{crc}.m4a")
             
     except Exception as e:
         logging.exception("Error deleting audio")
@@ -437,17 +436,17 @@ def create_playlist():
             return redirect(url_for('.index'))
         
         user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        # Check if playlist already exists
-        if playlist_name in user_metadata.playlists:
-            flash(f'Playlist "{playlist_name}" already exists.', 'warning')
-            return redirect(url_for('.index'))
-        
-        # Create new playlist
-        user_metadata.get_playlist(playlist_name)
-        DataInterface().save_user_metadata(user, user_metadata)
-        
+        with DataInterface().edit_metadata() as metadata:
+            user_metadata = metadata.get_user(user.id)
+
+            # Check if playlist already exists
+            if playlist_name in user_metadata.playlists:
+                flash(f'Playlist "{playlist_name}" already exists.', 'warning')
+                return redirect(url_for('.index'))
+
+            # Create new playlist
+            user_metadata.get_playlist(playlist_name)
+
         flash(f'Playlist "{playlist_name}" created successfully!', 'success')
         
     except Exception as e:
@@ -478,13 +477,12 @@ def move_tracks_to_playlist():
             return redirect(url_for('.index'))
         
         user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        for crc in song_crcs:
-            user_metadata.remove_from_all_playlists(crc)
-            user_metadata.add_to_playlist(crc, target_playlist)
+        with DataInterface().edit_metadata() as metadata:
+            user_metadata = metadata.get_user(user.id)
 
-        DataInterface().save_user_metadata(user, user_metadata)
+            for crc in song_crcs:
+                user_metadata.remove_from_all_playlists(crc)
+                user_metadata.add_to_playlist(crc, target_playlist)
         
     except Exception as e:
         logging.exception("Error moving songs to playlist", exc_info=e)
@@ -505,12 +503,12 @@ def delete_selected_songs():
         
         song_crcs = [int(crc) for crc in song_crcs_str.split(',') if crc.strip()]
         user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        for crc in song_crcs:
-            user_metadata.remove_from_all_playlists(crc)
-        DataInterface().save_user_metadata(user, user_metadata)
-        
+        with DataInterface().edit_metadata() as metadata:
+            user_metadata = metadata.get_user(user.id)
+
+            for crc in song_crcs:
+                user_metadata.remove_from_all_playlists(crc)
+
         DataInterface().cleanup_unused_tracks()
         DataInterface().cleanup_unused_thumbnails()
     except Exception as e:
@@ -535,17 +533,17 @@ def delete_playlist():
             return redirect(url_for('.index'))
         
         user = cur_user()
-        user_metadata = DataInterface().get_user_metadata(user)
-        
-        # Check if playlist exists
-        if playlist_name not in user_metadata.playlists:
-            flash(f'Playlist "{playlist_name}" does not exist.', 'warning')
-            return redirect(url_for('.index'))
-        
-        # Delete the playlist
-        del user_metadata.playlists[playlist_name]
-        DataInterface().save_user_metadata(user, user_metadata)
-        
+        with DataInterface().edit_metadata() as metadata:
+            user_metadata = metadata.get_user(user.id)
+
+            # Check if playlist exists
+            if playlist_name not in user_metadata.playlists:
+                flash(f'Playlist "{playlist_name}" does not exist.', 'warning')
+                return redirect(url_for('.index'))
+
+            # Delete the playlist
+            del user_metadata.playlists[playlist_name]
+
         flash(f'Playlist "{playlist_name}" deleted successfully!', 'success')
         
     except Exception as e:

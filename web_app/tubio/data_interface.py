@@ -60,6 +60,13 @@ class Metadata(BaseModel):
     # audio crc -> AudioMetadata
     audios: dict[int, AudioMetadata] = {}
 
+    def get_user(self, user_id: str) -> UserMetadata:
+        """Get-or-create this user's slice. Use inside an edit_metadata() block
+        so the mutation is persisted under the lock."""
+        if user_id not in self.users:
+            self.users[user_id] = UserMetadata(user_id=user_id)
+        return self.users[user_id]
+
 class DataInterface(BaseDataInterface):
     def __init__(self) -> None:
         super().__init__()
@@ -69,23 +76,30 @@ class DataInterface(BaseDataInterface):
         self.app_metadata_file = self.app_dir / "metadata.json"
 
     def delete_audio(self, crc: int) -> None:
-        metadata = self.get_metadata()
-        if crc not in metadata.audios:
-            raise ValueError(f"Audio with crc {crc} does not exist.")
-        metadata.audios.pop(crc)
-        self.save_metadata(metadata)
+        with self.edit_metadata() as metadata:
+            if crc not in metadata.audios:
+                raise ValueError(f"Audio with crc {crc} does not exist.")
+            metadata.audios.pop(crc)
         self.atomic_delete(self.app_audio_dir / f"{crc}.m4a")
 
     def get_metadata(self) -> Metadata:
+        """Read-only load. For mutations use edit_metadata() so the write is locked."""
         return self.load_model(self.app_metadata_file, Metadata, sync=False) or Metadata()
-    
-    def get_user_metadata(self, user: User) -> UserMetadata:
-        metadata = self.get_metadata()
-        if user.id not in metadata.users:
-            metadata.users[user.id] = UserMetadata(user_id=user.id)
 
-        return metadata.users[user.id]
-    
+    def edit_metadata(self):
+        """Transactional edit of the shared tubio metadata blob.
+
+        `with di.edit_metadata() as metadata: metadata.get_user(uid)...` — locks
+        the file, loads fresh, saves on clean exit (only if changed). Because
+        the blob is shared across all users, this is a global lock.
+        """
+        return self.edit_model(self.app_metadata_file, Metadata)
+
+    def get_user_metadata(self, user: User) -> UserMetadata:
+        """Read-only per-user slice. For mutations use edit_metadata() +
+        metadata.get_user(user.id)."""
+        return self.get_metadata().get_user(user.id)
+
     def get_audio_metadata(self, crc: int|None = None, yt_video_id: str|None = None) -> AudioMetadata:
         if not ((crc is None) ^ (yt_video_id is None)):
             raise ValueError("Either crc or yt_video_id must be provided, but not both.")
@@ -114,29 +128,20 @@ class DataInterface(BaseDataInterface):
             f.write(audio_data)
 
         if ext != 'm4a':
-            # convert to m4a
+            # convert to m4a (slow transcode — kept outside the metadata lock)
             audio = AudioSegment.from_file(audio_path, format=ext)
             output_path = self.app_audio_dir / f"{crc}.m4a"
             audio.export(output_path, format='mp4', bitrate="128k")
             audio_path.unlink()  # remove original file
 
-        audio_metadata = AudioMetadata(crc=crc, title=title, is_cached=True)
-        self.save_audio_metadata(audio_metadata)
+        self.save_audio_metadata(AudioMetadata(crc=crc, title=title, is_cached=True))
 
         return crc
 
     def save_audio_metadata(self, audio_metadata: AudioMetadata) -> None:
-        metadata = self.get_metadata()
-        metadata.audios[audio_metadata.crc] = audio_metadata
-        self.save_metadata(metadata)
-    
-    def save_user_metadata(self, user: User, user_metadata: UserMetadata) -> None:
-        metadata = self.get_metadata()
-        metadata.users[user.id] = user_metadata
-        self.save_metadata(metadata)
-    
-    def save_metadata(self, metadata: Metadata) -> None:
-        self.save_model(self.app_metadata_file, metadata)
+        """Single-shot upsert of one audio record (locked read-modify-write)."""
+        with self.edit_metadata() as metadata:
+            metadata.audios[audio_metadata.crc] = audio_metadata
 
     def get_audio_path(self, crc: int, metadata: Metadata|None = None) -> Path:
         """DEPRECATED want to stream eventually"""
@@ -174,12 +179,10 @@ class DataInterface(BaseDataInterface):
             logging.info(f"Deleted unused audio with crc {crc}.")
 
     def delete_user_data(self, user: User) -> None:
-        metadata = self.get_metadata()
-        if user.id not in metadata.users:
-            return
-
-        metadata.users.pop(user.id)
-        self.save_metadata(metadata)
+        with self.edit_metadata() as metadata:
+            if user.id not in metadata.users:
+                return
+            metadata.users.pop(user.id)
         self.cleanup_unused_tracks()
         self.cleanup_unused_thumbnails()
 

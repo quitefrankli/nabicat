@@ -1,16 +1,26 @@
 """Unit tests for account API routes."""
 
 import pytest
+from contextlib import contextmanager
 from unittest.mock import patch
 from unittest.mock import Mock
 
 import web_app.__main__ as main_module
 import web_app.helpers as helpers
-from web_app.users import User
+from web_app.users import User, UsersFile
 from web_app.helpers import limiter
 
 
 app = main_module.app
+
+
+def _mock_edit_users(mock_di, users_file: UsersFile):
+    """Wire mock_di.edit_users() to a context manager yielding users_file, so a
+    route mutates it in place and the test can assert on the result."""
+    @contextmanager
+    def _cm():
+        yield users_file
+    mock_di.return_value.edit_users.side_effect = _cm
 
 
 @pytest.fixture
@@ -64,36 +74,38 @@ class TestDeleteAccountRoute:
         mock_subapp_data_interface_class.return_value = mock_subapp_data_interface
         mock_get_all_data_interfaces.return_value = [mock_subapp_data_interface_class]
 
-        mock_data_interface.return_value.load_users.return_value = {
-            regular_user.id: regular_user,
-            'admin2': User(username='admin2', password='admin2pass', folder='folder2', is_admin=True),
-        }
+        users_file = UsersFile(root=[
+            regular_user,
+            User(username='admin2', password='admin2pass', folder='folder2', is_admin=True),
+        ])
+        _mock_edit_users(mock_data_interface, users_file)
 
         response = logged_in_user.post('/account/delete', data={'password': regular_user.password})
 
         assert response.status_code == 302
         assert response.location.endswith('/')
-        mock_data_interface.return_value.save_users.assert_called_once()
         mock_subapp_data_interface.delete_user_data.assert_called_once_with(regular_user)
 
-        saved_users = mock_data_interface.return_value.save_users.call_args[0][0]
-        assert all(user.id != regular_user.id for user in saved_users)
+        # The user was removed from the transactional users file.
+        assert regular_user.id not in users_file
 
         with logged_in_user.session_transaction() as session:
             assert '_user_id' not in session
 
     @patch('web_app.account_api.DataInterface')
     def test_delete_account_wrong_password(self, mock_data_interface, logged_in_user, regular_user):
-        mock_data_interface.return_value.load_users.return_value = {
-            regular_user.id: regular_user,
-            'admin2': User(username='admin2', password='admin2pass', folder='folder2', is_admin=True),
-        }
+        users_file = UsersFile(root=[
+            regular_user,
+            User(username='admin2', password='admin2pass', folder='folder2', is_admin=True),
+        ])
+        _mock_edit_users(mock_data_interface, users_file)
 
         response = logged_in_user.post('/account/delete', data={'password': 'wrongpassword'})
 
         assert response.status_code == 302
         assert response.location.endswith('/account/delete')
-        mock_data_interface.return_value.save_users.assert_not_called()
+        # Wrong password: the user is still present (no deletion).
+        assert regular_user.id in users_file
 
         with logged_in_user.session_transaction() as session:
             assert session.get('_user_id') == regular_user.id
@@ -108,15 +120,15 @@ class TestDeleteAccountRoute:
                 session['_user_id'] = admin_user.id
                 session['_fresh'] = True
 
-            mock_data_interface.return_value.load_users.return_value = {
-                admin_user.id: admin_user,
-            }
+            users_file = UsersFile(root=[admin_user])
+            _mock_edit_users(mock_data_interface, users_file)
 
             response = client.post('/account/delete', data={'password': admin_user.password})
 
             assert response.status_code == 302
             assert response.location.endswith('/account/delete')
-            mock_data_interface.return_value.save_users.assert_not_called()
+            # Last admin: deletion rejected, user still present.
+            assert admin_user.id in users_file
 
             with client.session_transaction() as session:
                 assert session.get('_user_id') == admin_user.id

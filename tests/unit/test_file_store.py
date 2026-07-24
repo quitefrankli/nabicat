@@ -570,9 +570,33 @@ class TestFileStoreRoutes:
 
     @patch('web_app.file_store.DataInterface')
     def test_delete_all_files(self, mock_di_class, client, auth_mock, caplog):
-        """Test deleting all files for current user"""
+        """Test deleting all files clears the user's entries in one transaction."""
+        from contextlib import contextmanager
+
+        metadata = Metadata(
+            users={auth_mock.id: UserMetadata(
+                user_id=auth_mock.id,
+                files=[
+                    UserFileEntry(crc=1, original_name='file1.txt', path='file1.txt'),
+                    UserFileEntry(crc=2, original_name='file2.txt', path='file2.txt'),
+                ],
+                folders=['docs'],
+            )},
+            files={
+                1: FileMetadata(crc=1, original_name='file1.txt', size=1, upload_date='x'),
+                2: FileMetadata(crc=2, original_name='file2.txt', size=1, upload_date='x'),
+            },
+        )
+
         mock_di = mock_di_class.return_value
         mock_di.list_files.return_value = ['file1.txt', 'file2.txt']
+
+        @contextmanager
+        def _edit():
+            yield metadata
+        mock_di.edit_metadata.side_effect = _edit
+        # _cleanup_unreferenced is called on the real metadata; make it a no-op.
+        mock_di._cleanup_unreferenced = lambda md: None
 
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
@@ -581,7 +605,9 @@ class TestFileStoreRoutes:
         response = client.post('/file_store/delete_all')
 
         assert response.status_code == 302
-        assert mock_di.delete_file.call_count == 2
+        # The user's file/folder entries were cleared in the transaction.
+        assert metadata.users[auth_mock.id].files == []
+        assert metadata.users[auth_mock.id].folders == []
         assert 'file_store.delete_all user=' in caplog.text
         assert 'files=2' in caplog.text
 

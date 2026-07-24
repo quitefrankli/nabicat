@@ -49,27 +49,23 @@ def new_metric():
         flask.flash('Metric name cannot be empty', category='error')
         return get_default_redirect()
 
-    data_interface = DataInterface()
-    tld = data_interface.load_data(cur_user())
-    
-    metric_id = 0 if not tld.metrics else max(tld.metrics.keys()) + 1
-    tld.metrics[metric_id] = Metric(id=metric_id, 
-                                    name=name, 
-                                    data=[], 
-                                    unit=unit, 
-                                    description=description,
-                                    creation_date=datetime.now())
-    data_interface.save_data(tld, cur_user())
-    
+    with DataInterface().edit_data(cur_user()) as tld:
+        metric_id = 0 if not tld.metrics else max(tld.metrics.keys()) + 1
+        tld.metrics[metric_id] = Metric(id=metric_id,
+                                        name=name,
+                                        data=[],
+                                        unit=unit,
+                                        description=description,
+                                        creation_date=datetime.now())
+
     return get_default_redirect()
 
 @metrics_api.route('/delete', methods=['GET'])
 @limiter.limit("2 per second")
 def delete_metric():
     metric_id = int(from_req('metric_id'))
-    tld = DataInterface().load_data(cur_user())
-    tld.metrics.pop(metric_id)
-    DataInterface().save_data(tld, cur_user())
+    with DataInterface().edit_data(cur_user()) as tld:
+        tld.metrics.pop(metric_id)
 
     return get_default_redirect()
 
@@ -86,13 +82,12 @@ def edit_metric():
     unit = from_req('units')
     description = from_req('description')
 
-    tld = DataInterface().load_data(cur_user())
-    metric = tld.metrics[metric_id]
-    metric.name = name
-    metric.unit = unit
-    metric.description = description
-    metric.last_modified = datetime.now()
-    DataInterface().save_data(tld, cur_user())
+    with DataInterface().edit_data(cur_user()) as tld:
+        metric = tld.metrics[metric_id]
+        metric.name = name
+        metric.unit = unit
+        metric.description = description
+        metric.last_modified = datetime.now()
 
     return get_default_redirect()
 
@@ -106,11 +101,10 @@ def log_metric():
         flask.flash('Value must be a number', category='error')
         return get_default_redirect()
 
-    tld = DataInterface().load_data(cur_user())
-    metric = tld.metrics[metric_id]
-    metric.data.append(DataPoint(date=datetime.now(), value=value))
-    metric.last_modified = datetime.now()
-    DataInterface().save_data(tld, cur_user())
+    with DataInterface().edit_data(cur_user()) as tld:
+        metric = tld.metrics[metric_id]
+        metric.data.append(DataPoint(date=datetime.now(), value=value))
+        metric.last_modified = datetime.now()
 
     return get_default_redirect()
 

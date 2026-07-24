@@ -72,7 +72,7 @@ class PostMeta(BaseModel):
     alias; gallery posts populate it, other types leave it None.
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+    model_config = ConfigDict(populate_by_name=True, extra="ignore", serialize_by_alias=True)
 
     type: PostType
     title: str = ""
@@ -91,6 +91,19 @@ class PreparedGalleryUpload(BaseModel):
     data: bytes
     display_name: str
     upload_suffix: str
+
+
+class ProjectStore(BaseModel):
+    posts: dict[str, PostMeta] = Field(default_factory=dict)
+
+
+class MetaStore(BaseModel):
+    """The persisted shape of the single global meta.json.
+
+    `{"projects": {<project>: {"posts": {<post>: <PostMeta>}}}}`. Modeled so it
+    can round-trip through edit_meta()/edit_model rather than raw-dict handling.
+    """
+    projects: dict[str, ProjectStore] = Field(default_factory=dict)
 
 
 def make_raw_post(title: str, date: str, owner: str) -> PostMeta:
@@ -193,44 +206,39 @@ class DataInterface(BaseDataInterface):
     def meta_file(self) -> Path:
         return self._content_dir / "meta.json"
 
-    def _read_meta_store(self) -> dict:
-        if not self.meta_file.exists():
-            return {"projects": {}}
-        try:
-            store = json.loads(self.meta_file.read_text(encoding="utf-8"))
-        except Exception:
-            return {"projects": {}}
-        if not isinstance(store, dict):
-            return {"projects": {}}
-        projects = store.get("projects")
-        if not isinstance(projects, dict):
-            store["projects"] = {}
-        return store
+    def _read_meta_store(self) -> MetaStore:
+        """Read-only load. For mutations use edit_meta() so the write is locked."""
+        return self.load_model(self.meta_file, MetaStore, sync=False) or MetaStore()
 
-    def _write_meta_store(self, store: dict) -> None:
-        # Whole-file read-modify-write of the single global meta.json: concurrent
-        # writers (any user, any post) can clobber each other (last write wins).
-        # Atomic write keeps the file valid but does not serialize requests.
-        self._content_dir.mkdir(parents=True, exist_ok=True)
-        self.atomic_write(self.meta_file, data=json.dumps(store, indent=2), mode="w", encoding="utf-8")
+    def edit_meta(self):
+        """Transactional edit of the shared meta.json.
+
+        `with di.edit_meta() as store: store.projects[...]...` — locks the file,
+        loads fresh, saves on clean exit (only if changed). The blob is global
+        (all users/posts), so this is a global lock; keep slow work (transcodes)
+        outside the block.
+        """
+        return self.edit_model(self.meta_file, MetaStore, exclude_none=True)
 
     def _post_entry(self, project: str, post: str) -> Optional[PostMeta]:
-        store = self._read_meta_store()
-        entry = store.get("projects", {}).get(project, {}).get("posts", {}).get(post)
-        if not isinstance(entry, dict) or not entry.get("type"):
+        project_store = self._read_meta_store().projects.get(project)
+        if project_store is None:
             return None
-        return PostMeta.model_validate(entry)
+        return project_store.posts.get(post)
 
     def get_post_meta(self, project: str, post: str) -> PostMeta:
-        # Missing or type-less entries (e.g. a post dir with only index.html and
-        # no meta record) fall back to a raw post so the index.html renderer is used.
+        # Missing entries (e.g. a post dir with only index.html and no meta
+        # record) fall back to a raw post so the index.html renderer is used.
         return self._post_entry(project, post) or PostMeta(type=PostType.RAW)
 
     def write_post_meta(self, project: str, post: str, meta: PostMeta) -> None:
-        store = self._read_meta_store()
-        project_store = store.setdefault("projects", {}).setdefault(project, {"posts": {}})
-        project_store.setdefault("posts", {})[post] = meta.to_dict()
-        self._write_meta_store(store)
+        with self.edit_meta() as store:
+            store.projects.setdefault(project, ProjectStore()).posts[post] = meta
+
+    @staticmethod
+    def _post_in_store(store: MetaStore, project: str, post: str) -> Optional[PostMeta]:
+        project_store = store.projects.get(project)
+        return project_store.posts.get(post) if project_store else None
 
     def register_raw_post(self, project: str, post: str, title: str, owner: str, date: str) -> None:
         self.write_post_meta(project, post, make_raw_post(title, date, owner))
@@ -337,14 +345,14 @@ class DataInterface(BaseDataInterface):
         title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
         source_md = self._validate_text(source_md, "Markdown", cfg.hammock.markdown_max_chars)
         post_dir = self._post_dir(project, post)
-        meta = self._post_entry(project, post)
-        if meta is None or meta.type != PostType.MARKDOWN:
-            raise APIError("Post is not a markdown post")
-        if not title.strip():
-            raise APIError("Title is required")
-        meta.title = title.strip()
-        self.write_post_meta(project, post, meta)
-        self.atomic_write(post_dir / "source.md", data=source_md, mode="w", encoding="utf-8")
+        with self.edit_meta() as store:
+            meta = self._post_in_store(store, project, post)
+            if meta is None or meta.type != PostType.MARKDOWN:
+                raise APIError("Post is not a markdown post")
+            if not title.strip():
+                raise APIError("Title is required")
+            meta.title = title.strip()
+            self.atomic_write(post_dir / "source.md", data=source_md, mode="w", encoding="utf-8")
 
     def get_markdown_source(self, project: str, post: str) -> str:
         src = self._post_dir(project, post) / "source.md"
@@ -387,16 +395,16 @@ class DataInterface(BaseDataInterface):
         cfg = ConfigManager()
         title = self._validate_text(title, "Title", cfg.hammock.title_max_chars)
         description = self._validate_text(description, "Description", cfg.hammock.description_max_chars)
-        meta = self._post_entry(project, post)
-        if meta is None or meta.type != PostType.GALLERY:
-            raise APIError("Post is not a gallery post")
-        if not title.strip():
-            raise APIError("Title is required")
-        meta.title = title.strip()
-        td = meta.template_data or GalleryTemplateData()
-        td.description = description
-        meta.template_data = td
-        self.write_post_meta(project, post, meta)
+        with self.edit_meta() as store:
+            meta = self._post_in_store(store, project, post)
+            if meta is None or meta.type != PostType.GALLERY:
+                raise APIError("Post is not a gallery post")
+            if not title.strip():
+                raise APIError("Title is required")
+            meta.title = title.strip()
+            td = meta.template_data or GalleryTemplateData()
+            td.description = description
+            meta.template_data = td
 
     def add_gallery_images(self, user: User, project: str, post: str, files: list[FileStorage]) -> int:
         return self.add_gallery_media(user, project, post, files)
@@ -485,10 +493,17 @@ class DataInterface(BaseDataInterface):
             self.atomic_delete(upload_path)
             added.append(GalleryItem(type="video", filename=item.name))
 
-        td = meta.template_data or GalleryTemplateData()
-        td.items = [item for item in td.items if item.filename] + added
-        meta.template_data = td
-        self.write_post_meta(project, post, meta)
+        # Only the meta update is serialized — the transcode/thumbnail work above
+        # can take minutes and must NOT hold the lock (it would exceed the lock
+        # timeout). Re-read meta fresh inside the lock so a concurrent edit that
+        # landed during transcoding is not clobbered.
+        with self.edit_meta() as store:
+            meta = self._post_in_store(store, project, post)
+            if meta is None or meta.type != PostType.GALLERY:
+                raise APIError("Post is not a gallery post")
+            td = meta.template_data or GalleryTemplateData()
+            td.items = [item for item in td.items if item.filename] + added
+            meta.template_data = td
         return len(added)
 
     def delete_gallery_image(self, project: str, post: str, filename: str) -> None:
@@ -496,16 +511,16 @@ class DataInterface(BaseDataInterface):
 
     def delete_gallery_media(self, project: str, post: str, filename: str) -> None:
         post_dir = self._post_dir(project, post)
-        meta = self._post_entry(project, post)
-        if meta is None or meta.type != PostType.GALLERY:
-            raise APIError("Post is not a gallery post")
-        td = meta.template_data or GalleryTemplateData()
-        if not any(item.filename == filename for item in td.items):
-            raise APIError("Media not found in gallery")
-        self.atomic_delete(post_dir / filename)
-        td.items = [item for item in td.items if item.filename != filename]
-        meta.template_data = td
-        self.write_post_meta(project, post, meta)
+        with self.edit_meta() as store:
+            meta = self._post_in_store(store, project, post)
+            if meta is None or meta.type != PostType.GALLERY:
+                raise APIError("Post is not a gallery post")
+            td = meta.template_data or GalleryTemplateData()
+            if not any(item.filename == filename for item in td.items):
+                raise APIError("Media not found in gallery")
+            self.atomic_delete(post_dir / filename)
+            td.items = [item for item in td.items if item.filename != filename]
+            meta.template_data = td
 
     # ---------- thumbnails / video processing ----------
 
@@ -631,12 +646,12 @@ class DataInterface(BaseDataInterface):
         if not post_dir.exists():
             return
         shutil.rmtree(post_dir)
-        store = self._read_meta_store()
-        posts = store.get("projects", {}).get(project, {}).get("posts", {})
-        posts.pop(post, None)
-        if not posts:
-            store.get("projects", {}).pop(project, None)
-        self._write_meta_store(store)
+        with self.edit_meta() as store:
+            project_store = store.projects.get(project)
+            if project_store is not None:
+                project_store.posts.pop(post, None)
+                if not project_store.posts:
+                    store.projects.pop(project, None)
         project_dir = post_dir.parent
         if project_dir.is_dir() and not any(project_dir.iterdir()):
             project_dir.rmdir()
@@ -718,19 +733,17 @@ class DataInterface(BaseDataInterface):
     # ---------- base hooks ----------
 
     def delete_user_data(self, user: User) -> None:
-        store = self._read_meta_store()
-        for project, project_data in list(store.get("projects", {}).items()):
-            posts = project_data.get("posts", {})
-            for post, meta in list(posts.items()):
-                if isinstance(meta, dict) and meta.get("owner") == user.id:
-                    shutil.rmtree(self._post_dir(project, post), ignore_errors=True)
-                    posts.pop(post, None)
-            if not posts:
-                store["projects"].pop(project, None)
-                project_dir = self.projects_dir / project
-                if project_dir.is_dir() and not any(project_dir.iterdir()):
-                    project_dir.rmdir()
-        self._write_meta_store(store)
+        with self.edit_meta() as store:
+            for project, project_store in list(store.projects.items()):
+                for post, meta in list(project_store.posts.items()):
+                    if meta.owner == user.id:
+                        shutil.rmtree(self._post_dir(project, post), ignore_errors=True)
+                        project_store.posts.pop(post, None)
+                if not project_store.posts:
+                    store.projects.pop(project, None)
+                    project_dir = self.projects_dir / project
+                    if project_dir.is_dir() and not any(project_dir.iterdir()):
+                        project_dir.rmdir()
 
     def backup_data(self, backup_dir: Path) -> None:
         self._backup_subtree(self._content_dir, backup_dir, "hammock")

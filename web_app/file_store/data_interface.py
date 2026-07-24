@@ -2,7 +2,6 @@ import binascii
 import logging
 import os
 import tempfile
-from copy import deepcopy
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path, PurePosixPath
@@ -63,12 +62,22 @@ class DataInterface(BaseDataInterface):
         self.metadata_file = self.file_store_dir / "metadata.json"
 
     def get_metadata(self) -> Metadata:
-        """Load metadata from file, returns empty metadata if file doesn't exist."""
+        """Read-only load. For mutations use edit_metadata() so the write is locked."""
         return self.load_model(self.metadata_file, Metadata, sync=False) or Metadata()
 
     def save_metadata(self, metadata: Metadata) -> None:
-        """Save metadata to file."""
+        """Save metadata to file. Prefer edit_metadata() for read-modify-write."""
         self.save_model(self.metadata_file, metadata)
+
+    def edit_metadata(self):
+        """Transactional edit of the shared file_store metadata blob.
+
+        `with di.edit_metadata() as metadata: ...` — locks the file, loads fresh,
+        saves on clean exit (only if changed). The blob is global (all users),
+        so this is a global lock. Do NOT stream large uploads inside the block;
+        stream to a temp file first (see _stream_upload), then edit_metadata().
+        """
+        return self.edit_model(self.metadata_file, Metadata)
 
     @staticmethod
     def _normalise_path(path: str, *, allow_root: bool = False) -> str:
@@ -134,21 +143,17 @@ class DataInterface(BaseDataInterface):
             metadata.users[user.id] = UserMetadata(user_id=user.id)
         return metadata.users[user.id]
 
-    def save_file(
-        self,
-        file_storage: FileStorage,
-        user: User,
-        relative_path: str | None = None,
-        metadata: Metadata | None = None,
-    ) -> int:
-        """Save a file and return its CRC."""
+    def _stream_upload(self, file_storage: FileStorage) -> tuple[Path, int, int]:
+        """Spool an upload to a temp file, returning (temp_path, crc, size).
+
+        Kept OUTSIDE the metadata lock: streaming a large file can take longer
+        than the lock's auto-expiry timeout, and it touches only a unique temp
+        file, so it needs no serialization.
+        """
         self.files_dir.mkdir(parents=True, exist_ok=True)
         chunk_size = ConfigManager().file_store.upload_stream_chunk_bytes
         crc = 0
         file_size = 0
-
-        # Flask has already spooled the multipart upload; copy it in bounded chunks
-        # so large files are never loaded into the Gunicorn worker's memory.
         with tempfile.NamedTemporaryFile(dir=self.files_dir, delete=False) as temp_file:
             temp_path = Path(temp_file.name)
             try:
@@ -159,9 +164,30 @@ class DataInterface(BaseDataInterface):
             except Exception:
                 temp_path.unlink(missing_ok=True)
                 raise
+        return temp_path, crc, file_size
 
-        persist = metadata is None
-        metadata = metadata or self.get_metadata()
+    def save_file(
+        self,
+        file_storage: FileStorage,
+        user: User,
+        relative_path: str | None = None,
+        metadata: Metadata | None = None,
+    ) -> int:
+        """Save a file and return its CRC."""
+        temp_path, crc, file_size = self._stream_upload(file_storage)
+
+        # Standalone call: the metadata read->mutate->save must be atomic across
+        # workers. Streaming above already happened outside the lock and the
+        # os.replace below is a fast rename, so the lock is held only briefly.
+        # When called from save_files (metadata passed in), the caller holds it.
+        if metadata is None:
+            with self.edit_metadata() as metadata:
+                result = self._save_file_metadata(file_storage, user, relative_path, temp_path, crc, file_size, metadata)
+                self._cleanup_unreferenced(metadata)
+            return result
+        return self._save_file_metadata(file_storage, user, relative_path, temp_path, crc, file_size, metadata)
+
+    def _save_file_metadata(self, file_storage, user, relative_path, temp_path, crc, file_size, metadata):
         user_metadata = self._user_metadata(metadata, user)
         stored_path = self._normalise_path(relative_path or file_storage.filename)
         existing_entry = next(
@@ -205,10 +231,6 @@ class DataInterface(BaseDataInterface):
         )
         user_metadata.files.append(user_file_entry)
         self._ensure_parent_folders(user_metadata, stored_path)
-
-        if persist:
-            self._cleanup_unreferenced(metadata)
-            self.save_metadata(metadata)
         return crc
 
     def save_files(
@@ -224,39 +246,49 @@ class DataInterface(BaseDataInterface):
         if len(paths) != len(set(paths)):
             raise ValueError('Folder upload contains duplicate paths')
 
-        metadata = self.get_metadata()
-        original_crcs = set(metadata.files)
-        working_metadata = deepcopy(metadata)
-        user_metadata = self._user_metadata(working_metadata, user)
-        existing_paths = {self._entry_path(entry) for entry in user_metadata.files}
-        required_folders = {
-            parent
-            for path in paths
-            for parent in self._parent_folders(path)
-        }
-        required_folders.update(self._normalise_path(folder) for folder in folders)
-        if required_folders & set(paths) or (required_folders & existing_paths) - set(paths):
-            raise ValueError('A file conflicts with a folder path')
-        if any(
-            path in user_metadata.folders or any(folder.startswith(f'{path}/') for folder in user_metadata.folders)
-            for path in paths
-        ):
-            raise ValueError('A folder conflicts with a file path')
-        for folder in folders:
-            self._ensure_parent_folders(user_metadata, self._normalise_path(folder))
-            normalised = self._normalise_path(folder)
-            if normalised not in user_metadata.folders:
-                user_metadata.folders.append(normalised)
+        # Stream every upload to a temp file OUTSIDE the metadata lock (slow,
+        # and can exceed the lock timeout). Then hold the lock only for the
+        # fast validation + metadata mutation + renames.
+        streamed = [(*self._stream_upload(file_storage), file_storage, path) for file_storage, path in uploads]
         try:
-            for file_storage, path in uploads:
-                self.save_file(file_storage, user, path, metadata=working_metadata)
-            self._cleanup_unreferenced(working_metadata)
-            self.save_metadata(working_metadata)
-        except Exception:
-            for crc in set(working_metadata.files) - original_crcs:
-                self.atomic_delete(self.files_dir / str(crc))
-                self.atomic_delete(self.get_thumbnail_path(crc))
-            raise
+            with self.edit_metadata() as metadata:
+                original_crcs = set(metadata.files)
+                user_metadata = self._user_metadata(metadata, user)
+                existing_paths = {self._entry_path(entry) for entry in user_metadata.files}
+                required_folders = {
+                    parent
+                    for path in paths
+                    for parent in self._parent_folders(path)
+                }
+                required_folders.update(self._normalise_path(folder) for folder in folders)
+                if required_folders & set(paths) or (required_folders & existing_paths) - set(paths):
+                    raise ValueError('A file conflicts with a folder path')
+                if any(
+                    path in user_metadata.folders or any(folder.startswith(f'{path}/') for folder in user_metadata.folders)
+                    for path in paths
+                ):
+                    raise ValueError('A folder conflicts with a file path')
+                for folder in folders:
+                    self._ensure_parent_folders(user_metadata, self._normalise_path(folder))
+                    normalised = self._normalise_path(folder)
+                    if normalised not in user_metadata.folders:
+                        user_metadata.folders.append(normalised)
+                try:
+                    for temp_path, crc, file_size, file_storage, path in streamed:
+                        self._save_file_metadata(file_storage, user, path, temp_path, crc, file_size, metadata)
+                    self._cleanup_unreferenced(metadata)
+                except Exception:
+                    # Roll back files written to disk this call; edit_metadata
+                    # discards the in-memory metadata changes on the raise.
+                    for crc in set(metadata.files) - original_crcs:
+                        self.atomic_delete(self.files_dir / str(crc))
+                        self.atomic_delete(self.get_thumbnail_path(crc))
+                    raise
+        finally:
+            # Any temp files not consumed by os.replace (duplicate content) are
+            # cleaned by _save_file_metadata; sweep leftovers on error paths.
+            for temp_path, *_ in streamed:
+                Path(temp_path).unlink(missing_ok=True)
 
     def get_folder_files(self, path: str, user: User) -> list[tuple[str, Path]]:
         folder_path = self._normalise_path(path)
@@ -296,72 +328,69 @@ class DataInterface(BaseDataInterface):
     def delete_path(self, path: str, user: User) -> None:
         """Delete one file or a folder and all of its contents."""
         target_path = self._normalise_path(path)
-        metadata = self.get_metadata()
-        user_metadata = metadata.users.get(user.id)
+        with self.edit_metadata() as metadata:
+            user_metadata = metadata.users.get(user.id)
 
-        if not user_metadata:
-            raise FileNotFoundError(f"File: {filename} not found for user: {user.id}")
+            if not user_metadata:
+                raise FileNotFoundError(f"File: {path} not found for user: {user.id}")
 
-        is_folder = target_path in user_metadata.folders
-        removed = [
-            entry for entry in user_metadata.files
-            if self._entry_path(entry) == target_path or self._entry_path(entry).startswith(f'{target_path}/')
-        ]
-        if not removed and not is_folder:
-            raise FileNotFoundError(f"File: {path} not found for user: {user.id}")
+            is_folder = target_path in user_metadata.folders
+            removed = [
+                entry for entry in user_metadata.files
+                if self._entry_path(entry) == target_path or self._entry_path(entry).startswith(f'{target_path}/')
+            ]
+            if not removed and not is_folder:
+                raise FileNotFoundError(f"File: {path} not found for user: {user.id}")
 
-        user_metadata.files = [entry for entry in user_metadata.files if entry not in removed]
-        user_metadata.folders = [
-            folder for folder in user_metadata.folders
-            if folder != target_path and not folder.startswith(f'{target_path}/')
-        ]
+            user_metadata.files = [entry for entry in user_metadata.files if entry not in removed]
+            user_metadata.folders = [
+                folder for folder in user_metadata.folders
+                if folder != target_path and not folder.startswith(f'{target_path}/')
+            ]
 
-        self._cleanup_unreferenced(metadata)
-        self.save_metadata(metadata)
+            self._cleanup_unreferenced(metadata)
 
     def delete_paths(self, paths: list[str], user: User) -> None:
         """Delete multiple files or folders in one metadata update."""
         target_paths = self._normalise_batch_paths(paths)
-        metadata = self.get_metadata()
-        user_metadata = metadata.users.get(user.id)
-        if not user_metadata:
-            raise FileNotFoundError('Selected items were not found')
+        with self.edit_metadata() as metadata:
+            user_metadata = metadata.users.get(user.id)
+            if not user_metadata:
+                raise FileNotFoundError('Selected items were not found')
 
-        folder_paths = self._folder_paths(user_metadata)
-        for target_path in target_paths:
-            exists = target_path in folder_paths or any(
-                self._entry_path(entry) == target_path
-                or self._entry_path(entry).startswith(f'{target_path}/')
-                for entry in user_metadata.files
-            )
-            if not exists:
-                raise FileNotFoundError(f'{target_path} not found')
+            folder_paths = self._folder_paths(user_metadata)
+            for target_path in target_paths:
+                exists = target_path in folder_paths or any(
+                    self._entry_path(entry) == target_path
+                    or self._entry_path(entry).startswith(f'{target_path}/')
+                    for entry in user_metadata.files
+                )
+                if not exists:
+                    raise FileNotFoundError(f'{target_path} not found')
 
-        user_metadata.files = [
-            entry for entry in user_metadata.files
-            if not any(
-                self._entry_path(entry) == target_path
-                or self._entry_path(entry).startswith(f'{target_path}/')
-                for target_path in target_paths
-            )
-        ]
-        user_metadata.folders = [
-            folder for folder in user_metadata.folders
-            if not any(folder == target_path or folder.startswith(f'{target_path}/') for target_path in target_paths)
-        ]
-        self._cleanup_unreferenced(metadata)
-        self.save_metadata(metadata)
+            user_metadata.files = [
+                entry for entry in user_metadata.files
+                if not any(
+                    self._entry_path(entry) == target_path
+                    or self._entry_path(entry).startswith(f'{target_path}/')
+                    for target_path in target_paths
+                )
+            ]
+            user_metadata.folders = [
+                folder for folder in user_metadata.folders
+                if not any(folder == target_path or folder.startswith(f'{target_path}/') for target_path in target_paths)
+            ]
+            self._cleanup_unreferenced(metadata)
 
     def create_folder(self, path: str, user: User) -> None:
         folder_path = self._normalise_path(path)
-        metadata = self.get_metadata()
-        user_metadata = self._user_metadata(metadata, user)
-        if any(self._entry_path(entry) == folder_path for entry in user_metadata.files):
-            raise ValueError('A file already exists at this path')
-        self._ensure_parent_folders(user_metadata, folder_path)
-        if folder_path not in user_metadata.folders:
-            user_metadata.folders.append(folder_path)
-        self.save_metadata(metadata)
+        with self.edit_metadata() as metadata:
+            user_metadata = self._user_metadata(metadata, user)
+            if any(self._entry_path(entry) == folder_path for entry in user_metadata.files):
+                raise ValueError('A file already exists at this path')
+            self._ensure_parent_folders(user_metadata, folder_path)
+            if folder_path not in user_metadata.folders:
+                user_metadata.folders.append(folder_path)
 
     def list_directory(self, path: str, user: User) -> dict[str, list[dict]]:
         directory = self._normalise_path(path, allow_root=True)
@@ -401,7 +430,10 @@ class DataInterface(BaseDataInterface):
         destination_path = self._normalise_path(destination)
         if destination_path == source_path or destination_path.startswith(f'{source_path}/'):
             raise ValueError('Invalid destination')
-        metadata = self.get_metadata()
+        with self.edit_metadata() as metadata:
+            self._move_path_locked(metadata, source_path, destination_path, user)
+
+    def _move_path_locked(self, metadata: Metadata, source_path: str, destination_path: str, user: User) -> None:
         user_metadata = self._user_metadata(metadata, user)
         source_files = [entry for entry in user_metadata.files if self._entry_path(entry) == source_path]
         is_folder = source_path in user_metadata.folders or any(
@@ -431,13 +463,15 @@ class DataInterface(BaseDataInterface):
                 user_metadata.folders.append(destination_path + folder[len(source_path):])
         self._ensure_parent_folders(user_metadata, destination_path)
         user_metadata.folders = list(dict.fromkeys(user_metadata.folders))
-        self.save_metadata(metadata)
 
     def move_paths(self, paths: list[str], destination: str, user: User) -> None:
         """Move multiple files or folders into one destination folder atomically."""
         source_paths = self._normalise_batch_paths(paths)
         destination_path = self._normalise_path(destination, allow_root=True)
-        metadata = self.get_metadata()
+        with self.edit_metadata() as metadata:
+            self._move_paths_locked(metadata, source_paths, destination_path, user)
+
+    def _move_paths_locked(self, metadata: Metadata, source_paths: list[str], destination_path: str, user: User) -> None:
         user_metadata = metadata.users.get(user.id)
         if not user_metadata:
             raise FileNotFoundError('Selected items were not found')
@@ -515,7 +549,6 @@ class DataInterface(BaseDataInterface):
             updated_folders.append(destination_path)
         user_metadata.folders = list(dict.fromkeys(updated_folders))
         self._ensure_parent_folders(user_metadata, destination_path)
-        self.save_metadata(metadata)
 
     def list_files(self, user: User) -> List[str]:
         """Get list of filenames for a user."""
@@ -652,21 +685,19 @@ class DataInterface(BaseDataInterface):
         self._backup_subtree(self.file_store_dir, backup_dir, self.data_sub_dirname)
 
     def delete_user_data(self, user: User) -> None:
-        metadata = self.get_metadata()
-        user_metadata = metadata.users.pop(user.id, None)
-        if user_metadata is None:
-            return
+        with self.edit_metadata() as metadata:
+            user_metadata = metadata.users.pop(user.id, None)
+            if user_metadata is None:
+                return
 
-        user_crcs = {user_file.crc for user_file in user_metadata.files}
-        referenced_crcs = {
-            user_file.crc
-            for other_user_metadata in metadata.users.values()
-            for user_file in other_user_metadata.files
-        }
+            user_crcs = {user_file.crc for user_file in user_metadata.files}
+            referenced_crcs = {
+                user_file.crc
+                for other_user_metadata in metadata.users.values()
+                for user_file in other_user_metadata.files
+            }
 
-        for crc in user_crcs - referenced_crcs:
-            self.atomic_delete(self.files_dir / str(crc))
-            self.atomic_delete(self.get_thumbnail_path(crc))
-            metadata.files.pop(crc, None)
-
-        self.save_metadata(metadata)
+            for crc in user_crcs - referenced_crcs:
+                self.atomic_delete(self.files_dir / str(crc))
+                self.atomic_delete(self.get_thumbnail_path(crc))
+                metadata.files.pop(crc, None)
