@@ -254,7 +254,7 @@ class LoftConfig:
     non_admin_quota_bytes: int = 50 * 1024 * 1024
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
     gallery_max_files_per_upload: int = 20
-    gallery_max_videos_per_upload: int = 1
+    gallery_max_videos_per_upload: int = 5
     gallery_media_filename_max_chars: int = 100
     gallery_upload_stream_chunk_bytes: int = 1024 * 1024
     gallery_upload_max_total_bytes: int = 250 * 1024 * 1024
