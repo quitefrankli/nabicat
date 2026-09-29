@@ -347,10 +347,19 @@
         const progress = container?.querySelector('.progress');
         const bar = progress?.querySelector('.progress-bar');
         const status = container?.querySelector('small');
+        function showProgress(label, percent) {
+            if (status) status.textContent = label;
+            if (typeof percent === 'number' && bar) {
+                bar.style.width = `${percent}%`;
+                bar.textContent = `${Math.round(percent)}%`;
+                bar.setAttribute('aria-valuenow', String(percent));
+            }
+        }
         button.disabled = true;
         button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Starting…';
         progress?.classList.remove('d-none');
         status?.classList.remove('d-none');
+        showProgress('Starting…', 0);
         let events = null;
         try {
             events = new EventSource(
@@ -358,13 +367,14 @@
             );
             events.onmessage = event => {
                 const update = JSON.parse(event.data);
-                if (typeof update.percent === 'number' && bar) {
-                    bar.style.width = `${update.percent}%`;
-                    bar.textContent = `${Math.round(update.percent)}%`;
-                    bar.setAttribute('aria-valuenow', String(update.percent));
+                if (update.status === 'not_found') {
+                    // The stream can arrive before the download creates its
+                    // progress record. Let EventSource reconnect when it ends.
+                    showProgress('Starting…');
+                    return;
                 }
-                if (status) status.textContent = update.status || '';
-                if (['complete', 'error', 'not_found'].includes(update.status)) {
+                showProgress(update.error || update.status || '', update.percent);
+                if (['complete', 'error'].includes(update.status)) {
                     events.close();
                 }
             };
@@ -375,10 +385,12 @@
             replaceLibrary(payload.library_html);
             button.innerHTML = '<i class="bi bi-check-circle me-1"></i>Converted';
             button.classList.add('search-result-cached');
+            showProgress('Complete', 100);
             notify(payload.message, 'success');
         } catch (error) {
             button.disabled = false;
             button.innerHTML = original;
+            showProgress(error.message || 'Conversion failed');
             notify(error.message, 'error');
         } finally {
             events?.close();

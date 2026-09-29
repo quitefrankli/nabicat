@@ -85,7 +85,7 @@ class TubioConfig:
     # until the requested page is filled, so long-stream-heavy queries still
     # surface short videos buried below them.
     search_length_filter_sps: tuple = (None, "EgIYAQ==", "EgIYAw==")
-    test_video_id: str = "dQw4w9WgXcQ"
+    test_video_id: str = "3G4cwFIh_Ns"
     upload_allowed_extensions: tuple = ("mp3", "mp4", "m4a")
     upload_transcode_format: str = "mp4"
     upload_transcode_bitrate: str = "128k"
@@ -426,6 +426,10 @@ class ConfigManager:
         self.deno_version = "v2.3.3"
         self.debug_mode = False
         self.production_data_root = Path.home() / ".nabicat" / "data"
+        self.youtube_direct_timeout_s = 15
+        self.youtube_direct_max_page_bytes = 5 * 1024 * 1024
+        self.youtube_direct_max_media_bytes = 20 * 1024 * 1024
+        self.youtube_direct_chunk_bytes = 64 * 1024
         self.debug_data_root = Path.home() / ".nabicat_debug" / "data"
         self.server_host = "0.0.0.0"
         self.server_default_port = 80

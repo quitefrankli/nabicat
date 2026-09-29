@@ -9,6 +9,50 @@ pytest.importorskip("playwright")
 from playwright.sync_api import expect
 
 
+@pytest.mark.parametrize("succeeds", [True, False])
+def test_download_waits_for_progress_and_displays_request_outcome(browser, succeeds):
+    page = browser.new_page()
+    page.route("http://tubio.test/", lambda route: route.fulfill(body="""
+        <div class="search-result-download">
+          <button data-tubio-action="download-video" data-video-id="test-video">Convert</button>
+          <div class="progress d-none"><div class="progress-bar"></div></div>
+          <small class="d-none"></small>
+        </div>
+    """, content_type="text/html"))
+    page.goto("http://tubio.test/")
+    page.evaluate("""() => {
+        window.EventSource = class {
+            constructor() { window.progressEvents = this; this.closed = false; }
+            close() { this.closed = true; }
+        };
+        window.Tubio = {
+            player: {handleAction: () => false, init: () => {}},
+            api: {post: () => new Promise((resolve, reject) => {
+                window.finishDownload = resolve;
+                window.failDownload = reject;
+            })},
+        };
+    }""")
+    page.add_script_tag(path=str(Path(__file__).parents[2] / "web_app/tubio/static/script.js"))
+    page.evaluate("document.dispatchEvent(new Event('DOMContentLoaded'))")
+    page.locator("button").click()
+    page.evaluate("progressEvents.onmessage({data: JSON.stringify({status: 'not_found'})})")
+    expect(page.locator("small")).to_have_text("Starting…")
+    assert not page.evaluate("progressEvents.closed")
+    page.evaluate("progressEvents.onmessage({data: JSON.stringify({status: 'downloading', percent: 42})})")
+    expect(page.locator(".progress-bar")).to_have_text("42%")
+    if succeeds:
+        page.evaluate("finishDownload({message: 'Converted'})")
+        expect(page.locator("small")).to_have_text("Complete")
+        expect(page.locator(".progress-bar")).to_have_attribute("aria-valuenow", "100")
+    else:
+        page.evaluate("failDownload(new Error('Conversion failed'))")
+        expect(page.locator("small")).to_have_text("Conversion failed")
+        expect(page.locator("button[data-tubio-action]")).to_be_enabled()
+    assert page.evaluate("progressEvents.closed")
+    page.close()
+
+
 @pytest.fixture
 def tubio_player_page(browser):
     """Load the real Tubio player script around a deterministic fake media element."""
