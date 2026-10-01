@@ -441,6 +441,9 @@ class ConfigManager:
         self.redis_readiness_poll_s = 0.1
         self.password_hash_method = "scrypt"
         self.password_hash_prefix = "nabicat$"
+        self.api_llm_timeout_s = 120.0
+        self.api_llm_approval_policy = "never"
+        self.api_llm_sandbox = "read-only"
         self.gunicorn_workers = 4
         self.gunicorn_request_timeout_s = 720
         self.gunicorn_graceful_timeout_s = 720

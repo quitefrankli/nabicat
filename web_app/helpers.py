@@ -361,6 +361,9 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
     else:
         raise APIError("Unsupported content type")
     
+    if not isinstance(request_body, dict):
+        raise APIError("Invalid request_body")
+
     # Check if this is a hybrid-encrypted request (new protocol)
     encrypted_payload = request_body.get("req")
     if encrypted_payload:
@@ -374,9 +377,14 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
             # Legacy format - deprecated, will be removed
             raise APIError("Legacy encryption format is no longer supported. Please use hybrid encryption.")
     
+    if not isinstance(request_body, dict):
+        raise APIError("Invalid request_body")
+
     if require_login:
         username = request_body.get("username", "")
         password = request_body.get("password", "")
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise AuthenticationError("Invalid credentials")
         if not authenticate_user(username, password, require_admin=require_admin):
             raise AuthenticationError("Invalid credentials")
 
@@ -416,6 +424,10 @@ class MeridianError(RuntimeError):
 
 class CodexCLIError(RuntimeError):
     """Raised when the local Codex CLI is unavailable or returns an error."""
+
+    def __init__(self, message: str, *, reason: str = "execution_failed"):
+        super().__init__(message)
+        self.reason = reason
 
 
 class BedrockError(RuntimeError):
@@ -581,12 +593,14 @@ def meridian_text(
 
 def codex_cli_text(
     user_message: str,
-    instructions: str,
+    instructions: str = "",
     model: str | None = None,
     timeout_s: float = 120.0,
     image_paths: list[Path] | None = None,
     reasoning_effort: str | None = None,
     permissions_profile: str | None = None,
+    working_directory: Path | None = None,
+    standalone: bool = False,
 ) -> str:
     """Run Codex CLI non-interactively and return its final message.
 
@@ -594,16 +608,19 @@ def codex_cli_text(
     authentication, not an OpenAI API key.
     """
     config = ConfigManager()
-    prompt = f"{instructions}\n\nUser request:\n{user_message}"
+    prompt = f"{instructions}\n\nUser request:\n{user_message}" if instructions else user_message
     with tempfile.NamedTemporaryFile("r+", encoding="utf-8") as output:
         cmd = [
             config.llm.codex_cli_command,
             "-a",
-            config.llm.codex_cli_approval_policy,
+            config.api_llm_approval_policy if standalone else config.llm.codex_cli_approval_policy,
             "exec",
             "--ephemeral",
             "--skip-git-repo-check",
         ]
+        if standalone:
+            cmd.extend(["--ignore-rules", "-c", "project_doc_max_bytes=0",
+                        "-c", "project_doc_fallback_filenames=[]"])
         if permissions_profile:
             cmd.extend(
                 [
@@ -619,7 +636,7 @@ def codex_cli_text(
                 ]
             )
         else:
-            cmd.extend(["--sandbox", config.llm.codex_cli_sandbox])
+            cmd.extend(["--sandbox", config.api_llm_sandbox if standalone else config.llm.codex_cli_sandbox])
         if reasoning_effort:
             cmd.extend(
                 ["-c", f"model_reasoning_effort={json.dumps(reasoning_effort)}"]
@@ -630,27 +647,27 @@ def codex_cli_text(
             if image_path.is_file():
                 cmd.extend(["--image", str(image_path)])
         cmd.extend(["--output-last-message", output.name])
-        cmd.append(prompt)
+        cmd.append("-")
         try:
             proc = subprocess.run(
                 cmd,
-                cwd=str(config.project_dir),
+                cwd=str(working_directory if working_directory is not None else config.project_dir),
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,
                 check=False,
             )
-        except FileNotFoundError as e:
-            raise CodexCLIError(f"codex cli not found: {config.llm.codex_cli_command}") from e
-        except subprocess.TimeoutExpired as e:
-            raise CodexCLIError(f"codex cli timed out after {timeout_s}s") from e
+        except FileNotFoundError:
+            raise CodexCLIError("Codex CLI is unavailable", reason="unavailable") from None
+        except subprocess.TimeoutExpired:
+            raise CodexCLIError("Codex CLI timed out", reason="timeout") from None
 
         if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or "").strip()
-            raise CodexCLIError(f"codex cli exited {proc.returncode}: {detail[:500]}")
+            raise CodexCLIError("Codex CLI execution failed")
 
         output.seek(0)
         text = output.read().strip()
         if not text:
-            raise CodexCLIError("codex cli returned an empty response")
+            raise CodexCLIError("Codex CLI returned an empty response", reason="empty_response")
         return text

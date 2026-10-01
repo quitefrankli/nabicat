@@ -4,6 +4,8 @@ import subprocess
 import logging
 import os
 import uuid
+import tempfile
+import time
 from functools import wraps
 from pathlib import Path
 
@@ -11,7 +13,7 @@ from flask import request, jsonify, Blueprint, current_app
 
 from web_app.data_interface import DataInterface
 from web_app.helpers import parse_request, authenticate_user, \
-    generate_ephemeral_keypair, get_all_data_interfaces
+    generate_ephemeral_keypair, get_all_data_interfaces, codex_cli_text, CodexCLIError
 from web_app.api.data_interface import DataInterface as APIDataInterface
 from web_app.config import ConfigManager
 from web_app.errors import APIError
@@ -320,3 +322,43 @@ def api_handshake():
         "expires_in": ConfigManager().ephemeral_key_ttl_s,
         "algorithm": "RSA-2048-OAEP-SHA256/AES-256-GCM"
     }), 200
+
+
+@api_api.route("/llm", methods=["POST"])
+def api_llm():
+    started = time.monotonic()
+    username = None
+    try:
+        body = parse_request(require_login=True, require_admin=True)
+        username = body["username"]
+        for field in ("model", "effort", "input"):
+            value = body.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise APIError(f"Invalid field: {field}")
+    except APIError:
+        log_event("api", "api.llm.rejected", level=logging.WARNING,
+                  user=username, reason="invalid_request")
+        return jsonify({"error": "Invalid credentials or request fields"}), 400
+
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            output = codex_cli_text(
+                body["input"], model=body["model"],
+                reasoning_effort=body["effort"],
+                timeout_s=ConfigManager().api_llm_timeout_s,
+                working_directory=Path(directory), standalone=True,
+            )
+    except (CodexCLIError, OSError) as error:
+        reason = error.reason if isinstance(error, CodexCLIError) else "execution_failed"
+        status = {"timeout": 504, "unavailable": 503}.get(reason, 502)
+        # A fresh exception omits subprocess diagnostics and exception chains.
+        safe_error = CodexCLIError("LLM request failed", reason=reason)
+        log_event("api", "api.llm.failed", level=logging.ERROR, user=username,
+                  reason=reason, status=status, error_type=type(error).__name__,
+                  exc_info=safe_error, duration_s=time.monotonic() - started)
+        return jsonify({"error": "LLM request failed", "reason": reason}), status
+
+    log_event("api", "api.llm.completed", user=username, status=200,
+              input_chars=len(body["input"]), output_chars=len(output),
+              duration_s=time.monotonic() - started)
+    return jsonify({"success": True, "output": output}), 200
