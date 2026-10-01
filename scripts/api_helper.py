@@ -66,14 +66,14 @@ def hybrid_encrypt(data: bytes, public_key_pem: str, session_id: str) -> dict:
     }
 
 
-def do_handshake() -> tuple[str, str]:
+def do_handshake(base_url: str | None = None) -> tuple[str, str]:
     """
     Perform handshake with server to get ephemeral RSA public key.
     
     Returns:
         tuple: (session_id, public_key_pem)
     """
-    url = f"{get_base_url()}/api/handshake"
+    url = f"{base_url or get_base_url()}/api/handshake"
     
     response = requests.post(url, timeout=10)
     
@@ -100,13 +100,16 @@ def get_base_url() -> str:
     base_url = keyring.get_password(KEYRING_APP_ID, "base_url")
     return base_url if base_url else DEFAULT_BASE_URL
 
-def _send_request_internal(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
-    url = f"{get_base_url()}/{endpoint}"
+def _send_request_internal(
+    endpoint: str, payload: dict = dict(), require_cred: bool = True,
+    *, base_url: str | None = None, timeout: float | None = None,
+) -> requests.Response:
+    url = f"{base_url or get_base_url()}/{endpoint}"
     if require_cred:
         payload = generate_cred_payload() | payload
 
     # Step 1: Handshake to get ephemeral public key
-    session_id, public_key = do_handshake()
+    session_id, public_key = do_handshake(base_url)
     
     # Step 2: Encrypt payload with hybrid encryption
     unencrypted_payload = json.dumps(payload).encode('utf-8')
@@ -120,12 +123,15 @@ def _send_request_internal(endpoint: str, payload: dict = dict(), require_cred: 
             print("Request cancelled.")
             sys.exit(0)
 
-    return requests.post(url, json={"req": encrypted_payload})
+    return requests.post(url, json={"req": encrypted_payload}, timeout=timeout)
 
 
-def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = True) -> requests.Response:
+def send_request(
+    endpoint: str, payload: dict = dict(), require_cred: bool = True,
+    *, base_url: str | None = None, timeout: float | None = None,
+) -> requests.Response:
     try:
-        return _send_request_internal(endpoint, payload, require_cred)
+        return _send_request_internal(endpoint, payload, require_cred, base_url=base_url, timeout=timeout)
     except ConnectionError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -133,6 +139,45 @@ def send_request(endpoint: str, payload: dict = dict(), require_cred: bool = Tru
 @click.group(help="cli helper for interacting with backend all data (including credentials) are encrypted")
 def cli():
     pass
+
+@cli.command()
+@click.option("--model", required=True, help="Codex model to request.")
+@click.option("--effort", required=True, help="Codex reasoning effort to request.")
+@click.option("--username", help="Prompt for a password instead of using saved credentials.")
+@click.option("--base-url", help="Server URL; defaults to production when --username is supplied.")
+@click.argument("prompt")
+def llm(model: str, effort: str, username: str | None, base_url: str | None, prompt: str) -> None:
+    """Ask the LLM API. Use - as PROMPT to read input from stdin."""
+    try:
+        if username:
+            credentials = {
+                "username": username,
+                "password": click.prompt("Password", hide_input=True),
+            }
+            base_url = base_url or ConfigManager().site_url
+        else:
+            credentials = generate_cred_payload()
+        if prompt == "-":
+            prompt = click.get_text_stream("stdin").read()
+        if not prompt.strip():
+            raise click.ClickException("Prompt must not be empty.")
+        response = send_request(
+            "api/llm", credentials | {"model": model, "effort": effort, "input": prompt},
+            require_cred=False, base_url=base_url,
+            timeout=ConfigManager().api_llm_client_timeout_s,
+        )
+        if response.status_code != 200:
+            raise click.ClickException(f"LLM request failed (HTTP {response.status_code}): {response.text}")
+        result = response.json()
+        if not result.get("success") or not isinstance(result.get("output"), str):
+            raise click.ClickException("Server returned an invalid LLM response.")
+    except (requests.RequestException, ValueError, keyring.errors.KeyringError) as error:
+        raise click.ClickException(
+            f"LLM request could not complete ({type(error).__name__}). "
+            "Use --username to enter credentials without a keyring."
+        ) from None
+    click.echo(result["output"])
+
 
 @cli.command()
 def login() -> None:
@@ -502,7 +547,7 @@ def test_handshake() -> None:
     Test the encryption handshake with the server.
     """
     try:
-        session_id, public_key = do_handshake()
+        session_id, public_key = do_handshake(base_url)
         print(f"Handshake successful!")
         print(f"Session ID: {session_id}")
         print(f"Public Key (first 100 chars): {public_key[:100]}...")
@@ -547,7 +592,7 @@ def show_config() -> None:
     # Test connection
     print(f"\nTesting connection to {base_url or DEFAULT_BASE_URL}...")
     try:
-        session_id, public_key = do_handshake()
+        session_id, public_key = do_handshake(base_url)
         print(f"  ✓ Server is reachable")
         print(f"  ✓ Handshake successful (session: {session_id[:8]}...)")
     except ConnectionError as e:

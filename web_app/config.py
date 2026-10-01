@@ -442,6 +442,7 @@ class ConfigManager:
         self.password_hash_method = "scrypt"
         self.password_hash_prefix = "nabicat$"
         self.api_llm_timeout_s = 120.0
+        self.api_llm_client_timeout_s = 130.0
         self.api_llm_approval_policy = "never"
         self.api_llm_sandbox = "read-only"
         self.gunicorn_workers = 4
