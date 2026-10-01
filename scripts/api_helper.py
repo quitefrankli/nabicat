@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.13,<3.14"
+# dependencies = [
+#     "click==8.1.8",
+#     "cryptography>=44.0.0",
+#     "gitpython>=3.1.45",
+#     "keyring==25.7.0",
+#     "requests>=2.32.5",
+#     "yt-dlp[default]>=2026.8.19",
+# ]
+# ///
+
 import subprocess
 import requests
 import click
@@ -17,9 +29,6 @@ from yt_dlp.cookies import extract_cookies_from_browser
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-from web_app.config import ConfigManager
-
 
 KEYRING_APP_ID = "nabicat"
 DEFAULT_BASE_URL = "https://nabicat.site"
@@ -75,7 +84,12 @@ def do_handshake(base_url: str | None = None) -> tuple[str, str]:
     """
     url = f"{base_url or get_base_url()}/api/handshake"
     
-    response = requests.post(url, timeout=10)
+    try:
+        response = requests.post(url, timeout=10)
+    except requests.RequestException as error:
+        raise click.ClickException(
+            f"Handshake request failed ({type(error).__name__})."
+        ) from None
     
     if response.status_code != 200:
         raise ConnectionError(f"Handshake failed: {response.status_code} - {response.text}")
@@ -123,7 +137,10 @@ def _send_request_internal(
             print("Request cancelled.")
             sys.exit(0)
 
-    return requests.post(url, json={"req": encrypted_payload}, timeout=timeout)
+    return requests.post(
+        url, json={"req": encrypted_payload},
+        timeout=timeout if timeout is not None else 130.0,
+    )
 
 
 def send_request(
@@ -132,31 +149,30 @@ def send_request(
 ) -> requests.Response:
     try:
         return _send_request_internal(endpoint, payload, require_cred, base_url=base_url, timeout=timeout)
+    except requests.RequestException as error:
+        raise click.ClickException(
+            f"API request failed ({type(error).__name__})."
+        ) from None
     except ConnectionError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise click.ClickException(str(e)) from None
 
 @click.group(help="cli helper for interacting with backend all data (including credentials) are encrypted")
 def cli():
     pass
 
 @cli.command()
-@click.option("--model", required=True, help="Codex model to request.")
-@click.option("--effort", required=True, help="Codex reasoning effort to request.")
-@click.option("--username", help="Prompt for a password instead of using saved credentials.")
-@click.option("--base-url", help="Server URL; defaults to production when --username is supplied.")
+@click.option("--model", default="gpt-6-luna", show_default=True,
+              help="Codex model to request; defaults to Luna 6.0.")
+@click.option("--effort", default="low", show_default=True,
+              help="Codex reasoning effort to request.")
+@click.option("--base-url", help="Server URL; defaults to the saved URL or production.")
+@click.option("--timeout", type=click.FloatRange(min=0, min_open=True), default=130.0,
+              show_default=True, help="LLM request timeout in seconds.")
 @click.argument("prompt")
-def llm(model: str, effort: str, username: str | None, base_url: str | None, prompt: str) -> None:
+def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: str) -> None:
     """Ask the LLM API. Use - as PROMPT to read input from stdin."""
     try:
-        if username:
-            credentials = {
-                "username": username,
-                "password": click.prompt("Password", hide_input=True),
-            }
-            base_url = base_url or ConfigManager().site_url
-        else:
-            credentials = generate_cred_payload()
+        credentials = generate_cred_payload()
         if prompt == "-":
             prompt = click.get_text_stream("stdin").read()
         if not prompt.strip():
@@ -164,7 +180,7 @@ def llm(model: str, effort: str, username: str | None, base_url: str | None, pro
         response = send_request(
             "api/llm", credentials | {"model": model, "effort": effort, "input": prompt},
             require_cred=False, base_url=base_url,
-            timeout=ConfigManager().api_llm_client_timeout_s,
+            timeout=timeout,
         )
         if response.status_code != 200:
             raise click.ClickException(f"LLM request failed (HTTP {response.status_code}): {response.text}")
@@ -174,7 +190,7 @@ def llm(model: str, effort: str, username: str | None, base_url: str | None, pro
     except (requests.RequestException, ValueError, keyring.errors.KeyringError) as error:
         raise click.ClickException(
             f"LLM request could not complete ({type(error).__name__}). "
-            "Use --username to enter credentials without a keyring."
+            "Check your keyring and connection; use 'login' to save credentials."
         ) from None
     click.echo(result["output"])
 
@@ -357,7 +373,7 @@ def upload_commit_patches() -> None:
     
     response = send_request("api/push", {
         "name": "_commit_patches.zip",
-        "data": zip_data.decode('utf-8')
+        "data": base64.b64encode(gzip.compress(zip_data)).decode('ascii')
     })
     
     if response.status_code == 200:
@@ -547,12 +563,12 @@ def test_handshake() -> None:
     Test the encryption handshake with the server.
     """
     try:
-        session_id, public_key = do_handshake(base_url)
+        session_id, public_key = do_handshake()
         print(f"Handshake successful!")
         print(f"Session ID: {session_id}")
         print(f"Public Key (first 100 chars): {public_key[:100]}...")
     except ConnectionError as e:
-        print(f"Handshake failed:\n{e}")
+        raise click.ClickException(f"Handshake failed: {e}") from None
 
 
 @cli.command(name="sync-data-from-prod")
@@ -560,14 +576,16 @@ def test_handshake() -> None:
               help="Local destination directory (receives .nabicat/)")
 @click.option("--dry-run", is_flag=True, default=False,
               help="Show what would be transferred without copying")
-def sync_data_from_prod(dest: str, dry_run: bool) -> None:
+@click.option("--exclude", multiple=True, default=("backups/", "data/logs/"),
+              show_default=True, help="Rsync exclusion pattern; repeat to supply multiple patterns.")
+def sync_data_from_prod(dest: str, dry_run: bool, exclude: tuple[str, ...]) -> None:
     """
     Rsync durable production data without backups or runtime logs.
     """
     cmd = ["rsync", "-azhP"]
     cmd.extend(
         f"--exclude={path}"
-        for path in ConfigManager().production_sync_excluded_paths
+        for path in exclude
     )
     if dry_run:
         cmd.append("--dry-run")
@@ -596,7 +614,7 @@ def show_config() -> None:
         print(f"  ✓ Server is reachable")
         print(f"  ✓ Handshake successful (session: {session_id[:8]}...)")
     except ConnectionError as e:
-        print(f"  ✗ {e}")
+        raise click.ClickException(str(e)) from None
 
 if __name__ == "__main__":
     cli()
