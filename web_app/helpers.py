@@ -8,7 +8,6 @@ import flask_login
 import logging
 
 import requests as http_requests
-from nabicat_app_sdk import AppDataLifecycle
 from io import BytesIO
 from pathlib import Path
 from flask import request
@@ -28,9 +27,9 @@ from web_app.errors import *
 from web_app.logging_utils import log_event
 
 
-def get_all_data_interfaces() -> list[type[AppDataLifecycle]]:
-    from nabicat_jswipe.data_interface import DataInterface as JSwipeDataInterface
-    from nabicat_sentinel.data_interface import DataInterface as SentinelDataInterface
+def get_all_data_interfaces() -> list[type[DataInterface]]:
+    from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
+    from web_app.sentinel.data_interface import DataInterface as SentinelDataInterface
     from web_app.api.data_interface import DataInterface as APIDataInterface
     from web_app.todoist.data_interface import DataInterface as TodoistDataInterface
     from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
@@ -51,6 +50,8 @@ def get_all_data_interfaces() -> list[type[AppDataLifecycle]]:
 
 
 def register_all_blueprints(app):
+    from web_app.jswipe import jswipe_api
+    from web_app.sentinel import sentinel_api
     from web_app.crosswords import crosswords_api
     from web_app.todoist import todoist_api
     from web_app.tubio import tubio_api
@@ -66,6 +67,8 @@ def register_all_blueprints(app):
     from web_app.todoist.api import actions_api
 
     blueprints = [
+        jswipe_api,
+        sentinel_api,
         todoist_api,
         crosswords_api,
         tubio_api,
@@ -84,19 +87,6 @@ def register_all_blueprints(app):
     for blueprint in blueprints:
         app.register_blueprint(blueprint)
 
-
-
-def register_installed_apps(app):
-    """Idempotently load V2 apps after the runtime mode is configured."""
-    registry = app.extensions.get("nabicat_apps")
-    if registry is not None:
-        return registry
-    from web_app.installed_apps import install_apps
-
-    return install_apps(
-        app,
-        config_overrides=ConfigManager().installed_app_config_overrides,
-    )
 
 
 _EPHEMERAL_KEY_PREFIX = "nabicat:ephkey:"

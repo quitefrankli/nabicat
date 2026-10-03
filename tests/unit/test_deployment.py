@@ -3,11 +3,9 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from nabicat_app_sdk import AccessLevel
 
 from web_app.config import ConfigManager
 
@@ -32,26 +30,15 @@ def test_synchronous_app_requests_have_aligned_proxy_and_worker_timeouts():
         assert nginx_config.count(directive) == 2
 
 
-def test_v2_app_dependencies_use_immutable_git_revisions():
+def test_apps_are_local_without_package_dependencies():
     project = tomllib.loads(Path("pyproject.toml").read_text())
-    requirements = "\n".join(project["project"]["dependencies"])
-
-    for distribution, repository in (
-        ("nabicat-app-sdk", "nabicat-app-sdk"),
-        ("nabicat-jswipe", "nabicat-jswipe"),
-        ("nabicat-sentinel", "nabicat-sentinel"),
-    ):
-        pattern = (
-            rf"^{re.escape(distribution)} @ git\+https://github\.com/quitefrankli/"
-            rf"{re.escape(repository)}\.git@[0-9a-f]{{40}}$"
-        )
-        assert re.search(pattern, requirements, re.MULTILINE)
+    assert not any(requirement.startswith("nabicat-") for requirement in project["project"]["dependencies"])
 
 
 def test_deployment_uses_isolated_locked_runtime():
     script = Path("update_server.sh").read_text()
     assert 'uv sync --locked --no-dev --managed-python' in script
-    assert '"$PYTHON_BIN" -m nabicat_jswipe.install_career_ops' in script
+    assert '"$PYTHON_BIN" -m web_app.jswipe.install_career_ops' in script
     assert 'miniforge' not in script
     assert 'pip install' not in script
     assert 'PYTHON_BIN="${PROJECT_DIR}/.venv/bin/python"' in script
@@ -76,53 +63,16 @@ def test_health_reports_commit_loaded_by_worker(client, app):
     assert isinstance(response.get_json()["pid"], int)
 
 
-def test_installed_app_metadata_drives_health_home_static_cache_and_versions(
-    client,
-    app,
-):
-    import web_app.__main__  # noqa: F401
-    from web_app.app import _add_static_version
+def test_local_apps_share_build_version_and_static_cache(client):
+    import web_app.__main__
+    from web_app.app import _add_static_version, STATIC_VERSION
 
-    class Registry:
-        def health(self):
-            return ({"app_id": "alpha", "version": "1.2.3", "status": "loaded"},)
-
-        def navigation(self):
-            return (
-                SimpleNamespace(
-                    access=AccessLevel.PUBLIC,
-                    app_id="alpha",
-                    endpoint="home",
-                    icon="bi-eye-fill",
-                    label="Alpha",
-                ),
-            )
-
-        def static_prefixes(self):
-            return ("/alpha/static/",)
-
-        def static_version(self, endpoint):
-            return "1.2.3" if endpoint == "alpha.static" else None
-
-    previous = app.extensions.get("nabicat_apps")
-    app.extensions["nabicat_apps"] = Registry()
-    try:
-        assert client.get("/api/health").get_json()["apps"] == [
-            {"app_id": "alpha", "version": "1.2.3", "status": "loaded"}
-        ]
-        home = client.get("/").text
-        assert 'data-installed-app="alpha"' in home
-        assert "Alpha" in home
-        service_worker = client.get("/service-worker.js").text
-        assert '"/alpha/static/"' in service_worker
+    for app_id in ("jswipe", "sentinel"):
+        assert app_id in web_app.__main__.app.blueprints
+        assert f'"/{app_id}/static/"' in client.get("/service-worker.js").text
         values = {}
-        _add_static_version("alpha.static", values)
-        assert values == {"v": "1.2.3"}
-    finally:
-        if previous is None:
-            app.extensions.pop("nabicat_apps", None)
-        else:
-            app.extensions["nabicat_apps"] = previous
+        _add_static_version(f"{app_id}.static", values)
+        assert values == {"v": STATIC_VERSION}
 
 
 def test_web_launcher_keeps_minimal_option_surface():
@@ -152,7 +102,6 @@ def test_debug_launcher_retains_existing_runtime_behavior():
     with (
         patch.object(web_main, "configure_logging"),
         patch.object(web_main, "ensure_local_redis"),
-        patch.object(web_main, "register_installed_apps"),
         patch.object(web_main.app, "run") as app_run,
     ):
         result = CliRunner().invoke(
@@ -184,7 +133,6 @@ def test_debug_reloader_parent_does_not_log_server_started():
         patch.dict("os.environ", {}, clear=True),
         patch.object(web_main, "configure_logging"),
         patch.object(web_main, "ensure_local_redis"),
-        patch.object(web_main, "register_installed_apps"),
         patch.object(web_main, "log_event") as log_event,
         patch.object(web_main.app, "run"),
     ):
@@ -207,7 +155,6 @@ def test_non_debug_launcher_uses_normal_session_cookie():
         patch.dict("os.environ", {"FLASK_SECRET_KEY": "normal-secret"}),
         patch.object(web_main, "configure_logging"),
         patch.object(web_main, "ensure_local_redis"),
-        patch.object(web_main, "register_installed_apps"),
         patch.object(web_main.app, "run"),
     ):
         result = CliRunner().invoke(web_main.cli_start, ["--port", "12346"])
@@ -519,7 +466,6 @@ def test_prod_entry_logs_gunicorn_worker_start(caplog, monkeypatch):
     with (
         patch.object(web_main, "configure_logging"),
         patch.object(web_main, "ensure_local_redis"),
-        patch.object(web_main, "register_installed_apps"),
         patch.object(web_main, "Repo") as repo,
         caplog.at_level(logging.INFO),
     ):

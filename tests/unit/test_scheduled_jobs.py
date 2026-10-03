@@ -18,7 +18,6 @@ def test_backup_job_dispatches_all_backup_sources():
 
     with (
         patch.object(scheduled_jobs, "ensure_local_redis") as ensure_redis,
-        patch.object(scheduled_jobs, "register_installed_apps") as register_apps,
         patch.object(scheduled_jobs, "DataInterface", return_value=root_interface),
         patch.object(
             scheduled_jobs,
@@ -29,7 +28,6 @@ def test_backup_job_dispatches_all_backup_sources():
         scheduled_jobs.run_backup()
 
     ensure_redis.assert_called_once_with()
-    register_apps.assert_called_once_with(scheduled_jobs.app)
     root_interface.generate_backup_dir.assert_called_once_with()
     root_interface.backup_data.assert_called_once_with(backup_dir)
     subapp_interface_1.return_value.backup_data.assert_called_once_with(backup_dir)

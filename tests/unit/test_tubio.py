@@ -1,5 +1,4 @@
 import pytest
-from nabicat_app_sdk import DataRoot
 
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta, timezone
@@ -44,7 +43,7 @@ def auth_mock():
 @pytest.fixture
 def tubio_data(tmp_path):
     data = DataInterface()
-    data.data = DataRoot(root=tmp_path)
+    data.data_root = tmp_path
     data.app_dir = tmp_path / "tubio"
     data.app_audio_dir = data.app_dir / "audio"
     data.app_thumbnails_dir = data.app_dir / "thumbnails"

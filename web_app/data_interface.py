@@ -1,35 +1,31 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import random
 import shutil
 import string
+import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
+from typing import BinaryIO, TextIO, TypeVar
 
 import boto3
 from botocore.exceptions import ClientError
 from git import Repo
-from nabicat_app_sdk import (
-    DataInterface as SdkDataInterface,
-)
-from nabicat_app_sdk import (
-    DataRoot,
-)
-from nabicat_app_sdk import (
-    DataSyncer as SdkDataSyncer,
-)
+from pydantic import BaseModel
 
 from web_app.config import ConfigManager
 from web_app.logging_utils import log_event
 from web_app.users import User, UsersFile
 
+Model = TypeVar("Model", bound=BaseModel)
+
 
 class _S3Client:
-    BUCKET_NAME = 'todoist'
-    
     def __init__(self) -> None:
         ACCESS_KEY = os.environ["AWS_ACCESS_KEY_ID"]
         SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
@@ -49,7 +45,8 @@ class _S3Client:
         if not file.parent.exists():
             file.parent.mkdir(exist_ok=True, parents=True)
         try:
-            self.s3_client.download_file(self.BUCKET_NAME, self._get_s3_path(file), str(file))
+            bucket = ConfigManager().data_sync_bucket_name
+            self.s3_client.download_file(bucket, self._get_s3_path(file), str(file))
         except ClientError as e:
             if e.response['Error']['Code'] == "404":
                 log_event(
@@ -64,7 +61,8 @@ class _S3Client:
             "storage", "storage.s3_upload_started",
             source=str(file), destination=self._get_s3_path(file),
         )
-        self.s3_client.upload_file(str(file), self.BUCKET_NAME, self._get_s3_path(file))
+        bucket = ConfigManager().data_sync_bucket_name
+        self.s3_client.upload_file(str(file), bucket, self._get_s3_path(file))
 
 class _OfflineClient:
     def download_file(self, file: Path) -> None:
@@ -73,8 +71,8 @@ class _OfflineClient:
     def upload_file(self, file: Path) -> None:
         pass
 
-class DataSyncer(SdkDataSyncer):
-    _instance: Optional['DataSyncer'] = None
+class DataSyncer:
+    _instance: DataSyncer | None = None
 
     @classmethod
     def instance(cls) -> 'DataSyncer':
@@ -88,23 +86,112 @@ class DataSyncer(SdkDataSyncer):
         return cls._instance
     
     def __init__(self, client: _S3Client | _OfflineClient) -> None:
-        super().__init__(client)
+        self.client = client
+
+    def download_file(self, file: Path) -> None:
+        self.client.download_file(file)
+
+    def upload_file(self, file: Path) -> None:
+        self.client.upload_file(file)
 
 
-class DataInterface(SdkDataInterface):
+class DataInterface:
     def __init__(self) -> None:
         from web_app.redis_client import rmw_lock
 
         config = ConfigManager()
-        syncer = DataSyncer.instance()
-        super().__init__(
-            DataRoot(root=config.save_data_path.parent),
-            syncer=syncer,
-            lock_factory=rmw_lock,
-        )
+        self.data_root = config.save_data_path.parent
+        self.data_syncer = DataSyncer.instance()
+        self._lock_factory = rmw_lock
         self.backups_directory = config.save_data_path.parent / "backups"
         self.users_file = config.save_data_path / "users.json"
         self.metadata_filename = "metadata.json"
+
+    def app_path(self, *parts: str | Path) -> Path:
+        return self._safe_path(self.data_root, parts)
+
+    def user_path(self, user: User, *parts: str | Path) -> Path:
+        if not user.folder or "/" in user.folder or "\\" in user.folder or user.folder in {".", ".."}:
+            raise ValueError("user folder must be a safe path component")
+        return self._safe_path(self.data_root / user.folder, parts)
+
+    def load_model(self, path: Path, model: type[Model], *, sync: bool = True) -> Model | None:
+        self._assert_path(path)
+        if sync:
+            self.data_syncer.download_file(path)
+        if not path.exists():
+            return None
+        return model.model_validate_json(path.read_text(encoding="utf-8"))
+
+    @contextmanager
+    def edit_model(self, path: Path, model: type[Model], *, exclude_none: bool = False) -> Iterator[Model]:
+        self._assert_path(path)
+        lock_name = f"model:{path.relative_to(self.data_root)}"
+        with self._lock_factory(lock_name):
+            current = self.load_model(path, model, sync=False) or model()
+            before = current.model_dump_json(exclude_none=exclude_none)
+            yield current
+            if current.model_dump_json(exclude_none=exclude_none) != before:
+                self._save_model(path, current, exclude_none=exclude_none)
+
+    def atomic_write(
+        self,
+        path: Path,
+        data: str | bytes | None = None,
+        *,
+        stream: BinaryIO | TextIO | None = None,
+        encoding: str = "utf-8",
+        mode: str | None = None,
+    ) -> None:
+        if data is None and stream is None:
+            raise ValueError("either data or stream must be provided")
+        if data is not None and stream is not None:
+            raise ValueError("data and stream are mutually exclusive")
+        self._assert_path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        del mode
+        temporary_path: Path | None = None
+        try:
+            config = ConfigManager()
+            with tempfile.NamedTemporaryFile("wb", dir=path.parent, delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+                if data is not None:
+                    temporary.write(data if isinstance(data, bytes) else data.encode(encoding))
+                else:
+                    assert stream is not None
+                    while chunk := stream.read(config.atomic_write_chunk_size):
+                        temporary.write(chunk if isinstance(chunk, bytes) else chunk.encode(encoding))
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_path, path)
+            path.chmod(config.atomic_write_file_mode)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+    def atomic_delete(self, path: Path) -> bool:
+        self._assert_path(path)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return False
+        return True
+
+    def _save_model(self, path: Path, model: BaseModel, *, exclude_none: bool = False) -> None:
+        self.atomic_write(path, model.model_dump_json(indent=4, exclude_none=exclude_none))
+
+    def _assert_path(self, path: Path) -> None:
+        try:
+            path.resolve(strict=False).relative_to(self.data_root.resolve())
+        except ValueError as error:
+            raise ValueError("path must remain inside app data") from error
+
+    @staticmethod
+    def _safe_path(root: Path, parts: tuple[str | Path, ...]) -> Path:
+        relative = Path(*parts)
+        if relative.is_absolute() or any(part in {".", ".."} for part in relative.parts):
+            raise ValueError("path must remain inside app data")
+        return root / relative
     
     def delete_user_data(self, user: User) -> None:
         raise NotImplementedError("Method not overriden")
@@ -147,7 +234,9 @@ class DataInterface(SdkDataInterface):
         return self.edit_model(self.users_file, UsersFile)
 
     @staticmethod
-    def generate_random_string(length: int = 10) -> str:
+    def generate_random_string(length: int | None = None) -> str:
+        if length is None:
+            length = ConfigManager().random_string_length
         letters = string.ascii_lowercase
         result_str = ''.join(random.choice(letters) for _ in range(length))
 
@@ -156,7 +245,7 @@ class DataInterface(SdkDataInterface):
     def generate_new_user(self, username: str, password: str) -> User:
         users = self.load_users()
         used_folders = {user.folder for user in users.values()}
-        for _ in range(100):
+        for _ in range(ConfigManager().random_generation_attempts):
             folder = self.generate_random_string()
             if folder not in used_folders:
                 return User.create(username, password, folder)
@@ -189,8 +278,9 @@ class DataInterface(SdkDataInterface):
     def find_avail_temp_file_path(self, ext: str = "") -> Path:
         dir = ConfigManager().temp_dir
         ext = ext if ext.startswith('.') else f".{ext}"
-        for _ in range(100):
-            temp_file = dir / f"{self.generate_random_string(10)}{ext}"
+        config = ConfigManager()
+        for _ in range(config.random_generation_attempts):
+            temp_file = dir / f"{self.generate_random_string(config.random_string_length)}{ext}"
             if not temp_file.exists():
                 return temp_file
         raise RuntimeError("Could not find available temporary file path")

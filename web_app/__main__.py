@@ -17,7 +17,6 @@ from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.helpers import (
     register_all_blueprints,
-    register_installed_apps,
 )
 from web_app.redis_client import ensure_local_redis
 from web_app.logging_utils import configure_logging, log_event
@@ -178,12 +177,10 @@ def teardown_request(error: BaseException | None) -> None:
 
 @app.route('/')
 def home():
-    registry = app.extensions.get("nabicat_apps")
     return render_template(
         'home.html',
         build_version=BUILD_VERSION,
         build_version_is_tag=BUILD_VERSION_IS_TAG,
-        installed_apps=registry.navigation() if registry is not None else (),
     )
 
 
@@ -214,10 +211,7 @@ def service_worker():
     """Serve service worker from root for proper scope"""
     config = ConfigManager()
     source = (Path(app.static_folder) / 'service-worker.js').read_text()
-    registry = app.extensions.get("nabicat_apps")
-    static_prefixes = config.cache_versioned_static_path_prefixes + (
-        registry.static_prefixes() if registry is not None else ()
-    )
+    static_prefixes = config.cache_versioned_static_path_prefixes
     source = source.replace(
         '__NABICAT_CACHE_VERSION__',
         json.dumps(config.cache_service_worker_version),
@@ -296,7 +290,6 @@ def cli_start(
     app.config["SESSION_COOKIE_NAME"] = cfg.flask_session_cookie_name
 
     ensure_local_redis()
-    register_installed_apps(app)
 
     mode = "debug" if debug else "development"
     if not debug or is_running_from_reloader():
@@ -321,7 +314,6 @@ def prod_entry():
     app.config["DEPLOY_COMMIT"] = Repo(".").head.commit.hexsha
 
     ensure_local_redis()
-    register_installed_apps(app)
 
     log_event("system", "worker.started", mode="production")
     return app

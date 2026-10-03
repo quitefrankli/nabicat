@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from nabicat_app_sdk import DataRoot
 
 import web_app.helpers as helpers
 from web_app.redis_client import get_redis
@@ -126,7 +125,7 @@ class TestSurpriseCleanup:
     def test_expired_surprise_and_its_resources_are_removed(self, tmp_path):
         now = datetime.now(timezone.utc)
         data = DataInterface()
-        data.data = DataRoot(root=tmp_path)
+        data.data_root = tmp_path
         data.app_dir = tmp_path
         data.app_audio_dir = tmp_path / "audio"
         data.app_thumbnails_dir = tmp_path / "thumbnails"
@@ -162,7 +161,7 @@ class TestSurpriseCleanup:
 
     def test_backup_omits_temporary_playlists_and_dependencies(self, tmp_path):
         data = DataInterface()
-        data.data = DataRoot(root=tmp_path)
+        data.data_root = tmp_path
         data.app_dir = tmp_path / "data"
         data.app_audio_dir = data.app_dir / "audio"
         data.app_thumbnails_dir = data.app_dir / "thumbnails"

@@ -83,12 +83,10 @@ def update_server(patch: str | None = None):
 
 @api_api.route("/health", methods=["GET"])
 def health():
-    registry = current_app.extensions.get("nabicat_apps")
     return jsonify({
         "status": "ok",
         "commit": current_app.config.get("DEPLOY_COMMIT", "unknown"),
         "pid": os.getpid(),
-        "apps": list(registry.health()) if registry is not None else [],
     })
 
 def handle_github_webhook():

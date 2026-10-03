@@ -786,9 +786,6 @@ dependencies = [
     { name = "markdown-it-py" },
     { name = "markupsafe" },
     { name = "mdurl" },
-    { name = "nabicat-app-sdk" },
-    { name = "nabicat-jswipe" },
-    { name = "nabicat-sentinel" },
     { name = "narwhals" },
     { name = "numpy" },
     { name = "ordered-set" },
@@ -803,6 +800,7 @@ dependencies = [
     { name = "pydantic-core" },
     { name = "pydub" },
     { name = "pygments" },
+    { name = "pypdf" },
     { name = "python-dateutil" },
     { name = "python-dotenv" },
     { name = "pytz" },
@@ -861,9 +859,6 @@ requires-dist = [
     { name = "markdown-it-py", specifier = "==3.0.0" },
     { name = "markupsafe", specifier = "==3.0.2" },
     { name = "mdurl", specifier = "==0.1.2" },
-    { name = "nabicat-app-sdk", git = "https://github.com/quitefrankli/nabicat-app-sdk.git?rev=6b8bb83a274436f64867696d9f16c34f638341ef" },
-    { name = "nabicat-jswipe", git = "https://github.com/quitefrankli/nabicat-jswipe.git?rev=e681e7c4a31e7f2b7bf50d616e5196478e2c3c82" },
-    { name = "nabicat-sentinel", git = "https://github.com/quitefrankli/nabicat-sentinel.git?rev=c9dc3c5dd99a50d45b18bf4e977829732aac6f0c" },
     { name = "narwhals", specifier = "==1.34.1" },
     { name = "numpy", specifier = "==2.2.4" },
     { name = "ordered-set", specifier = "==4.1.0" },
@@ -878,6 +873,7 @@ requires-dist = [
     { name = "pydantic-core", specifier = "==2.33.1" },
     { name = "pydub", specifier = ">=0.25.1" },
     { name = "pygments", specifier = "==2.19.1" },
+    { name = "pypdf", specifier = ">=6.14,<7" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pytz", specifier = "==2025.2" },
@@ -904,42 +900,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-playwright", specifier = ">=0.7.0" },
     { name = "tomlkit", specifier = ">=0.13.3" },
-]
-
-[[package]]
-name = "nabicat-app-sdk"
-version = "0.1.0"
-source = { git = "https://github.com/quitefrankli/nabicat-app-sdk.git?rev=6b8bb83a274436f64867696d9f16c34f638341ef#6b8bb83a274436f64867696d9f16c34f638341ef" }
-dependencies = [
-    { name = "boto3" },
-    { name = "gitpython" },
-    { name = "pydantic" },
-    { name = "redis" },
-    { name = "werkzeug" },
-]
-
-[[package]]
-name = "nabicat-jswipe"
-version = "0.1.1"
-source = { git = "https://github.com/quitefrankli/nabicat-jswipe.git?rev=e681e7c4a31e7f2b7bf50d616e5196478e2c3c82#e681e7c4a31e7f2b7bf50d616e5196478e2c3c82" }
-dependencies = [
-    { name = "flask" },
-    { name = "nabicat-app-sdk" },
-    { name = "pypdf" },
-]
-
-[[package]]
-name = "nabicat-sentinel"
-version = "0.1.0"
-source = { git = "https://github.com/quitefrankli/nabicat-sentinel.git?rev=c9dc3c5dd99a50d45b18bf4e977829732aac6f0c#c9dc3c5dd99a50d45b18bf4e977829732aac6f0c" }
-dependencies = [
-    { name = "flask" },
-    { name = "markdown-it-py" },
-    { name = "nabicat-app-sdk" },
-    { name = "pillow" },
-    { name = "playwright" },
-    { name = "playwright-stealth" },
-    { name = "pydantic" },
 ]
 
 [[package]]

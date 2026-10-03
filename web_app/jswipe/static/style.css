@@ -1,0 +1,756 @@
+.jswipe-shell {
+  --jswipe-card-max: 34rem;
+  max-width: 72rem;
+  margin: 1.5rem auto 0;
+  padding: 0 0 calc(6rem + env(safe-area-inset-bottom));
+}
+
+.jswipe-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin: 1.5rem 0;
+}
+
+.jswipe-eyebrow {
+  color: var(--hw-sage-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.jswipe-heading {
+  color: var(--hw-forest);
+  font-size: clamp(2rem, 8vw, 3.4rem);
+  line-height: 1.02;
+}
+
+.jswipe-subtitle {
+  max-width: 42rem;
+  color: var(--hw-text-secondary);
+  font-size: 1.02rem;
+}
+
+.jswipe-scan-toggle {
+  min-height: 44px;
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.jswipe-scan-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.jswipe-personalization {
+  margin: 1.25rem 0;
+  padding: clamp(1rem, 4vw, 1.5rem);
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-xl);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--hw-shadow-md);
+}
+
+.jswipe-personalization-header,
+.jswipe-form-heading,
+.jswipe-resume-row,
+.jswipe-profile-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jswipe-personalization-header {
+  align-items: flex-start;
+}
+
+.jswipe-profile-status,
+.jswipe-review-note {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--hw-radius-full);
+  background: rgba(135, 168, 120, 0.14);
+  color: var(--hw-sage-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.jswipe-onboarding {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px dashed var(--hw-sage);
+  border-radius: var(--hw-radius-lg);
+  background: rgba(135, 168, 120, 0.08);
+}
+
+.jswipe-onboarding-icon {
+  display: grid;
+  flex: 0 0 3rem;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: var(--hw-radius-full);
+  background: var(--hw-gradient-soft);
+  color: var(--hw-sage-dark);
+  font-size: 1.5rem;
+}
+
+.jswipe-resume-row {
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hw-border);
+}
+
+.jswipe-resume-meta {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  min-height: 44px;
+}
+
+.jswipe-resume-meta > i {
+  font-size: 1.5rem;
+}
+
+.jswipe-resume-meta strong,
+.jswipe-resume-meta span {
+  display: block;
+}
+
+.jswipe-resume-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.jswipe-file-label,
+.jswipe-resume-form button,
+.jswipe-resume-form a {
+  display: inline-flex;
+  min-height: 44px;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.jswipe-profile-form {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hw-border);
+  animation: fadeInUp 0.3s ease both;
+}
+
+.jswipe-profile-form fieldset {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border: 0;
+}
+
+.jswipe-profile-form legend {
+  float: none;
+  width: auto;
+  margin-bottom: 0.35rem;
+  color: var(--hw-forest);
+  font-family: "Playfair Display", serif;
+}
+
+.jswipe-profile-form .form-control,
+.jswipe-profile-form .form-select {
+  min-height: 44px;
+}
+
+.jswipe-profile-form textarea.form-control {
+  min-height: 5rem;
+}
+
+.jswipe-profile-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-top: 0.25rem;
+}
+
+.jswipe-profile-actions button {
+  min-height: 44px;
+}
+
+.jswipe-fit-details {
+  margin-top: 1.25rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  background: rgba(135, 168, 120, 0.07);
+}
+
+.jswipe-fit-summary {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0.35rem 0.6rem;
+  align-items: center;
+  min-height: 52px;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.jswipe-fit-summary::-webkit-details-marker {
+  display: none;
+}
+
+.jswipe-fit-summary::after {
+  justify-self: end;
+  color: var(--hw-sage-dark);
+  content: "▾";
+}
+
+.jswipe-fit-details[open] .jswipe-fit-summary::after {
+  content: "▴";
+}
+
+.jswipe-fit-score {
+  display: inline-grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border-radius: var(--hw-radius-full);
+  background: var(--hw-gradient-sage);
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.jswipe-fit-score-label {
+  color: var(--hw-sage-dark);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.jswipe-fit-confidence {
+  color: var(--hw-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.jswipe-fit-summary-text {
+  overflow: hidden;
+  color: var(--hw-text-secondary);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jswipe-fit-evidence {
+  padding: 0 0.8rem 0.8rem;
+  border-top: 1px solid var(--hw-border);
+}
+
+.jswipe-fit-evidence-level,
+.jswipe-fit-heading {
+  color: var(--hw-text-muted);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.jswipe-fit-evidence-level {
+  margin: 0.65rem 0;
+}
+
+.jswipe-fit-section {
+  margin-top: 0.65rem;
+}
+
+.jswipe-fit-heading {
+  margin: 0 0 0.25rem;
+}
+
+.jswipe-fit-list {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  color: var(--hw-text-secondary);
+  font-size: 0.82rem;
+  list-style: none;
+}
+
+.jswipe-fit-list li {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.jswipe-fit-section.is-Matches i { color: var(--hw-sage-dark); }
+.jswipe-fit-section.is-Gaps i { color: var(--hw-gold); }
+.jswipe-fit-section.is-Conflicts i { color: var(--hw-coral); }
+
+.jswipe-list-empty {
+  position: relative;
+  min-height: 18rem;
+}
+
+.jswipe-confirm {
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--hw-shadow-lg);
+  color: var(--hw-text-primary);
+}
+
+.jswipe-confirm::backdrop {
+  background: rgba(45, 74, 62, 0.35);
+}
+
+.jswipe-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.jswipe-confirm-actions button {
+  min-height: 44px;
+}
+
+.jswipe-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.jswipe-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 5rem;
+  padding: 0.75rem 0.35rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--hw-shadow-sm);
+}
+
+.jswipe-stat-value {
+  color: var(--hw-forest);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.jswipe-stat-label {
+  margin-top: 0.35rem;
+  color: var(--hw-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.jswipe-search-panel {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--hw-shadow-md);
+  animation: fadeInUp 0.3s ease both;
+}
+
+.jswipe-panel-heading,
+.jswipe-scan-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jswipe-panel-heading {
+  margin-bottom: 1rem;
+}
+
+.jswipe-source-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.jswipe-company-range {
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.jswipe-range-value {
+  display: inline-flex;
+  min-width: 2.25rem;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.35rem;
+  padding: 0 0.55rem;
+  border-radius: var(--hw-radius-full);
+  background: var(--hw-bg-cream);
+  color: var(--hw-forest);
+  font-weight: 800;
+}
+
+.jswipe-check {
+  display: inline-flex;
+  min-height: 40px;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-full);
+  background: var(--hw-bg-secondary);
+  color: var(--hw-text-primary);
+  cursor: pointer;
+}
+
+.jswipe-scan-actions {
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: 1rem;
+}
+
+.jswipe-scan-note {
+  color: var(--hw-text-muted);
+  font-size: 0.88rem;
+}
+
+.jswipe-alert {
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-md);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--hw-text-secondary);
+}
+
+.jswipe-alert.is-error {
+  border-color: rgba(224, 122, 95, 0.45);
+  background: rgba(224, 122, 95, 0.1);
+  color: #8a3e31;
+}
+
+.jswipe-alert.is-warning {
+  border-color: rgba(233, 196, 106, 0.65);
+  background: rgba(233, 196, 106, 0.16);
+}
+
+.jswipe-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  max-width: var(--jswipe-card-max);
+  margin: 1rem auto;
+  padding: 0.3rem;
+  border-radius: var(--hw-radius-full);
+  background: rgba(135, 168, 120, 0.12);
+}
+
+.jswipe-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--hw-radius-full);
+  background: transparent;
+  color: var(--hw-text-secondary);
+  font-weight: 700;
+  transition: var(--hw-transition-fast);
+}
+
+.jswipe-tab.is-active {
+  background: white;
+  color: var(--hw-forest);
+  box-shadow: var(--hw-shadow-sm);
+}
+
+.jswipe-deck {
+  position: relative;
+  min-height: min(31rem, 62dvh);
+  max-width: var(--jswipe-card-max);
+  margin: 0 auto;
+}
+
+.jswipe-card,
+.jswipe-list-card,
+.jswipe-empty {
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-xl);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--hw-shadow-lg);
+}
+
+.jswipe-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: min(31rem, 62dvh);
+  overflow: hidden;
+  touch-action: pan-y;
+  transform-origin: 50% 100%;
+  transition: transform var(--hw-transition-fast), opacity var(--hw-transition-fast);
+  will-change: transform;
+}
+
+.jswipe-card.is-dragging {
+  transition: none;
+}
+
+.jswipe-card.is-exiting-left {
+  opacity: 0;
+  transform: translateX(-120%) rotate(-12deg);
+}
+
+.jswipe-card.is-exiting-right {
+  opacity: 0;
+  transform: translateX(120%) rotate(12deg);
+}
+
+.jswipe-card-accent {
+  height: 0.55rem;
+  background: var(--hw-gradient-sage);
+}
+
+.jswipe-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: clamp(1.2rem, 5vw, 2rem);
+}
+
+.jswipe-card-company {
+  color: var(--hw-sage-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jswipe-card-title {
+  margin: 0.55rem 0 1rem;
+  color: var(--hw-forest);
+  font-size: clamp(1.65rem, 7vw, 2.5rem);
+  line-height: 1.08;
+}
+
+.jswipe-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.jswipe-chip {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--hw-radius-full);
+  background: rgba(135, 168, 120, 0.13);
+  color: var(--hw-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.jswipe-card-hint {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  color: var(--hw-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.jswipe-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  max-width: var(--jswipe-card-max);
+  margin: 0.85rem auto 0;
+}
+
+.jswipe-action {
+  display: inline-flex;
+  min-height: 50px;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem;
+  border: 1px solid var(--hw-border);
+  border-radius: var(--hw-radius-lg);
+  background: white;
+  box-shadow: var(--hw-shadow-sm);
+  color: var(--hw-text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: var(--hw-transition-fast);
+}
+
+.jswipe-action:hover,
+.jswipe-action:focus-visible {
+  color: var(--hw-forest);
+  transform: translateY(-2px);
+}
+
+.jswipe-action i {
+  font-size: 1.25rem;
+}
+
+.jswipe-pass i {
+  color: var(--hw-coral);
+}
+
+.jswipe-shortlist i {
+  color: var(--hw-sage-dark);
+}
+
+.jswipe-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--hw-text-muted);
+  text-align: center;
+}
+
+.jswipe-empty i {
+  margin-bottom: 1rem;
+  font-size: 4rem;
+  opacity: 0.3;
+}
+
+.jswipe-list {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.jswipe-list-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: var(--hw-radius-lg);
+  box-shadow: var(--hw-shadow-sm);
+}
+
+.jswipe-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.jswipe-undo {
+  position: fixed;
+  z-index: 1080;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  left: 1rem;
+  display: flex;
+  max-width: 30rem;
+  min-height: 48px;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 auto;
+  padding: 0.65rem 0.75rem 0.65rem 1rem;
+  border-radius: var(--hw-radius-md);
+  background: var(--hw-forest);
+  box-shadow: var(--hw-shadow-lg);
+  color: white;
+}
+
+@media (min-width: 768px) {
+  .jswipe-shell {
+    margin-top: 2rem;
+  }
+
+  .jswipe-hero {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .jswipe-search-panel {
+    padding: 1.5rem;
+  }
+
+  .jswipe-scan-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .jswipe-action {
+    flex-direction: row;
+    font-size: 0.9rem;
+  }
+
+  .jswipe-list-card {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+
+@media (max-width: 575px) {
+  .jswipe-personalization-header,
+  .jswipe-resume-row,
+  .jswipe-form-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jswipe-resume-form {
+    margin-left: 0;
+  }
+
+  .jswipe-resume-form > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .jswipe-fit-summary {
+    grid-template-columns: auto auto 1fr;
+  }
+
+  .jswipe-fit-confidence {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+
+  .jswipe-fit-summary-text {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jswipe-card,
+  .jswipe-search-panel,
+  .jswipe-action,
+  .jswipe-tab {
+    animation: none;
+    transition: none;
+  }
+}

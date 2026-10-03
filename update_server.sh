@@ -26,9 +26,7 @@ deploy_error() {
 
 install_runtime_requirements() {
     uv sync --locked --no-dev --managed-python || return $?
-    if "$PYTHON_BIN" -c 'import importlib.util; raise SystemExit(importlib.util.find_spec("nabicat_jswipe") is None)'; then
-        "$PYTHON_BIN" -m nabicat_jswipe.install_career_ops
-    fi
+    "$PYTHON_BIN" -m web_app.jswipe.install_career_ops
 }
 
 LOCK_PATH=$("$PYTHON_BIN" -c 'from web_app.config import ConfigManager; print(ConfigManager().deployment_lock_path)')

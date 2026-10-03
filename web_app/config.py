@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from os import getenv
 from pathlib import Path
 from datetime import timedelta
+from math import ceil
 from typing import Callable, Literal
 from dotenv import load_dotenv
 
@@ -10,6 +11,333 @@ LLMSource = Literal["meridian", "codex", "bedrock"]
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
+
+
+def default_career_ops_root() -> str:
+    return str(Path.home() / ".local" / "share" / "nabicat" / "jswipe" / "career-ops")
+
+
+@dataclass(frozen=True, slots=True)
+class JswipeConfig:
+    career_ops_root: str = field(default_factory=default_career_ops_root)
+    node_command: str = "node"
+    scan_script: str = "scan-ats-full.mjs"
+    ats_sources: tuple[str, ...] = (
+        "greenhouse",
+        "lever",
+        "ashby",
+        "workday",
+        "icims",
+    )
+    default_keywords: tuple[str, ...] = (
+        "Software Engineer",
+        "C++",
+        "Platform Engineer",
+        "Systems Engineer",
+        "Infrastructure Engineer",
+    )
+    default_locations: tuple[str, ...] = (
+        "Sydney",
+        "New South Wales",
+        "Australia",
+        "Remote",
+    )
+    remote_preferences: tuple[str, ...] = ("any", "prefer", "require", "exclude")
+    default_since_days: int = 7
+    minimum_since_days: int = 1
+    maximum_since_days: int = 30
+    minimum_companies_per_source: int = 1
+    companies_per_source: int = 100
+    maximum_companies_per_source: int = 500
+    companies_per_source_step: int = 1
+    maximum_results: int = 250
+    description_enrichment_limit: int = 50
+    job_description_max_chars: int = 50_000
+    maximum_retained_jobs: int = 1_000
+    maximum_keywords: int = 24
+    maximum_locations: int = 16
+    maximum_filter_chars: int = 80
+    scan_timeout_seconds: int = 240
+    scan_lease_grace_seconds: int = 30
+    scan_retry_after_seconds: int = 10
+    user_operation_retry_after_seconds: int = 10
+    scan_rate_limit_requests: int = 10
+    scan_rate_limit_window_minutes: int = 60
+    resume_rate_limit_requests: int = 6
+    profile_rate_limit_requests: int = 30
+    personalization_rate_limit_window_minutes: int = 60
+    scanner_output_max_bytes: int = 2_000_000
+    node_max_old_space_mb: int = 256
+    resume_max_bytes: int = 5 * 1024 * 1024
+    resume_max_pages: int = 20
+    resume_text_max_chars: int = 50_000
+    profile_model_max_tokens: int = 2_048
+    profile_model_timeout_seconds: int = 60
+    ranking_batch_size: int = 10
+    ranking_model_max_tokens: int = 4_096
+    ranking_model_timeout_seconds: int = 60
+    ranking_dimension_weights: dict[str, int] = field(default_factory=lambda: {
+        "role": 30,
+        "skills_experience": 30,
+        "seniority": 15,
+        "location_remote": 10,
+        "constraints": 15,
+    })
+    truncated_description_confidence_cap: int = 85
+
+    def __post_init__(self) -> None:
+        if not self.career_ops_root.strip():
+            raise ValueError("career_ops_root must be non-empty")
+        if not self.node_command.strip():
+            raise ValueError("node_command must be non-empty")
+        if not self.scan_script.strip():
+            raise ValueError("scan_script must be non-empty")
+        if not self.ats_sources or len(set(self.ats_sources)) != len(self.ats_sources):
+            raise ValueError("ats_sources must be non-empty and unique")
+        if not self.remote_preferences or len(set(self.remote_preferences)) != len(
+            self.remote_preferences
+        ):
+            raise ValueError("remote_preferences must be non-empty and unique")
+        if self.minimum_companies_per_source < 1:
+            raise ValueError("minimum_companies_per_source must be positive")
+        if self.maximum_companies_per_source < self.minimum_companies_per_source:
+            raise ValueError("maximum_companies_per_source is below its minimum")
+        if self.companies_per_source_step < 1:
+            raise ValueError("companies_per_source_step must be positive")
+        if not (
+            self.minimum_companies_per_source
+            <= self.companies_per_source
+            <= self.maximum_companies_per_source
+        ):
+            raise ValueError("companies_per_source is outside the configured range")
+        if not self.minimum_since_days <= self.default_since_days <= self.maximum_since_days:
+            raise ValueError("default_since_days is outside the configured range")
+        positive_values = (
+            self.maximum_results,
+            self.description_enrichment_limit,
+            self.job_description_max_chars,
+            self.maximum_retained_jobs,
+            self.maximum_keywords,
+            self.maximum_locations,
+            self.maximum_filter_chars,
+            self.scan_timeout_seconds,
+            self.scan_lease_grace_seconds,
+            self.scan_retry_after_seconds,
+            self.user_operation_retry_after_seconds,
+            self.scan_rate_limit_requests,
+            self.scan_rate_limit_window_minutes,
+            self.resume_rate_limit_requests,
+            self.profile_rate_limit_requests,
+            self.personalization_rate_limit_window_minutes,
+            self.scanner_output_max_bytes,
+            self.node_max_old_space_mb,
+            self.resume_max_bytes,
+            self.resume_max_pages,
+            self.resume_text_max_chars,
+            self.profile_model_max_tokens,
+            self.profile_model_timeout_seconds,
+            self.ranking_batch_size,
+            self.ranking_model_max_tokens,
+            self.ranking_model_timeout_seconds,
+            self.truncated_description_confidence_cap,
+        )
+        if any(value < 1 for value in positive_values):
+            raise ValueError("numeric limits must be positive")
+        if self.truncated_description_confidence_cap > 100:
+            raise ValueError("truncated description confidence cap must not exceed 100")
+
+    @property
+    def maximum_ranking_seconds(self) -> int:
+        return (
+            ceil(self.description_enrichment_limit / self.ranking_batch_size)
+            * self.ranking_model_timeout_seconds
+        )
+
+    @property
+    def scan_lease_seconds(self) -> int:
+        return (
+            self.scan_timeout_seconds + self.maximum_ranking_seconds + self.scan_lease_grace_seconds
+        )
+
+    @property
+    def user_operation_lease_seconds(self) -> int:
+        return (
+            max(
+                self.scan_timeout_seconds + self.maximum_ranking_seconds,
+                self.profile_model_timeout_seconds + self.maximum_ranking_seconds,
+            )
+            + self.scan_lease_grace_seconds
+        )
+
+
+@dataclass(slots=True)
+class SentinelConfig:
+    """Typed, app-owned configuration for Sentinel."""
+
+    llm_tier: str = "strong"
+    codex_model: str = "gpt-5.6-sol"
+    codex_reasoning_effort: str = "medium"
+    codex_permissions_profile: str = "sentinel_qa"
+    image_temp_prefix: str = "nabicat-sentinel-text-"
+    allow_local_targets: bool = False
+    request_deadline_s: int = 690
+    lease_ttl_s: int = 90
+    lease_retry_after_s: int = 5
+    lease_recovery_grace_s: int = 5
+    cancel_flag_ttl_s: int = 3600
+
+    default_limit_mins: int = 5
+    min_limit_mins: int = 1
+    max_limit_mins: int = 10
+    max_steps: int = 50
+    max_screenshots: int = 50
+    sidebar_run_limit: int = 25
+    sidebar_batch_limit: int = 25
+    max_batch_items: int = 1
+    batch_name_max_chars: int = 80
+    batch_name_fallback: str = "Sentinel batch"
+
+    prompt_max_chars: int = 4000
+    title_max_chars: int = 80
+    verdict_reason_max_chars: int = 300
+    finding_detail_max_chars: int = 500
+    final_report_max_chars: int = 4000
+    final_report_max_images: int = 4
+    final_report_picker_budget: int = 6
+    additional_domains_max_count: int = 10
+    additional_domain_max_chars: int = 253
+
+    browser_width_px: int = 1366
+    browser_height_px: int = 900
+    browser_launch_timeout_ms: int = 30000
+    browser_default_timeout_ms: int = 15000
+    ignore_https_errors: bool = False
+    browser_desktop_user_agent: str = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+    browser_launch_args: list[str] = field(
+        default_factory=lambda: ["--disable-blink-features=AutomationControlled"]
+    )
+    navigation_timeout_ms: int = 30000
+    post_click_load_timeout_ms: int = 5000
+    post_click_settle_ms: int = 600
+    post_fill_settle_ms: int = 200
+    post_select_settle_ms: int = 1000
+    post_scroll_settle_ms: int = 1000
+    wait_action_ms: int = 1000
+    scroll_action_delta_px: int = 650
+    scroll_position_tolerance_px: int = 2
+    full_page_scope_prompt_pattern: str = (
+        r"\b(?:all|every|each|whole|entire|full)\b.{0,80}\b"
+        r"(?:apps?|cards?|links?|items?|rows?|sections?|pages?|menus?|public|private)\b"
+        r"|\b(?:apps?|cards?|links?|items?|rows?|sections?|pages?|menus?|public|private)\b"
+        r".{0,80}\b(?:all|every|each|whole|entire|full)\b"
+    )
+    observation_max_elements: int = 80
+    observation_text_max_chars: int = 3000
+    observation_element_text_max_chars: int = 140
+
+    agent_parse_retry_attempts: int = 1
+    click_loop_threshold: int = 3
+    click_loop_max_warnings: int = 3
+    console_finding_title: str = "Console"
+    console_finding_kind: str = "browser.console"
+
+    llm_step_timeout_s: float = 45.0
+    llm_step_max_tokens: int = 1024
+    llm_title_timeout_s: float = 15.0
+    llm_title_max_tokens: int = 80
+    llm_verdict_timeout_s: float = 20.0
+    llm_verdict_max_tokens: int = 200
+    llm_picker_timeout_s: float = 20.0
+    llm_picker_max_tokens: int = 300
+    final_report_timeout_s: float = 60.0
+    llm_final_report_max_tokens: int = 2048
+
+    annotation_box_width_px: int = 3
+    annotation_label_font_px: int = 14
+    annotation_label_pad_px: int = 4
+    screenshot_load_stagger_ms: int = 200
+    screenshot_load_max_retries: int = 3
+    screenshot_load_retry_delay_ms: int = 1000
+    screenshot_thumb_max_px: int = 360
+    annotation_palette: tuple[tuple[int, int, int], ...] = (
+        (224, 122, 95),
+        (135, 168, 120),
+        (244, 162, 97),
+        (233, 196, 106),
+        (74, 93, 74),
+        (107, 142, 90),
+    )
+
+    pdf_margin_top: str = "16mm"
+    pdf_margin_bottom: str = "18mm"
+    pdf_margin_left: str = "14mm"
+    pdf_margin_right: str = "14mm"
+    pdf_footer_label: str = "Generated by Sentinel"
+
+    device_profiles: dict[str, str] = field(
+        default_factory=lambda: {
+            "desktop": "",
+            "tablet": "iPad (gen 7)",
+            "large_phone": "iPhone 13 Pro Max",
+            "small_phone": "iPhone SE",
+        }
+    )
+    device_labels: dict[str, str] = field(
+        default_factory=lambda: {
+            "desktop": "Desktop",
+            "tablet": "Tablet",
+            "large_phone": "Large Phone",
+            "small_phone": "Small Phone",
+        }
+    )
+    default_device: str = "desktop"
+    demographic_personas: dict[str, str] = field(
+        default_factory=lambda: {
+            "child": (
+                "You are an 8-year-old child using a website for the first time; "
+                "you click colorful things, get bored fast, and cannot read long text."
+            ),
+            "adult": (
+                "You are a typical adult web user with average tech literacy who "
+                "skims interfaces and expects standard web conventions."
+            ),
+            "senior": (
+                "You are a senior in your 70s with limited tech experience; small targets, "
+                "jargon, and unexpected layouts confuse you."
+            ),
+            "techie": (
+                "You are a power user comfortable with developer tools, keyboard shortcuts, "
+                "and dense UIs; you probe edge cases and unusual flows."
+            ),
+        }
+    )
+    demographic_labels: dict[str, str] = field(
+        default_factory=lambda: {
+            "child": "Child",
+            "adult": "Adult",
+            "senior": "Senior",
+            "techie": "Techie",
+        }
+    )
+    default_demographic: str = "adult"
+    account_keywords: tuple[str, ...] = (
+        "account",
+        "accounts",
+        "sign up",
+        "signup",
+        "sign-up",
+        "sign in",
+        "signin",
+        "sign-in",
+        "log in",
+        "login",
+        "log-in",
+        "register",
+        "registration",
+    )
 
 
 @dataclass
@@ -486,24 +814,15 @@ class ConfigManager:
         self.rmw_lock_timeout_s = 10
         self.rmw_lock_blocking_timeout_s = 5.0
         self.rmw_lock_renewal_interval_s = 3.0
-        self.installed_app_file_mode = 0o600
-        self.installed_app_user_folder_pattern = r"[a-z0-9][a-z0-9._-]*"
-        self.installed_app_state_key_prefix = "nabicat:app:{app_id}:state:"
-        self.installed_app_lease_key_prefix = "nabicat:app:{app_id}:lease:"
-        self.installed_app_text_temp_prefix = "nabicat-{app_id}-text-"
-        self.installed_app_text_image_extensions = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/webp": ".webp",
-        }
-        self.installed_app_default_llm_tier = "medium"
-        self.installed_app_llm_tiers = {"sentinel": "strong"}
-        self.installed_app_codex_models = {"sentinel": "gpt-5.6-sol"}
-        self.installed_app_codex_reasoning_effort = {"sentinel": "medium"}
-        self.installed_app_codex_permissions_profile = {
-            "sentinel": "sentinel_qa"
-        }
-        self.installed_app_config_overrides: dict[str, dict[str, object]] = {}
+        self.app_data_file_mode = 0o600
+        self.app_user_folder_pattern = r"[a-z0-9][a-z0-9._-]*"
+        self.data_sync_bucket_name = "todoist"
+        self.atomic_write_file_mode = 0o644
+        self.atomic_write_chunk_size = 1024 * 1024
+        self.random_string_length = 10
+        self.random_generation_attempts = 100
+        self.career_ops_repository = "https://github.com/santifer/career-ops.git"
+        self.career_ops_revision = "fdda56138988873022bf0e1b42baa1fdef665494"
         self.backup_max_count = 8
         self.jswipe_request_path_prefix = "/jswipe/"
         self.jswipe_multipart_request_max_bytes = 6 * 1024 * 1024
@@ -547,6 +866,8 @@ class ConfigManager:
             "/dev/static/",
             "/file_store/static/",
             "/loft/static/",
+            "/jswipe/static/",
+            "/sentinel/static/",
             "/metrics/static/",
             "/proxy/static/",
             "/simulations/static/",
@@ -575,6 +896,8 @@ class ConfigManager:
         # TTL for the ephemeral RSA keypair minted during the encrypted-request
         # handshake. Surfaced to clients as `expires_in` in /api/handshake.
         self.ephemeral_key_ttl_s = 300
+        self.jswipe = JswipeConfig()
+        self.sentinel = SentinelConfig()
         self.llm = LLMConfig()
         self.tubio = TubioConfig(lambda: self.save_data_path)
         self.todoist = TodoistConfig()

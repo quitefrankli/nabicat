@@ -22,14 +22,7 @@ jobs:
           version: "0.12.10"
           enable-cache: true
 
-      - name: Configure private dependency access
-        env:
-          GH_TOKEN: ${{ secrets.PRIVATE_DEPS_TOKEN }}
-        run: gh auth setup-git
-
       - name: Install dependencies
-        env:
-          GH_TOKEN: ${{ secrets.PRIVATE_DEPS_TOKEN }}
         run: uv sync --locked
 
       - name: Install system dependencies

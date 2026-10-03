@@ -1,0 +1,318 @@
+{% extends "subpage_base.html" %}
+
+{% block page_title %}JSwipe · NabiCat{% endblock %}
+{% block meta_description %}Private job discovery and triage with JSwipe.{% endblock %}
+{% block robots_meta %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block subapp_title %}JSwipe{% endblock %}
+{% block navbar_brand %}JSwipe{% endblock %}
+
+{% block scripts %}
+  <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
+  <script defer src="{{ url_for('.static', filename='app.js') }}"></script>
+{% endblock %}
+
+{% block page_content %}
+<section
+  class="jswipe-shell"
+  id="jswipeApp"
+  data-jobs-url="{{ url_for('.jobs_api') }}"
+  data-profile-url="{{ url_for('.get_profile') }}"
+  data-resume-url="{{ url_for('.download_resume') }}"
+  data-resume-upload-url="{{ url_for('.import_resume') }}"
+  data-clear-profile-url="{{ url_for('.clear_profile') }}"
+  data-scan-url="{{ url_for('.create_scan') }}"
+  data-decision-template="{{ url_for('.decide_job', job_id='JOB_ID') }}"
+>
+  <header class="jswipe-hero">
+    <div>
+      <p class="jswipe-eyebrow mb-1">Career-Ops discovery</p>
+      <h1 class="jswipe-heading mb-2">Find the roles worth your time.</h1>
+      <p class="jswipe-subtitle mb-0">
+        Swipe right to shortlist and left to pass. Nothing here submits an application.
+      </p>
+    </div>
+    <button class="btn btn-primary jswipe-scan-toggle" id="scanToggle" type="button" disabled>
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <span>New scan</span>
+    </button>
+  </header>
+
+  <section class="jswipe-personalization" id="personalizationPanel" aria-labelledby="personalizationHeading">
+    <div class="jswipe-personalization-header">
+      <div>
+        <p class="jswipe-eyebrow mb-1">Personalized matching</p>
+        <h2 class="h3 mb-1" id="personalizationHeading">Tune your job deck</h2>
+        <p class="text-muted mb-0" id="personalizationIntro">
+          Start with a text-based PDF resume. JSwipe uses it to create a private, editable profile.
+        </p>
+      </div>
+      <span class="jswipe-profile-status" id="profileStatus" hidden></span>
+    </div>
+
+    <div class="jswipe-onboarding" id="onboardingEmpty">
+      <div class="jswipe-onboarding-icon"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></div>
+      <div>
+        <h3 class="h5 text-forest mb-1">Upload a text PDF to begin</h3>
+        <p class="text-muted mb-0">Image-only and encrypted PDFs cannot be read. Your resume stays private and is never shown in job cards.</p>
+      </div>
+    </div>
+
+    <div class="jswipe-resume-row">
+      <div class="jswipe-resume-meta" id="resumeMeta" hidden>
+        <i class="bi bi-file-earmark-check text-sage" aria-hidden="true"></i>
+        <div>
+          <strong id="resumeFilename">Resume uploaded</strong>
+          <span class="text-muted small" id="resumeDetails"></span>
+        </div>
+      </div>
+      <form class="jswipe-resume-form" id="resumeForm">
+        <label class="btn btn-outline-primary jswipe-file-label" for="resumeFile">
+          <i class="bi bi-upload" aria-hidden="true"></i>
+          <span id="resumeUploadLabel">Upload PDF</span>
+        </label>
+        <input class="visually-hidden" id="resumeFile" name="resume" type="file" accept="application/pdf,.pdf" required>
+        <button class="btn btn-primary" id="resumeSubmit" type="submit" disabled>
+          <span class="spinner-border spinner-border-sm me-2" id="resumeSpinner" hidden aria-hidden="true"></span>
+          <span id="resumeSubmitLabel">Save resume</span>
+        </button>
+        <a class="btn btn-outline-secondary" id="resumeDownload" href="#" download hidden>
+          <i class="bi bi-download" aria-hidden="true"></i> Download
+        </a>
+        <button class="btn btn-outline-danger" id="resumeRemove" type="button" hidden>Remove</button>
+      </form>
+    </div>
+
+    <form class="jswipe-profile-form" id="profileForm" hidden>
+      <div class="jswipe-form-heading">
+        <div>
+          <h3 class="h4 mb-1">Your editable profile</h3>
+          <p class="text-muted mb-0">Review the extracted details and adjust what matters for matching.</p>
+        </div>
+        <span class="jswipe-review-note" id="reviewNote" hidden><i class="bi bi-info-circle" aria-hidden="true"></i> Review suggested</span>
+      </div>
+
+      <fieldset>
+        <legend class="h5">Profile</legend>
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="profileHeadline">Headline</label>
+            <input class="form-control" id="profileHeadline" name="headline" maxlength="160">
+          </div>
+          <div class="col-12 col-lg-3">
+            <label class="form-label" for="profileYears">Years of experience</label>
+            <input class="form-control" id="profileYears" name="years_experience" type="number" min="0" max="80">
+          </div>
+          <div class="col-12 col-lg-3">
+            <label class="form-label" for="profileSeniority">Seniority</label>
+            <input class="form-control" id="profileSeniority" name="seniority" maxlength="40">
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="profileSummary">Summary</label>
+            <textarea class="form-control" id="profileSummary" name="summary" rows="3" maxlength="2000"></textarea>
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="profileRoles">Role titles</label>
+            <textarea class="form-control" id="profileRoles" name="role_titles" rows="3" placeholder="One per line"></textarea>
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="profileSkills">Skills</label>
+            <textarea class="form-control" id="profileSkills" name="skills" rows="3" placeholder="One per line"></textarea>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label" for="profileIndustries">Industries</label>
+            <textarea class="form-control" id="profileIndustries" name="industries" rows="2" placeholder="One per line"></textarea>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label" for="profileEducation">Education</label>
+            <textarea class="form-control" id="profileEducation" name="education" rows="2" placeholder="One per line"></textarea>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label" for="profileCertifications">Certifications</label>
+            <textarea class="form-control" id="profileCertifications" name="certifications" rows="2" placeholder="One per line"></textarea>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend class="h5">Manual preferences</legend>
+        <p class="text-muted small">These preferences influence fit scores and scan defaults.</p>
+        <div class="row g-3">
+          <div class="col-12 col-lg-6"><label class="form-label" for="preferenceRoles">Target roles</label><textarea class="form-control" id="preferenceRoles" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-lg-6"><label class="form-label" for="preferenceLocations">Locations</label><textarea class="form-control" id="preferenceLocations" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-md-4"><label class="form-label" for="preferenceRemote">Remote preference</label><select class="form-select" id="preferenceRemote"><option value="any">Any</option><option value="prefer">Prefer remote</option><option value="require">Require remote</option><option value="exclude">Exclude remote</option></select></div>
+          <div class="col-12 col-md-4"><label class="form-label" for="preferenceEmployment">Employment types</label><input class="form-control" id="preferenceEmployment" placeholder="Full-time, contract"></div>
+          <div class="col-12 col-md-4"><label class="form-label" for="preferenceSinceDays">Posted within</label><div class="input-group"><input class="form-control" id="preferenceSinceDays" type="number" min="{{ minimum_since_days }}" max="{{ maximum_since_days }}" value="{{ settings.since_days }}" required><span class="input-group-text">days</span></div></div>
+          <div class="col-8 col-md-3"><label class="form-label" for="preferenceCompensation">Minimum compensation</label><input class="form-control" id="preferenceCompensation" type="number" min="0"></div>
+          <div class="col-4 col-md-1"><label class="form-label" for="preferenceCurrency">Currency</label><input class="form-control" id="preferenceCurrency" maxlength="8" placeholder="AUD"></div>
+          <div class="col-12 col-lg-6"><label class="form-label" for="preferenceSkills">Preferred skills</label><textarea class="form-control" id="preferenceSkills" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-lg-6"><label class="form-label" for="preferenceIndustries">Preferred industries</label><textarea class="form-control" id="preferenceIndustries" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-lg-4"><label class="form-label" for="preferenceAuthorized">Work-authorized regions</label><textarea class="form-control" id="preferenceAuthorized" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-lg-4"><label class="form-label" for="preferenceExcluded">Excluded title terms</label><textarea class="form-control" id="preferenceExcluded" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-lg-4"><label class="form-label" for="preferenceDealbreakers">Dealbreakers</label><textarea class="form-control" id="preferenceDealbreakers" rows="2" placeholder="One per line"></textarea></div>
+          <div class="col-12 col-md-6"><label class="form-label" for="preferenceSponsorship">Sponsorship</label><select class="form-select" id="preferenceSponsorship"><option value="">No preference</option><option value="true">Required</option><option value="false">Not required</option></select></div>
+          <fieldset class="col-12 col-md-6">
+            <legend class="form-label">ATS sources</legend>
+            <div class="jswipe-source-grid">
+              {% for source in available_sources %}
+              <label class="jswipe-check">
+                <input class="form-check-input" type="checkbox" name="preference_sources" value="{{ source }}">
+                <span>{{ source | title }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        </div>
+      </fieldset>
+
+      <div class="jswipe-profile-actions">
+        <button class="btn btn-primary" id="profileSubmit" type="submit"><span class="spinner-border spinner-border-sm me-2" id="profileSpinner" hidden aria-hidden="true"></span><span id="profileSubmitLabel">Save profile</span></button>
+        <button class="btn btn-outline-danger" id="clearProfile" type="button">Clear personalization</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="jswipe-stats" aria-label="Job counts">
+    <div class="jswipe-stat">
+      <span class="jswipe-stat-value" id="pendingCount">0</span>
+      <span class="jswipe-stat-label">To review</span>
+    </div>
+    <div class="jswipe-stat">
+      <span class="jswipe-stat-value" id="shortlistedCount">0</span>
+      <span class="jswipe-stat-label">Shortlisted</span>
+    </div>
+    <div class="jswipe-stat">
+      <span class="jswipe-stat-value" id="passedCount">0</span>
+      <span class="jswipe-stat-label">Passed</span>
+    </div>
+  </div>
+
+  <section class="jswipe-search-panel" id="scanPanel" hidden>
+    <div class="jswipe-panel-heading">
+      <div>
+        <h2 class="h4 mb-1">Search settings</h2>
+        <p class="text-muted mb-0">Career-Ops scans public ATS directories with these filters.</p>
+      </div>
+      <button class="btn-close" id="scanClose" type="button" aria-label="Close search settings"></button>
+    </div>
+    <form id="scanForm">
+      <div class="row g-3">
+        <div class="col-12 col-lg-6">
+          <label class="form-label" for="keywords">Target titles or keywords</label>
+          <textarea class="form-control" id="keywords" name="keywords" rows="4" required>{{ settings.keywords | join('\n') }}</textarea>
+          <div class="form-text">One per line. Use “software + engineer” to require both terms.</div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <label class="form-label" for="locations">Allowed locations</label>
+          <textarea class="form-control" id="locations" name="locations" rows="4">{{ settings.locations | join('\n') }}</textarea>
+          <div class="form-text">Missing locations remain eligible, matching Career-Ops semantics.</div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="sinceDays">Posted within</label>
+          <div class="input-group">
+            <input
+              class="form-control"
+              id="sinceDays"
+              name="since_days"
+              type="number"
+              min="{{ minimum_since_days }}"
+              max="{{ maximum_since_days }}"
+              value="{{ settings.since_days }}"
+              required
+            >
+            <span class="input-group-text">days</span>
+          </div>
+        </div>
+        <fieldset class="col-12 col-md-8">
+          <legend class="form-label">ATS sources</legend>
+          <div class="jswipe-source-grid">
+            {% for source in available_sources %}
+            <label class="jswipe-check">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                name="sources"
+                value="{{ source }}"
+                {{ 'checked' if source in settings.sources else '' }}
+              >
+              <span>{{ source | title }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <div class="col-12">
+          <label class="form-label" for="companiesPerSource">
+            Companies per source
+            <output class="jswipe-range-value" id="companiesPerSourceValue" for="companiesPerSource">{{ settings.companies_per_source }}</output>
+          </label>
+          <input
+            class="form-range jswipe-company-range"
+            id="companiesPerSource"
+            name="companies_per_source"
+            type="range"
+            min="{{ minimum_companies_per_source }}"
+            max="{{ maximum_companies_per_source }}"
+            step="{{ companies_per_source_step }}"
+            value="{{ settings.companies_per_source }}"
+            aria-describedby="companiesPerSourceEstimate"
+          >
+          <div class="form-text" id="companiesPerSourceEstimate" aria-live="polite">
+            Up to {{ settings.companies_per_source * (settings.sources | length) }} companies across {{ settings.sources | length }} selected sources.
+          </div>
+        </div>
+      </div>
+      <div class="jswipe-scan-actions">
+        <p class="jswipe-scan-note mb-0">
+          <i class="bi bi-shield-check" aria-hidden="true"></i>
+          Discovery only—JSwipe cannot apply or contact anyone.
+        </p>
+        <button class="btn btn-primary" id="scanSubmit" type="submit">
+          <span class="spinner-border spinner-border-sm me-2" id="scanSpinner" hidden aria-hidden="true"></span>
+          <span id="scanSubmitLabel">Scan jobs</span>
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <div class="jswipe-alert" id="statusAlert" role="status" aria-live="polite" hidden></div>
+
+  <nav class="jswipe-tabs" aria-label="Job views">
+    <button class="jswipe-tab is-active" type="button" data-view="pending" aria-pressed="true">Deck</button>
+    <button class="jswipe-tab" type="button" data-view="shortlisted" aria-pressed="false">Shortlist</button>
+    <button class="jswipe-tab" type="button" data-view="passed" aria-pressed="false">History</button>
+  </nav>
+
+  <section class="jswipe-deck-view" id="deckView">
+    <div class="jswipe-deck" id="jobDeck" aria-live="polite"></div>
+    <div class="jswipe-controls" id="deckControls" hidden>
+      <button class="jswipe-action jswipe-pass" id="passButton" type="button">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+        <span>Pass</span>
+      </button>
+      <a class="jswipe-action jswipe-open" id="openButton" href="#" target="_blank" rel="noopener noreferrer">
+        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+        <span>Open</span>
+      </a>
+      <button class="jswipe-action jswipe-shortlist" id="shortlistButton" type="button">
+        <i class="bi bi-heart-fill" aria-hidden="true"></i>
+        <span>Shortlist</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="jswipe-list" id="jobList" hidden aria-live="polite"></section>
+
+  <div class="jswipe-undo" id="undoBar" role="status" hidden>
+    <span id="undoMessage">Decision saved.</span>
+    <button class="btn btn-sm btn-light" id="undoButton" type="button">Undo</button>
+  </div>
+
+  <dialog class="jswipe-confirm" id="clearDialog" aria-labelledby="clearDialogHeading">
+    <form method="dialog">
+      <h2 class="h4" id="clearDialogHeading">Clear personalization?</h2>
+      <p>This removes your saved profile, preferences, and resume. Your job deck and swipe decisions stay intact.</p>
+      <div class="jswipe-confirm-actions"><button class="btn btn-outline-secondary" value="cancel">Keep profile</button><button class="btn btn-danger" id="confirmClear" value="confirm">Clear personalization</button></div>
+    </form>
+  </dialog>
+</section>
+{% endblock %}

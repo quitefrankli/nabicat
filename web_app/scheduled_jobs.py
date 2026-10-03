@@ -12,12 +12,10 @@ from pathlib import Path
 
 import click
 
-from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.helpers import (
     get_all_data_interfaces,
-    register_installed_apps,
 )
 from web_app.logging_utils import configure_logging, log_event
 from web_app.redis_client import ensure_local_redis
@@ -29,7 +27,6 @@ def run_backup() -> None:
     log_event("system", "backup.started", source="systemd", job_id=job_id)
     try:
         ensure_local_redis()
-        register_installed_apps(app)
         data_interface = DataInterface()
         backup_dir = data_interface.generate_backup_dir()
         data_interface.backup_data(backup_dir)

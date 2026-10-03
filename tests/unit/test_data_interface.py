@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -13,31 +13,16 @@ from web_app.data_interface import DataInterface
 from web_app.users import User
 
 
-def test_host_reexports_the_sdk_user_models() -> None:
-    from nabicat_app_sdk import User as SdkUser
-    from nabicat_app_sdk import UsersFile as SdkUsersFile
+def test_users_file_rejects_duplicate_identity_and_folder(mock_config) -> None:
+    from pydantic import ValidationError
 
     from web_app.users import UsersFile
 
-    assert User is SdkUser
-    assert UsersFile is SdkUsersFile
-
-
-def test_host_data_interface_extends_the_sdk_persistence_core() -> None:
-    from nabicat_app_sdk import DataInterface as SdkDataInterface
-
-    assert issubclass(DataInterface, SdkDataInterface)
-
-
-def test_v2_dependencies_participate_in_the_host_data_interface_registry() -> None:
-    from nabicat_jswipe.data_interface import DataInterface as JSwipeDataInterface
-    from nabicat_sentinel.data_interface import DataInterface as SentinelDataInterface
-
-    from web_app.helpers import get_all_data_interfaces
-
-    interfaces = get_all_data_interfaces()
-    assert JSwipeDataInterface in interfaces
-    assert SentinelDataInterface in interfaces
+    first = User(username="alice", folder="alice-folder")
+    with pytest.raises(ValidationError):
+        UsersFile(root=[first, first.model_copy()])
+    with pytest.raises(ValidationError):
+        UsersFile(root=[first, User(username="bob", folder="alice-folder")])
 
 
 @pytest.fixture
@@ -51,13 +36,22 @@ def temp_dir():
 @pytest.fixture
 def mock_config(temp_dir):
     """Mock ConfigManager for testing"""
-    with patch('web_app.data_interface.ConfigManager') as mock_cfg:
+    with (
+        patch('web_app.data_interface.ConfigManager') as mock_cfg,
+        patch('web_app.users.ConfigManager') as mock_user_config,
+    ):
         config_instance = Mock()
         config_instance.save_data_path = temp_dir / "data"
         config_instance.tubio.cookie_path = temp_dir / "data" / "cookies.txt"
         config_instance.temp_dir = temp_dir / "temp"
         config_instance.use_offline_syncer = True
+        config_instance.random_string_length = 10
+        config_instance.random_generation_attempts = 100
+        config_instance.atomic_write_file_mode = 0o644
+        config_instance.atomic_write_chunk_size = 1024 * 1024
+        config_instance.app_user_folder_pattern = r"[a-z0-9][a-z0-9._-]*"
         mock_cfg.return_value = config_instance
+        mock_user_config.return_value = config_instance
         yield config_instance
 
 
@@ -226,6 +220,9 @@ class TestDataInterface:
         DataInterface().backup_data(backup_dir)
 
         assert (backup_dir / "users.json").read_text() == "[]"
+        assert json.loads((backup_dir / "metadata.json").read_text()) == {
+            "commit_hash": "abc123"
+        }
         assert not (backup_dir / "logs").exists()
 
     def test_atomic_write_with_data(self, mock_config, mock_data_syncer, temp_dir):
@@ -359,6 +356,43 @@ class TestDataInterface:
         interface._save_model(path, original)
         loaded = interface.load_model(path, Sample, sync=False)
         assert loaded == original
+
+    def test_edit_model_saves_changed_model_under_lock(self, mock_config, mock_data_syncer, temp_dir):
+        from pydantic import BaseModel
+
+        class Sample(BaseModel):
+            count: int = 0
+
+        lock = MagicMock()
+        mock_config.save_data_path = temp_dir / "data"
+        with patch("web_app.redis_client.rmw_lock", return_value=lock) as lock_factory:
+            interface = DataInterface()
+            path = interface.app_path("sample.json")
+            with interface.edit_model(path, Sample) as sample:
+                sample.count = 1
+
+        lock_factory.assert_called_once_with(f"model:{path.relative_to(temp_dir)}")
+        lock.__enter__.assert_called_once()
+        lock.__exit__.assert_called_once()
+        assert interface.load_model(path, Sample, sync=False) == Sample(count=1)
+
+    def test_edit_model_discards_changes_when_edit_fails(self, mock_config, mock_data_syncer, temp_dir):
+        from pydantic import BaseModel
+
+        class Sample(BaseModel):
+            count: int = 0
+
+        mock_config.save_data_path = temp_dir / "data"
+        interface = DataInterface()
+        path = interface.app_path("sample.json")
+        interface._save_model(path, Sample(count=1))
+
+        with pytest.raises(RuntimeError):
+            with interface.edit_model(path, Sample) as sample:
+                sample.count = 2
+                raise RuntimeError("abort edit")
+
+        assert interface.load_model(path, Sample, sync=False) == Sample(count=1)
 
 
 if __name__ == '__main__':

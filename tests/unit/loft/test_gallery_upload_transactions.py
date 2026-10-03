@@ -8,7 +8,6 @@ from pathlib import Path
 from threading import Barrier, Event
 
 import pytest
-from nabicat_app_sdk import DataInterface as SdkDataInterface, DataRoot
 from PIL import Image
 from werkzeug.datastructures import FileStorage
 
@@ -29,9 +28,8 @@ def projects_dir(tmp_path, monkeypatch):
 
     def patched_init(self):
         from markdown_it import MarkdownIt
-        from web_app.redis_client import rmw_lock
-
-        SdkDataInterface.__init__(self, DataRoot(root=tmp_path), lock_factory=rmw_lock)
+        BaseDataInterface.__init__(self)
+        self.data_root = tmp_path
         self.projects_dir = projects
         self._content_dir = projects.parent
         self._md = MarkdownIt(
