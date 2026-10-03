@@ -6,7 +6,7 @@ auto-save, and no-op-skip behaviors.
 import pytest
 from pydantic import BaseModel
 
-import web_app.data_interface as data_interface_module
+from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 
 
@@ -16,15 +16,10 @@ class _Box(BaseModel):
 
 @pytest.fixture
 def scoped_interface(tmp_path, monkeypatch):
-    config = type(
-        "Config",
-        (),
-        {
-            "save_data_path": tmp_path / "data",
-            "use_offline_syncer": True,
-        },
-    )()
-    monkeypatch.setattr(data_interface_module, "ConfigManager", lambda: config)
+    config = ConfigManager()
+    monkeypatch.setattr(config, "debug_mode", True)
+    monkeypatch.setattr(config, "debug_data_root", tmp_path / "data")
+    monkeypatch.setattr(config, "use_offline_syncer", True)
     return DataInterface(), config.save_data_path / "box.json"
 
 
