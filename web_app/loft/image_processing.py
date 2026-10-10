@@ -16,6 +16,11 @@ else:
     register_heif_opener()
 
 
+# Set once per process; never change Pillow's global limit around individual requests.
+# Keep its warning threshold aligned with the explicit pre-decode Loft limit.
+Image.MAX_IMAGE_PIXELS = ConfigManager().loft.max_image_pixels
+
+
 class ImageProcessingError(APIError):
     """Raised when an upload cannot be safely normalized as an image."""
 

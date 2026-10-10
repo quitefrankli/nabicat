@@ -183,3 +183,22 @@ def test_normalizes_heif_input_when_pillow_heif_is_available(tmp_path):
     with _normalized_image(source) as normalized:
         assert normalized.format == "WEBP"
         assert normalized.size == (12, 7)
+
+
+def test_large_image_header_is_accepted_without_pillow_bomb_warning(tmp_path):
+    """Validate dimensions without allocating a large image on the production host."""
+    import struct
+    import warnings
+    import zlib
+    from web_app.loft.image_processing import image_decoded_pixels
+
+    buffer = BytesIO()
+    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+    data = bytearray(buffer.getvalue())
+    data[16:24] = struct.pack(">II", 10_000, 10_000)
+    data[29:33] = struct.pack(">I", zlib.crc32(data[12:29]))
+    source = tmp_path / "large-header.png"
+    source.write_bytes(data)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        assert image_decoded_pixels(source) == 100_000_000

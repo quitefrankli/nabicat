@@ -585,8 +585,8 @@ class LoftConfig:
     gallery_max_videos_per_upload: int = 5
     gallery_media_filename_max_chars: int = 100
     gallery_upload_stream_chunk_bytes: int = 1024 * 1024
-    gallery_upload_max_total_bytes: int = 250 * 1024 * 1024
-    gallery_request_max_bytes: int = 252 * 1024 * 1024
+    gallery_upload_max_total_bytes: int = 2 * 1024 * 1024 * 1024
+    gallery_request_max_bytes: int = 2 * 1024 * 1024 * 1024 + 2 * 1024 * 1024
     gallery_quota_lock_timeout_s: int = 30
     gallery_quota_lock_blocking_timeout_s: float = 10.0
     gallery_staging_root: Path | None = None
@@ -598,7 +598,7 @@ class LoftConfig:
     gallery_backup_excluded_names: tuple[str, ...] = (
         ".gallery-upload-staging",
     )
-    gallery_image_max_upload_bytes: int = 25 * 1024 * 1024
+    gallery_image_max_upload_bytes: int = 100 * 1024 * 1024
     gallery_image_allowed_formats: tuple[str, ...] = (
         "AVIF",
         "BMP",
@@ -612,10 +612,10 @@ class LoftConfig:
     )
     gallery_thumb_max_px: int = 1400
     gallery_thumb_quality: int = 80
-    max_image_pixels: int = 40_000_000
-    gallery_image_max_batch_pixels: int = 80_000_000
-    gallery_video_max_upload_bytes: int = 100 * 1024 * 1024
-    gallery_video_max_duration_s: int = 60
+    max_image_pixels: int = 120_000_000
+    gallery_image_max_batch_pixels: int = 1_200_000_000
+    gallery_video_max_upload_bytes: int = 1024 * 1024 * 1024
+    gallery_video_max_duration_s: int = 300
     gallery_video_allowed_demuxers: tuple[str, ...] = (
         "avi",
         "matroska",
