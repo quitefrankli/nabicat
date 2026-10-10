@@ -261,7 +261,7 @@ class DataInterface(BaseDataInterface):
         # guard: resolved path must stay inside projects_dir.
         path = self.projects_dir / project / post
         if not path.resolve().is_relative_to(self.projects_dir.resolve()):
-            raise APIError("Invalid path")
+            raise APIError("Invalid path", reason="invalid_path")
         return path
 
     @property
@@ -333,7 +333,7 @@ class DataInterface(BaseDataInterface):
         if value is None:
             return ""
         if len(value) > max_chars:
-            raise APIError(f"{field} is too long (max {max_chars} characters)")
+            raise APIError(f"{field} is too long (max {max_chars} characters)", reason="text_too_long")
         return value
 
     # ---------- slug helpers ----------
@@ -345,7 +345,8 @@ class DataInterface(BaseDataInterface):
         if (self.projects_dir / project_slug / slug).exists():
             raise APIError(
                 f'A post titled "{title}" already exists in project '
-                f'"{project_slug}". Pick a different title.'
+                f'"{project_slug}". Pick a different title.',
+                reason="post_already_exists",
             )
         return slug
 
@@ -385,7 +386,8 @@ class DataInterface(BaseDataInterface):
         if used + additional_bytes > limit:
             raise APIError(
                 f"Storage quota exceeded ({used + additional_bytes} > {limit} bytes). "
-                f"Free up space by deleting existing posts."
+                f"Free up space by deleting existing posts.",
+                reason="storage_quota_exceeded",
             )
 
     # ---------- markdown ----------
@@ -397,7 +399,7 @@ class DataInterface(BaseDataInterface):
         source_md = self._validate_text(source_md, "Markdown", cfg.loft.markdown_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
-            raise APIError("Title is required")
+            raise APIError("Title is required", reason="title_required")
         post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
 
@@ -422,9 +424,9 @@ class DataInterface(BaseDataInterface):
         with self.edit_meta() as store:
             meta = self._post_in_store(store, project, post)
             if meta is None or meta.type != PostType.MARKDOWN:
-                raise APIError("Post is not a markdown post")
+                raise APIError("Post is not a markdown post", reason="post_is_not_a_markdown_post")
             if not title.strip():
-                raise APIError("Title is required")
+                raise APIError("Title is required", reason="title_required")
             meta.title = title.strip()
             self.atomic_write(post_dir / "source.md", data=source_md, mode="w", encoding="utf-8")
 
@@ -441,7 +443,7 @@ class DataInterface(BaseDataInterface):
         description = self._validate_text(description, "Description", cfg.loft.description_max_chars)
         project_slug = slugify(project_input)
         if not title.strip():
-            raise APIError("Title is required")
+            raise APIError("Title is required", reason="title_required")
         post_slug = self.reserve_post_slug(project_slug, title)
         post_dir = self.projects_dir / project_slug / post_slug
         post_dir.mkdir(parents=True, exist_ok=True)
@@ -479,9 +481,9 @@ class DataInterface(BaseDataInterface):
         with self.edit_meta() as store:
             meta = self._post_in_store(store, project, post)
             if meta is None or meta.type != PostType.GALLERY:
-                raise APIError("Post is not a gallery post")
+                raise APIError("Post is not a gallery post", reason="post_is_not_a_gallery_post")
             if not title.strip():
-                raise APIError("Title is required")
+                raise APIError("Title is required", reason="title_required")
             meta.title = title.strip()
             td = meta.template_data or GalleryTemplateData()
             td.description = description
@@ -494,7 +496,7 @@ class DataInterface(BaseDataInterface):
                     or len(set(media_order)) != len(media_order)
                     or set(media_order) != set(by_filename)
                 ):
-                    raise APIError("Media order does not match the current gallery")
+                    raise APIError("Media order does not match the current gallery", reason="media_order_does_not_match_the_current_gallery")
                 td.items = [by_filename[filename] for filename in media_order]
             meta.template_data = td
 
@@ -505,14 +507,15 @@ class DataInterface(BaseDataInterface):
         post_dir = self._post_dir(project, post)
         meta = self._post_entry(project, post)
         if meta is None or meta.type != PostType.GALLERY:
-            raise APIError("Post is not a gallery post")
+            raise APIError("Post is not a gallery post", reason="post_is_not_a_gallery_post")
 
         cfg = ConfigManager().loft
         uploads = [file for file in files if file and file.filename]
         if len(uploads) > cfg.gallery_max_files_per_upload:
             raise APIError(
                 f"Too many media files "
-                f"(max {cfg.gallery_max_files_per_upload} per upload)"
+                f"(max {cfg.gallery_max_files_per_upload} per upload)",
+                reason="too_many_media_files",
             )
         if not uploads:
             return 0
@@ -528,10 +531,11 @@ class DataInterface(BaseDataInterface):
                 exist_ok=True,
             )
             if staging_root.is_symlink() or not staging_root.is_dir():
-                raise APIError("Gallery upload staging path is unsafe")
+                raise APIError("Gallery upload staging path is unsafe", reason="gallery_upload_staging_path_is_unsafe")
         except OSError as error:
             raise APIError(
-                "Could not prepare gallery upload staging"
+                "Could not prepare gallery upload staging",
+                reason="could_not_prepare_gallery_upload_staging",
             ) from error
         self._cleanup_stale_gallery_staging(staging_root)
         with tempfile.TemporaryDirectory(dir=staging_root) as staging_dir_name:
@@ -569,7 +573,8 @@ class DataInterface(BaseDataInterface):
                     )
             except TimeoutError as error:
                 raise APIError(
-                    "Gallery upload finalization is busy; try again"
+                    "Gallery upload finalization is busy; try again",
+                    reason="gallery_upload_finalization_is_busy_try_again",
                 ) from error
 
     @staticmethod
@@ -651,17 +656,19 @@ class DataInterface(BaseDataInterface):
                 if image_format not in cfg.gallery_image_allowed_formats:
                     raise APIError(
                         f"Unsupported image format for {display_name}: "
-                        f"{image_format}"
+                        f"{image_format}",
+                        reason="unsupported_image_format_for",
                     )
                 if source_bytes > cfg.gallery_image_max_upload_bytes:
-                    raise APIError(f"Image {display_name} is too large")
+                    raise APIError(f"Image {display_name} is too large", reason="image_is_too_large")
                 total_image_pixels += image_decoded_pixels(source_path)
                 if (
                     total_image_pixels
                     > cfg.gallery_image_max_batch_pixels
                 ):
                     raise APIError(
-                        "Selected images exceed the decoded pixel budget"
+                        "Selected images exceed the decoded pixel budget",
+                        reason="selected_images_exceed_the_decoded_pixel_budget",
                     )
                 staged_sources.append(
                     StagedGallerySource(
@@ -674,7 +681,7 @@ class DataInterface(BaseDataInterface):
                 continue
 
             if source_bytes > cfg.gallery_video_max_upload_bytes:
-                raise APIError(f"Video {display_name} is too large")
+                raise APIError(f"Video {display_name} is too large", reason="video_is_too_large")
             try:
                 source_info = self._validate_video(source_path, display_name)
             except APIError as error:
@@ -683,14 +690,16 @@ class DataInterface(BaseDataInterface):
                     f"Unsupported video container for {display_name}",
                 }:
                     raise APIError(
-                        f"Unsupported or invalid media: {display_name}"
+                        f"Unsupported or invalid media: {display_name}",
+                        reason="unsupported_or_invalid_media",
                     ) from error
                 raise
             video_count += 1
             if video_count > cfg.gallery_max_videos_per_upload:
                 raise APIError(
                     "Too many videos "
-                    f"(max {cfg.gallery_max_videos_per_upload} per upload)"
+                    f"(max {cfg.gallery_max_videos_per_upload} per upload)",
+                    reason="too_many_videos",
                 )
             staged_sources.append(
                 StagedGallerySource(
@@ -723,7 +732,8 @@ class DataInterface(BaseDataInterface):
             source_info = source.video_info
             if source_info is None:
                 raise APIError(
-                    f"Could not process {source.display_name} as a video"
+                    f"Could not process {source.display_name} as a video",
+                    reason="could_not_process_as_a_video",
                 )
             output_path = staging_dir / f"normalized-{index}.mp4"
             self._transcode_video(
@@ -744,7 +754,8 @@ class DataInterface(BaseDataInterface):
                 < source_info.duration
             ):
                 raise APIError(
-                    f"Normalized video {source.display_name} is incomplete"
+                    f"Normalized video {source.display_name} is incomplete",
+                    reason="normalized_video_is_incomplete",
                 )
             prepared.append(
                 PreparedGalleryUpload(
@@ -774,10 +785,11 @@ class DataInterface(BaseDataInterface):
                     break
                 written += len(chunk)
                 if written > max_file_bytes:
-                    raise APIError(f"Media file {upload.filename} is too large")
+                    raise APIError(f"Media file {upload.filename} is too large", reason="media_file_is_too_large")
                 if total_so_far + written > cfg.gallery_upload_max_total_bytes:
                     raise APIError(
-                        "Selected media exceeds the total upload size limit"
+                        "Selected media exceeds the total upload size limit",
+                        reason="selected_media_exceeds_the_total_upload_size_limit",
                     )
                 output.write(chunk)
         return written
@@ -801,7 +813,7 @@ class DataInterface(BaseDataInterface):
                     or (meta.owner or storage_owner_id) != storage_owner_id
                     or not post_dir.is_dir()
                 ):
-                    raise APIError("Post is not a gallery post")
+                    raise APIError("Post is not a gallery post", reason="post_is_not_a_gallery_post")
 
                 td = meta.template_data or GalleryTemplateData()
                 existing_names = {
@@ -889,7 +901,8 @@ class DataInterface(BaseDataInterface):
                     )
             if isinstance(error, OSError):
                 raise APIError(
-                    "Could not finalize gallery upload"
+                    "Could not finalize gallery upload",
+                    reason="could_not_finalize_gallery_upload",
                 ) from error
             raise
 
@@ -968,10 +981,10 @@ class DataInterface(BaseDataInterface):
         with self.edit_meta() as store:
             meta = self._post_in_store(store, project, post)
             if meta is None or meta.type != PostType.GALLERY:
-                raise APIError("Post is not a gallery post")
+                raise APIError("Post is not a gallery post", reason="post_is_not_a_gallery_post")
             td = meta.template_data or GalleryTemplateData()
             if not any(item.filename == filename for item in td.items):
-                raise APIError("Media not found in gallery")
+                raise APIError("Media not found in gallery", reason="media_not_found_in_gallery")
             self.atomic_delete(post_dir / filename)
             td.items = [item for item in td.items if item.filename != filename]
             meta.template_data = td
@@ -994,10 +1007,12 @@ class DataInterface(BaseDataInterface):
             )
             if "pixel limit" in str(error):
                 raise APIError(
-                    f"Image {display_name} is too large to process"
+                    f"Image {display_name} is too large to process",
+                    reason="image_is_too_large_to_process",
                 ) from error
             raise APIError(
-                f"Could not process {display_name} as an image"
+                f"Could not process {display_name} as an image",
+                reason="could_not_process_as_an_image",
             ) from error
 
     def _make_thumbnail(self, src: Path, dst: Path) -> None:
@@ -1010,16 +1025,16 @@ class DataInterface(BaseDataInterface):
         try:
             return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, check=True)
         except FileNotFoundError as e:
-            raise APIError("Video processing requires ffmpeg") from e
+            raise APIError("Video processing requires ffmpeg", reason="video_processing_requires_ffmpeg") from e
         except subprocess.TimeoutExpired as e:
-            raise APIError(error_message) from e
+            raise APIError(error_message, reason="media_processing_failed") from e
         except subprocess.CalledProcessError as e:
             log_event(
                 "loft", "loft.media_command_failed",
                 level=logging.WARNING, executable=Path(cmd[0]).name,
                 returncode=e.returncode,
             )
-            raise APIError(error_message) from e
+            raise APIError(error_message, reason="media_processing_failed") from e
 
     def _probe_video_info(self, src: Path, display_name: str) -> VideoInfo:
         cfg = ConfigManager()
@@ -1058,7 +1073,7 @@ class DataInterface(BaseDataInterface):
         try:
             payload = json.loads(result.stdout or "{}")
         except json.JSONDecodeError as e:
-            raise APIError(f"Could not process {display_name} as a video") from e
+            raise APIError(f"Could not process {display_name} as a video", reason="could_not_process_as_a_video") from e
         streams = payload.get("streams", [])
         format_name = str(payload.get("format", {}).get("format_name") or "")
         detected_demuxers = set(format_name.split(","))
@@ -1066,7 +1081,8 @@ class DataInterface(BaseDataInterface):
             cfg.loft.gallery_video_allowed_demuxers
         ):
             raise APIError(
-                f"Unsupported video container for {display_name}"
+                f"Unsupported video container for {display_name}",
+                reason="unsupported_video_container_for",
             )
 
         invalid_codecs = {None, "", "none", "unknown", "bin_data"}
@@ -1105,7 +1121,7 @@ class DataInterface(BaseDataInterface):
             default=None,
         )
         if video is None:
-            raise APIError(f"Video {display_name} has no valid video stream")
+            raise APIError(f"Video {display_name} has no valid video stream", reason="video_has_no_valid_video_stream")
 
         audio_candidates = [
             stream
@@ -1310,12 +1326,14 @@ class DataInterface(BaseDataInterface):
         info = self._probe_video_info(src, display_name)
         if info.duration is None:
             raise APIError(
-                f"Video {display_name} has no reliable duration metadata"
+                f"Video {display_name} has no reliable duration metadata",
+                reason="video_has_no_reliable_duration_metadata",
             )
         if info.duration > cfg.loft.gallery_video_max_duration_s:
             raise APIError(
                 f"Video {display_name} is too long "
-                f"(max {cfg.loft.gallery_video_max_duration_s} seconds)"
+                f"(max {cfg.loft.gallery_video_max_duration_s} seconds)",
+                reason="video_duration_exceeded",
             )
         if (
             info.width > cfg.loft.gallery_video_max_input_width_px
@@ -1323,12 +1341,12 @@ class DataInterface(BaseDataInterface):
             or info.width * info.height
             > cfg.loft.gallery_video_max_input_pixels
         ):
-            raise APIError(f"Video {display_name} dimensions are too large")
+            raise APIError(f"Video {display_name} dimensions are too large", reason="video_dimensions_are_too_large")
         if (
             info.fps is not None
             and info.fps > cfg.loft.gallery_video_max_input_fps
         ):
-            raise APIError(f"Video {display_name} frame rate is too high")
+            raise APIError(f"Video {display_name} frame rate is too high", reason="video_frame_rate_is_too_high")
         return info
 
     def _validate_normalized_video(
@@ -1341,16 +1359,19 @@ class DataInterface(BaseDataInterface):
             output_bytes = src.stat().st_size
         except OSError as error:
             raise APIError(
-                f"Could not inspect normalized video {display_name}"
+                f"Could not inspect normalized video {display_name}",
+                reason="could_not_inspect_normalized_video",
             ) from error
         if output_bytes > cfg.gallery_video_max_output_bytes:
             raise APIError(
-                f"Normalized video {display_name} exceeds the output size limit"
+                f"Normalized video {display_name} exceeds the output size limit",
+                reason="normalized_video_exceeds_the_output_size_limit",
             )
         info = self._probe_video_info(src, display_name)
         if info.duration is None:
             raise APIError(
-                f"Normalized video {display_name} has no reliable duration"
+                f"Normalized video {display_name} has no reliable duration",
+                reason="normalized_video_has_no_reliable_duration",
             )
         if (
             info.duration
@@ -1358,31 +1379,36 @@ class DataInterface(BaseDataInterface):
             + cfg.gallery_video_duration_tolerance_s
         ):
             raise APIError(
-                f"Normalized video {display_name} is too long"
+                f"Normalized video {display_name} is too long",
+                reason="video_duration_exceeded",
             )
         if cfg.gallery_video_output_demuxer not in set(
             info.format_name.split(",")
         ):
-            raise APIError(f"Normalized video {display_name} is not MP4")
+            raise APIError(f"Normalized video {display_name} is not MP4", reason="normalized_video_is_not_mp4")
         if (
             info.video_codec != cfg.gallery_video_output_codec
             or info.video_codec_tag != cfg.gallery_video_output_codec_tag
             or info.pixel_format != cfg.gallery_video_output_pixel_format
         ):
             raise APIError(
-                f"Normalized video {display_name} is not browser-safe H.264"
+                f"Normalized video {display_name} is not browser-safe H.264",
+                reason="normalized_video_is_not_browser_safe_h_264",
             )
         if info.width % 2 or info.height % 2:
             raise APIError(
-                f"Normalized video {display_name} has invalid dimensions"
+                f"Normalized video {display_name} has invalid dimensions",
+                reason="normalized_video_has_invalid_dimensions",
             )
         if info.sample_aspect_ratio not in (None, "0:1", "1:1"):
             raise APIError(
-                f"Normalized video {display_name} has invalid aspect ratio"
+                f"Normalized video {display_name} has invalid aspect ratio",
+                reason="normalized_video_has_invalid_aspect_ratio",
             )
         if info.rotation not in (None, 0):
             raise APIError(
-                f"Normalized video {display_name} retains rotation metadata"
+                f"Normalized video {display_name} retains rotation metadata",
+                reason="normalized_video_retains_rotation_metadata",
             )
         if (
             info.width > cfg.gallery_video_max_width_px
@@ -1391,14 +1417,16 @@ class DataInterface(BaseDataInterface):
             or info.height <= 0
         ):
             raise APIError(
-                f"Normalized video {display_name} exceeds the output size limit"
+                f"Normalized video {display_name} exceeds the output size limit",
+                reason="normalized_video_exceeds_the_output_size_limit",
             )
         if (
             info.fps is not None
             and info.fps > cfg.gallery_video_max_output_fps
         ):
             raise APIError(
-                f"Normalized video {display_name} exceeds the frame rate limit"
+                f"Normalized video {display_name} exceeds the frame rate limit",
+                reason="normalized_video_exceeds_the_frame_rate_limit",
             )
         if any(
             value != cfg.gallery_video_output_color_space
@@ -1409,7 +1437,8 @@ class DataInterface(BaseDataInterface):
             )
         ):
             raise APIError(
-                f"Normalized video {display_name} is not tagged as BT.709"
+                f"Normalized video {display_name} is not tagged as BT.709",
+                reason="normalized_video_is_not_tagged_as_bt_709",
             )
         if (
             info.audio_index is not None
@@ -1420,7 +1449,8 @@ class DataInterface(BaseDataInterface):
             )
         ):
             raise APIError(
-                f"Normalized video {display_name} does not use AAC audio"
+                f"Normalized video {display_name} does not use AAC audio",
+                reason="normalized_video_does_not_use_aac_audio",
             )
         if info.audio_index is not None and (
             info.audio_sample_rate
@@ -1428,7 +1458,8 @@ class DataInterface(BaseDataInterface):
             or info.audio_channels > cfg.gallery_video_audio_channels
         ):
             raise APIError(
-                f"Normalized video {display_name} has incompatible audio"
+                f"Normalized video {display_name} has incompatible audio",
+                reason="normalized_video_has_incompatible_audio",
             )
         if (
             info.video_stream_count != 1
@@ -1437,15 +1468,18 @@ class DataInterface(BaseDataInterface):
             or info.chapter_count
         ):
             raise APIError(
-                f"Normalized video {display_name} contains unexpected streams"
+                f"Normalized video {display_name} contains unexpected streams",
+                reason="normalized_video_contains_unexpected_streams",
             )
         if info.private_metadata_keys:
             raise APIError(
-                f"Normalized video {display_name} retains private metadata"
+                f"Normalized video {display_name} retains private metadata",
+                reason="normalized_video_retains_private_metadata",
             )
         if not self._mp4_has_faststart(src):
             raise APIError(
-                f"Normalized video {display_name} is not optimized for streaming"
+                f"Normalized video {display_name} is not optimized for streaming",
+                reason="normalized_video_is_not_optimized_for_streaming",
             )
         return info
 

@@ -53,7 +53,8 @@ def image_decoded_pixels(source: Path) -> int:
         ValueError,
     ) as error:
         raise ImageProcessingError(
-            f"Could not inspect {source.name} as an image"
+            f"Could not inspect {source.name} as an image",
+            reason="could_not_inspect_as_an_image",
         ) from error
 
 
@@ -108,7 +109,8 @@ def normalize_image_to_webp(source: Path) -> bytes:
             width, height = opened.size
             if width * height > cfg.max_image_pixels:
                 raise ImageProcessingError(
-                    f"Image {source.name} exceeds the decoded pixel limit"
+                    f"Image {source.name} exceeds the decoded pixel limit",
+                    reason="image_exceeds_the_decoded_pixel_limit",
                 )
 
             opened.seek(0)
@@ -146,5 +148,6 @@ def normalize_image_to_webp(source: Path) -> bytes:
         ValueError,
     ) as error:
         raise ImageProcessingError(
-            f"Could not decode {source.name} as an image"
+            f"Could not decode {source.name} as an image",
+            reason="could_not_decode_as_an_image",
         ) from error

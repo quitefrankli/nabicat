@@ -1080,3 +1080,95 @@ class TestLoftBackup:
             / "loft"
             / ".gallery-upload-staging"
         ).exists()
+
+class TestLoftFailureAudit:
+    @pytest.mark.parametrize("data,reason", [
+        ({"template": "gallery", "title": "private title"}, "topic_required"),
+        ({"project_new": "private topic", "title": "private title"}, "invalid_template"),
+        ({"project_new": "private topic", "template": "gallery"}, "title_required"),
+    ])
+    def test_creation_rejections_are_audited_without_content(
+        self, client, projects_dir, monkeypatch, caplog, data, reason,
+    ):
+        if "loft" not in client.application.blueprints:
+            client.application.register_blueprint(loft_api)
+        alice = User("alice", "x", "fa", is_admin=False)
+        monkeypatch.setattr(helpers.login_manager, "_user_callback", lambda _: alice)
+        with client.session_transaction() as session:
+            session["_user_id"] = alice.id
+        response = client.post("/loft/new", data=data,
+                               headers={"X-Requested-With": "XMLHttpRequest"})
+        assert response.status_code == 400
+        events = [json.loads(record.message) for record in caplog.records
+                  if '"event": "loft.operation_rejected"' in record.message]
+        assert len(events) == 1
+        assert events[0]["reason"] == reason
+        assert events[0]["operation"] == "new_post"
+        assert events[0]["user"] == "alice"
+        assert "private" not in caplog.text
+
+    def test_csrf_rejection_is_audited(self, client, monkeypatch, caplog):
+        if "loft" not in client.application.blueprints:
+            client.application.register_blueprint(loft_api)
+        monkeypatch.setitem(client.application.config, "WTF_CSRF_ENABLED", True)
+        response = client.post("/loft/new", data={"title": "private title"})
+        assert response.status_code == 400
+        assert '"reason": "csrf_failed"' in caplog.text
+        assert '"error_type": "CSRFError"' in caplog.text
+        assert '"csrf_reason": "token_missing"' in caplog.text
+        assert "private title" not in caplog.text
+
+    def test_duplicate_title_has_safe_reason(self, client, projects_dir, monkeypatch, caplog):
+        if "loft" not in client.application.blueprints:
+            client.application.register_blueprint(loft_api)
+        alice = User("alice", "x", "fa", is_admin=False)
+        monkeypatch.setattr(helpers.login_manager, "_user_callback", lambda _: alice)
+        DataInterface().create_gallery_post(alice, "album", "private title", "")
+        with client.session_transaction() as session:
+            session["_user_id"] = alice.id
+        response = client.post("/loft/new", data={"project_existing": "album",
+            "title": "private title", "template": "gallery"},
+            headers={"X-Requested-With": "XMLHttpRequest"})
+        assert response.status_code == 400
+        assert '"reason": "post_already_exists"' in caplog.text
+        assert "private title" not in caplog.text
+
+    def test_upload_count_limit_is_audited(self, client, projects_dir, monkeypatch, caplog):
+        if "loft" not in client.application.blueprints:
+            client.application.register_blueprint(loft_api)
+        alice = User("alice", "x", "fa", is_admin=False)
+        monkeypatch.setattr(helpers.login_manager, "_user_callback", lambda _: alice)
+        monkeypatch.setattr(ConfigManager().loft, "gallery_max_files_per_upload", 0)
+        with client.session_transaction() as session:
+            session["_user_id"] = alice.id
+        response = client.post("/loft/new", data={"project_new": "album",
+            "title": "private title", "template": "gallery",
+            "files": (BytesIO(b"secret bytes"), "private-file.png")},
+            headers={"X-Requested-With": "XMLHttpRequest"})
+        assert response.status_code == 400
+        assert '"reason": "too_many_media_files"' in caplog.text
+        assert '"stage": "add_media"' in caplog.text
+        assert "private title" not in caplog.text
+        assert "private-file.png" not in caplog.text
+        assert not (projects_dir / "album" / "private-title").exists()
+
+    def test_unexpected_storage_failure_is_audited_and_reraised(
+        self, client, projects_dir, monkeypatch, caplog,
+    ):
+        if "loft" not in client.application.blueprints:
+            client.application.register_blueprint(loft_api)
+        alice = User("alice", "x", "fa", is_admin=False)
+        monkeypatch.setattr(helpers.login_manager, "_user_callback", lambda _: alice)
+        private_error = "secret storage details"
+        def fail(*args):
+            raise OSError(private_error)
+        monkeypatch.setattr(DataInterface, "create_gallery_post", fail)
+        with client.session_transaction() as session:
+            session["_user_id"] = alice.id
+        with pytest.raises(OSError):
+            client.post("/loft/new", data={"project_new": "album",
+                "title": "private title", "template": "gallery"})
+        assert '"event": "loft.operation_failed"' in caplog.text
+        assert '"error_type": "OSError"' in caplog.text
+        assert '"stage": "create_post"' in caplog.text
+        assert "secret storage details" not in caplog.text
