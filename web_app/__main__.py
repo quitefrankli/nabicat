@@ -162,7 +162,8 @@ def after_request(response: Response) -> Response:
 
 @app.teardown_request
 def teardown_request(error: BaseException | None) -> None:
-    if error is None or getattr(g, "request_log_suppressed", True):
+    if (error is None or getattr(g, "request_log_suppressed", True)
+            or getattr(g, "request_exception_logged", False)):
         return
     log_event(
         getattr(g, "request_app", _request_app()),
