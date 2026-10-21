@@ -384,6 +384,8 @@ class AudioDownloader:
         query: str,
         cached_yt_vid_ids: set[str],
         page: int = 0,
+        *,
+        direct_max_duration: timedelta | None = None,
     ) -> dict:
         """
         Search YouTube for videos matching the query. Returns a dict with paginated results
@@ -408,7 +410,7 @@ class AudioDownloader:
             video_info = AudioDownloader.get_video_info(
                 video_id,
                 cached_yt_vid_ids,
-                max_duration=ConfigManager().tubio.direct_video_max_length,
+                max_duration=direct_max_duration or ConfigManager().tubio.direct_video_max_length,
             )
             results = [video_info] if video_info else []
             return {"results": results, "page": 0, "total_pages": 1}

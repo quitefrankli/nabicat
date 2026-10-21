@@ -15,6 +15,21 @@
     let stream = null;
     let timer = null;
     let operation = 0;
+    let cameraAvailable = Boolean(navigator.mediaDevices?.getUserMedia);
+
+    async function updateCameraAvailability() {
+        if (navigator.mediaDevices?.enumerateDevices) {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                cameraAvailable = Boolean(navigator.mediaDevices.getUserMedia) && devices.some(device => device.kind === "videoinput");
+            } catch {
+                // Allow the browser to prompt for permission when detection is restricted.
+            }
+        }
+        if (!stream && stop.hidden) start.disabled = !cameraAvailable;
+    }
+    updateCameraAvailability();
+    navigator.mediaDevices?.addEventListener("devicechange", updateCameraAvailability);
 
     function stopCamera() {
         operation += 1;
@@ -23,7 +38,7 @@
         stream = null;
         video.srcObject = null;
         video.hidden = true;
-        start.disabled = false;
+        start.disabled = !cameraAvailable;
         stop.hidden = true;
     }
 
@@ -109,7 +124,7 @@
     document.addEventListener("visibilitychange", () => {
         if (document.hidden && (stream || start.disabled)) {
             stopCamera();
-            status.textContent = "Camera stopped. Tap Start camera to scan again.";
+            status.textContent = "Camera stopped. Tap Open camera to scan again.";
         }
     });
 
@@ -148,6 +163,22 @@
         if (image) {
             event.preventDefault();
             readPhoto(image);
+        }
+    });
+    document.getElementById("paste-image").addEventListener("click", async () => {
+        try {
+            if (!navigator.clipboard?.read) throw new Error("Clipboard reading unavailable");
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                const type = item.types.find(type => type.startsWith("image/"));
+                if (type) {
+                    await readPhoto(await item.getType(type));
+                    return;
+                }
+            }
+            status.textContent = "No image found in the clipboard. Copy an image and try again.";
+        } catch {
+            status.textContent = "Could not access the clipboard. Try your browser’s paste shortcut or upload a photo.";
         }
     });
     document.getElementById("clear-result").addEventListener("click", () => {

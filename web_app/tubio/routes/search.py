@@ -39,10 +39,16 @@ def search():
         page = 0
 
     try:
+        user = cur_user()
+        config = ConfigManager().tubio
         search_data = AudioDownloader.search_youtube(
-            f"{ConfigManager().tubio.search_prefix}{query}",
-            get_cached_yt_vid_ids(cur_user()),
+            f"{config.search_prefix}{query}",
+            get_cached_yt_vid_ids(user),
             page=page,
+            direct_max_duration=(
+                config.admin_direct_video_max_length if user.is_admin
+                else config.direct_video_max_length
+            ),
         )
     except VideoTooLongError as error:
         max_minutes = int(error.max_duration.total_seconds() // 60)

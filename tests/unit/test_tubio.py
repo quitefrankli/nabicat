@@ -724,6 +724,35 @@ class TestPlaylistMutations:
 
 
 class TestSearchRoutes:
+    @pytest.mark.parametrize('is_admin, duration, expected_status', [
+        (False, 3600, 200), (False, 3601, 400),
+        (True, 36000, 200), (True, 36001, 400),
+    ])
+    def test_direct_url_length_limit_depends_on_admin_status(
+        self, client, auth_mock, tubio_data, is_admin, duration, expected_status
+    ):
+        auth_mock.is_admin = is_admin
+        with client.session_transaction() as session:
+            session['_user_id'] = auth_mock.id
+
+        with (
+            patch('web_app.tubio.routes.playlists.DataInterface', return_value=tubio_data),
+            patch('web_app.tubio.audio_downloader.yt_dlp.YoutubeDL') as youtube_dl,
+        ):
+            youtube_dl.return_value.__enter__.return_value.extract_info.return_value = {
+                'duration': duration, 'title': 'Long video',
+            }
+            response = client.post('/tubio/search', data={
+                'youtube_query': 'https://youtu.be/dQw4w9WgXcQ',
+            })
+
+        assert response.status_code == expected_status
+        if expected_status == 200:
+            assert 'Long video' in response.get_json()['results_html']
+        else:
+            minutes = 600 if is_admin else 60
+            assert f'{minutes} minutes' in response.get_json()['error']
+
     def test_search_marks_tracks_cached_from_any_regular_playlist(
         self, client, auth_mock, tubio_data
     ):

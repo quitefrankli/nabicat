@@ -408,6 +408,7 @@ class TubioConfig:
     max_search_pages: int = 3
     max_video_length: timedelta = timedelta(minutes=10)
     direct_video_max_length: timedelta = timedelta(hours=1)
+    admin_direct_video_max_length: timedelta = timedelta(hours=10)
     # Ordered fallback tiers for the YouTube results `sp` duration filter:
     # no filter -> short (<4 min) -> medium (4-20 min). Each fetch is appended
     # until the requested page is filled, so long-stream-heavy queries still

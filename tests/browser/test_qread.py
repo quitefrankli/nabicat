@@ -53,6 +53,7 @@ def test_text_can_be_encoded_downloaded_and_read_from_photo(page, qread_url, tmp
 
 
 def test_camera_decodes_and_releases_stream(page, qread_url):
+    page.add_init_script("navigator.mediaDevices.enumerateDevices = async () => [{kind: 'videoinput'}];")
     page.goto(qread_url)
     page.get_by_label("Text to encode").fill("Camera QR test")
     page.get_by_role("button", name="Generate QR code", exact=True).click()
@@ -69,10 +70,42 @@ def test_camera_decodes_and_releases_stream(page, qread_url):
             return window.testStream;
         };
     }""")
-    page.get_by_role("button", name="Start camera", exact=True).click()
+    page.get_by_role("button", name="Open camera", exact=True).click()
     expect(page.get_by_label("Decoded text")).to_have_value("Camera QR test")
     assert page.evaluate("window.testStream.getTracks().every(track => track.readyState === 'ended')")
     expect(page.locator("#camera")).to_be_hidden()
     page.evaluate("() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Denied', 'NotAllowedError'); }; }")
-    page.get_by_role("button", name="Start camera", exact=True).click()
+    page.get_by_role("button", name="Open camera", exact=True).click()
     expect(page.locator("#scan-status")).to_contain_text("permission")
+
+
+def test_camera_button_is_disabled_when_no_camera_is_detected(page, qread_url):
+    page.add_init_script("navigator.mediaDevices.enumerateDevices = async () => [{kind: 'videoinput'}];")
+    page.goto(qread_url)
+    expect(page.get_by_role("button", name="Open camera")).to_be_enabled()
+    page.evaluate("""() => {
+        navigator.mediaDevices.enumerateDevices = async () => [];
+        navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+    }""")
+    expect(page.get_by_role("button", name="Open camera")).to_be_disabled()
+
+
+def test_clipboard_image_can_be_pasted_with_button(page, qread_url):
+    page.goto(qread_url)
+    page.get_by_label("Text to encode").fill("Clipboard QR test")
+    page.get_by_role("button", name="Generate QR code", exact=True).click()
+    page.evaluate("""() => {
+        navigator.clipboard.read = async () => [{
+            types: ['image/png'],
+            getType: async () => await new Promise(resolve =>
+                document.querySelector('#generated-qr').toBlob(resolve, 'image/png')),
+        }];
+    }""")
+    page.get_by_role("button", name="Paste image").click()
+    expect(page.get_by_label("Decoded text")).to_have_value("Clipboard QR test")
+    page.evaluate("() => { navigator.clipboard.read = async () => []; }")
+    page.get_by_role("button", name="Paste image").click()
+    expect(page.locator("#scan-status")).to_contain_text("No image found")
+    page.evaluate("() => { navigator.clipboard.read = async () => { throw new Error('Denied'); }; }")
+    page.get_by_role("button", name="Paste image").click()
+    expect(page.locator("#scan-status")).to_contain_text("paste")
