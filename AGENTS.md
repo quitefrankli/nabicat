@@ -4,7 +4,7 @@
   in design or code quality, stop before making that compromise, explain the
   trade-off, and ask the user for explicit approval.
 
-* Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why. When making a commit, use the dedicated commit agent: Claude Code via the `commit` subagent (`.claude/agents/commit.md`), Codex via the `commit` agent (`.codex/agents/commit.toml`).
+* Git commits: only commit code when explicitly told to. Commit messages must be descriptive; small changes can use a one-line message, but larger changes need multiple lines or a short paragraph explaining what changed and why.
 
 * Don't add any documentation files unless explicitly asked to.
 
