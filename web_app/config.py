@@ -825,6 +825,11 @@ class ConfigManager:
         self.career_ops_revision = "fdda56138988873022bf0e1b42baa1fdef665494"
         self.backup_max_count = 8
         self.jswipe_request_path_prefix = "/jswipe/"
+        self.qread_max_image_bytes = 20 * 1024 * 1024
+        self.qread_scan_max_dimension = 1600
+        self.qread_scan_interval_ms = 200
+        self.qread_qr_quiet_modules = 4
+        self.qread_qr_module_pixels = 8
         self.jswipe_multipart_request_max_bytes = 6 * 1024 * 1024
         self.production_sync_excluded_paths = (
             "backups/",
@@ -870,6 +875,7 @@ class ConfigManager:
             "/sentinel/static/",
             "/metrics/static/",
             "/proxy/static/",
+            "/qread/static/",
             "/simulations/static/",
             "/todoist/static/",
             "/tubio/static/",

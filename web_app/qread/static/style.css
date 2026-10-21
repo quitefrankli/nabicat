@@ -1,0 +1,8 @@
+.qread { max-width: 48rem; }
+.qread-icon { font-size: 3rem; color: var(--hw-sage-dark); }
+.qread .card { border: 1px solid var(--hw-border); border-radius: var(--hw-radius-lg); box-shadow: var(--hw-shadow-md); }
+.qread .btn, .qread input { min-height: 44px; }
+.qread video { width: 100%; max-height: 55dvh; object-fit: contain; border-radius: var(--hw-radius-md); margin-bottom: 1rem; background: var(--hw-forest); }
+.qread textarea { font-family: "SF Mono", monospace; overflow-wrap: anywhere; }
+.qread [hidden] { display: none !important; }
+.qread #generated-qr { width: 100%; max-width: 24rem; height: auto; align-self: center; image-rendering: pixelated; }

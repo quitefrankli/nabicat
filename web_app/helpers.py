@@ -50,6 +50,7 @@ def get_all_data_interfaces() -> list[type[DataInterface]]:
 
 
 def register_all_blueprints(app):
+    from web_app.qread import qread_api
     from web_app.jswipe import jswipe_api
     from web_app.sentinel import sentinel_api
     from web_app.crosswords import crosswords_api
@@ -67,6 +68,7 @@ def register_all_blueprints(app):
     from web_app.todoist.api import actions_api
 
     blueprints = [
+        qread_api,
         jswipe_api,
         sentinel_api,
         todoist_api,

@@ -1,0 +1,54 @@
+{% extends "subpage_base.html" %}
+{% block page_title %}QRead · NabiCat{% endblock %}
+{% block navbar_brand %}QRead{% endblock %}
+{% block subapp_index_url %}{{ url_for('.index') }}{% endblock %}
+{% block scripts %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
+<script defer src="{{ url_for('.static', filename='vendor/jsQR.js') }}"></script>
+<script defer src="{{ url_for('.static', filename='vendor/qrcode.js') }}"></script>
+<script defer src="{{ url_for('.static', filename='qread.js') }}"></script>
+{% endblock %}
+{% block page_content %}
+<main class="qread container py-4" id="qread"
+      data-max-image-bytes="{{ max_image_bytes }}"
+      data-scan-max-dimension="{{ scan_max_dimension }}"
+      data-scan-interval-ms="{{ scan_interval_ms }}"
+      data-qr-quiet-modules="{{ qr_quiet_modules }}"
+      data-qr-module-pixels="{{ qr_module_pixels }}">
+  <header class="text-center mb-4">
+    <i class="bi bi-qr-code-scan qread-icon" aria-hidden="true"></i>
+    <h1>QR code to text</h1>
+    <p>Scan with your camera or choose a photo containing a QR code.</p>
+    <p class="small text-muted">Images and decoded text stay on your device.</p>
+  </header>
+  <section class="card p-3 p-md-4 mb-4" aria-label="Read a QR code">
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button type="button" class="btn btn-primary" id="start-camera">Start camera</button>
+      <button type="button" class="btn btn-outline-secondary" id="stop-camera" hidden>Stop camera</button>
+    </div>
+    <video id="camera" autoplay muted playsinline hidden aria-label="Camera preview"></video>
+    <label for="qr-photo" class="form-label fw-bold">Upload photo</label>
+    <input id="qr-photo" type="file" accept="image/*" class="form-control" aria-describedby="photo-help">
+    <p id="photo-help" class="small text-muted mt-2">Choose an image up to {{ max_image_bytes // (1024 * 1024) }} MB. You can also paste an image.</p>
+    <p id="scan-status" role="status" aria-live="polite" class="mb-0">Ready to scan.</p>
+  </section>
+  <section class="card p-3 p-md-4 mb-4" aria-label="Decoded result">
+    <label for="qr-result" class="form-label fw-bold">Decoded text</label>
+    <textarea id="qr-result" class="form-control" rows="6" readonly spellcheck="false" placeholder="Your QR code’s text will appear here."></textarea>
+    <div class="d-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary" id="copy-result" disabled>Copy text</button>
+      <button type="button" class="btn btn-outline-secondary" id="clear-result">Clear</button>
+    </div>
+  </section>
+  <section class="card p-3 p-md-4" aria-labelledby="encode-heading">
+    <h2 id="encode-heading">Text to QR code</h2>
+    <label for="qr-text" class="form-label fw-bold">Text to encode</label>
+    <textarea id="qr-text" class="form-control" rows="4" placeholder="Type or paste your text here." spellcheck="false"></textarea>
+    <button type="button" class="btn btn-primary mt-3 align-self-start" id="generate-qr">Generate QR code</button>
+    <p id="encode-status" class="small mt-2" role="status" aria-live="polite"></p>
+    <canvas id="generated-qr" hidden role="img" aria-label="Generated QR code"></canvas>
+    <a id="download-qr" class="btn btn-outline-secondary mt-3 align-self-start" download="qread.png" hidden>Download PNG</a>
+  </section>
+</main>
+{% endblock %}
