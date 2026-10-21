@@ -14,7 +14,8 @@ def test_qread_is_public_and_serves_local_scanner_assets():
     with app.test_client() as client:
         response = client.get("/qread/")
         assert response.status_code == 200
-        assert b'Start camera' in response.data
+        assert b'id="start-camera"' in response.data
+        assert b'Open camera' in response.data
         assert b'Upload photo' in response.data
         assert b'Generate QR code' in response.data
         for asset in ("qread.js", "style.css", "vendor/jsQR.js", "vendor/qrcode.js"):
