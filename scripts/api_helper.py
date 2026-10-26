@@ -291,9 +291,13 @@ def backup() -> None:
 @cli.command()
 def update() -> None:
     """
-    Updates the server with a patch
+    Update the server automatically via the API, bypassing GitHub Actions.
 
-    Make sure you are on main branch and strictly ahead of origin/main
+    Run from a clean checkout on main. Fetches origin/main and asks for
+    confirmation before requesting an update.
+
+    When local HEAD matches origin/main, asks the server to pull the latest
+    main. Otherwise, sends local commits ahead of origin/main as patches.
     """
     
     repo = Repo(".")
@@ -306,23 +310,26 @@ def update() -> None:
     local_commit = repo.head.commit
     remote_commit = origin.refs.main.commit
 
-    ahead_commits = list(repo.iter_commits(f'{remote_commit.hexsha}..{local_commit.hexsha}'))
-    if len(ahead_commits) <= 0:
-        print("Invalid git state detected, aborting update")
-        return
-
-    raw_patch: str = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
+    payload = {}
+    prompt = "Ask server to pull the latest main? (y/n): "
+    if local_commit.hexsha != remote_commit.hexsha:
+        ahead_commits = list(repo.iter_commits(f'{remote_commit.hexsha}..{local_commit.hexsha}'))
+        if len(ahead_commits) <= 0:
+            print("Invalid git state detected, aborting update")
+            return
+        payload["patch"] = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
+        prompt = f"Apply update with {len(ahead_commits)} commits ahead? (y/n): "
     
-    if input(f"Apply update with {len(ahead_commits)} commits ahead? (y/n): ").strip().lower() != 'y':
+    if input(prompt).strip().lower() != 'y':
         print("Update cancelled.")
         return
     
-    response = send_request("api/update", {"patch": raw_patch})
+    response = send_request("api/update", payload)
 
     if response.status_code == 200:
-        print("Update applied successfully.")
+        print("Update requested successfully.")
     else:
-        print(f"Failed to apply update: {response.status_code} - {response.text}")
+        print(f"Failed to request update: {response.status_code} - {response.text}")
 
 @cli.command()
 def upload_commit_patches() -> None:

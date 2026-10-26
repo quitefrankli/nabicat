@@ -22,6 +22,28 @@ def helper():
     return module
 
 
+@pytest.mark.parametrize("ahead", [False, True])
+@pytest.mark.parametrize("answer", ["y", "n"])
+def test_update_selects_pull_or_patch_and_requires_confirmation(helper, monkeypatch, ahead, answer):
+    repo = MagicMock()
+    repo.is_dirty.return_value = False
+    repo.head.commit.hexsha = "local" if ahead else "remote"
+    repo.remotes.origin.refs.main.commit.hexsha = "remote"
+    repo.iter_commits.return_value = [MagicMock()] if ahead else []
+    repo.git.format_patch.return_value = "patch contents\n"
+    monkeypatch.setattr(helper, "Repo", lambda path: repo)
+    send = MagicMock(return_value=MagicMock(status_code=200))
+    monkeypatch.setattr(helper, "send_request", send)
+    result = CliRunner().invoke(helper.cli, ["update"], input=answer + "\n")
+    assert result.exit_code == 0, result.output
+    if answer == "y":
+        send.assert_called_once_with("api/update", {"patch": "patch contents\n"} if ahead else {})
+        assert "Update requested" in result.output
+    else:
+        send.assert_not_called()
+        assert "cancelled" in result.output
+
+
 def test_download_creates_parent_directories(helper, monkeypatch, tmp_path):
     response = MagicMock(status_code=200)
     response.json.return_value = {"data": base64.b64encode(gzip.compress(b"notes")).decode()}
