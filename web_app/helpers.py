@@ -30,7 +30,6 @@ from web_app.logging_utils import log_event
 def get_all_data_interfaces() -> list[type[DataInterface]]:
     from web_app.jswipe.data_interface import DataInterface as JSwipeDataInterface
     from web_app.sentinel.data_interface import DataInterface as SentinelDataInterface
-    from web_app.api.data_interface import DataInterface as APIDataInterface
     from web_app.todoist.data_interface import DataInterface as TodoistDataInterface
     from web_app.metrics.data_interface import DataInterface as MetricsDataInterface
     from web_app.tubio.data_interface import DataInterface as TubioDataInterface
@@ -38,7 +37,6 @@ def get_all_data_interfaces() -> list[type[DataInterface]]:
     from web_app.loft.data_interface import DataInterface as LoftDataInterface
 
     return [
-        APIDataInterface,
         TodoistDataInterface,
         MetricsDataInterface,
         TubioDataInterface,

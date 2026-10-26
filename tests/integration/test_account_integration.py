@@ -42,12 +42,10 @@ class TestAccountDeletionIntegration:
         user_folder = users[username]["folder"]
 
         # Seed data in sub-app directories that implement delete_user_data
-        api_user_dir = DEBUG_SAVE_DATA_PATH / "api_data" / user_folder
         todoist_user_dir = DEBUG_SAVE_DATA_PATH / "todoist" / user_folder
         metrics_user_dir = DEBUG_SAVE_DATA_PATH / "metrics" / user_folder
 
         for directory, filename, content in [
-            (api_user_dir, "payload.txt", "hello"),
             (todoist_user_dir, "goals.json", "{}"),
             (metrics_user_dir, "data.json", "{}"),
         ]:
@@ -137,7 +135,6 @@ class TestAccountDeletionIntegration:
         assert username not in users_after_delete
 
         # Sub-app directory cleanup checks
-        assert not api_user_dir.exists()
         assert not todoist_user_dir.exists()
         assert not metrics_user_dir.exists()
 

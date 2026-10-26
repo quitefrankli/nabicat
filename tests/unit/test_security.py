@@ -31,46 +31,6 @@ def csrf_client():
         yield client
 
 
-class TestPathTraversal:
-    """API data_interface must reject paths that escape the user directory"""
-
-    def test_write_rejects_traversal(self):
-        from web_app.api.data_interface import DataInterface
-        di = DataInterface()
-        user = User(username='test', password='x', folder='testfolder', is_admin=False)
-        with pytest.raises(ValueError, match="Invalid filename"):
-            di.write_data("../../etc/passwd", b"pwned", user)
-
-    def test_read_rejects_traversal(self):
-        from web_app.api.data_interface import DataInterface
-        di = DataInterface()
-        user = User(username='test', password='x', folder='testfolder', is_admin=False)
-        with pytest.raises(ValueError, match="Invalid filename"):
-            di.read_data("../../../etc/shadow", user)
-
-    def test_delete_rejects_traversal(self):
-        from web_app.api.data_interface import DataInterface
-        di = DataInterface()
-        user = User(username='test', password='x', folder='testfolder', is_admin=False)
-        with pytest.raises(ValueError, match="Invalid filename"):
-            di.delete_data("../users.json", user)
-
-    def test_allows_normal_filename(self, monkeypatch, tmp_path):
-        from web_app.api.data_interface import DataInterface
-
-        config = ConfigManager()
-        monkeypatch.setattr(config, "debug_mode", True)
-        monkeypatch.setattr(config, "debug_data_root", tmp_path)
-        monkeypatch.setattr(config, "use_offline_syncer", True)
-        di = DataInterface()
-        user = User(username='test', password='x', folder='testfolder', is_admin=False)
-        user_dir = di._get_user_dir(user)
-        user_dir.mkdir(parents=True, exist_ok=True)
-        di.write_data("normal_file.json", b'{"ok": true}', user)
-        assert di.read_data("normal_file.json", user) == b'{"ok": true}'
-        di.delete_data("normal_file.json", user)
-
-
 class TestCSRFProtection:
     """State-changing POST endpoints should reject requests without CSRF token"""
 

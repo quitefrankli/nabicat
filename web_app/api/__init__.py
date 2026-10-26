@@ -1,5 +1,7 @@
 import base64
 import gzip
+import io
+import mimetypes
 import subprocess
 import logging
 import os
@@ -10,11 +12,12 @@ from functools import wraps
 from pathlib import Path
 
 from flask import request, jsonify, Blueprint, current_app
+from werkzeug.datastructures import FileStorage
 
 from web_app.data_interface import DataInterface
 from web_app.helpers import parse_request, authenticate_user, \
     generate_ephemeral_keypair, get_all_data_interfaces, codex_cli_text, CodexCLIError
-from web_app.api.data_interface import DataInterface as APIDataInterface
+from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
 from web_app.config import ConfigManager
 from web_app.errors import APIError
 from web_app.logging_utils import log_event
@@ -53,6 +56,14 @@ def _get_required_field(request_body: dict, field: str) -> str:
             level=logging.WARNING, reason="missing_required_field", field=field,
         )
         raise APIError(f"Missing required field: {field}")
+
+
+def _get_file_name(request_body: dict) -> str:
+    name = _get_required_field(request_body, "name")
+    if not isinstance(name, str) or not name:
+        raise APIError("File name must be a non-empty string")
+    return name
+
 
 def update_server(patch: str | None = None):
     log_event("api", "api.update_started", has_patch=patch is not None)
@@ -188,7 +199,7 @@ def api_backup():
 @_handle_api_error
 def api_push():
     request_body = parse_request(require_login=True, require_admin=True)
-    name = _get_required_field(request_body, "name")
+    name = _get_file_name(request_body)
     data = _get_required_field(request_body, "data")
 
     # Decode base64 and decompress gzip to store plain data
@@ -205,7 +216,19 @@ def api_push():
 
     username = request_body["username"]
     user = DataInterface().load_users()[username]
-    APIDataInterface().write_data(name, plain_data, user)
+    try:
+        upload = FileStorage(
+            stream=io.BytesIO(plain_data), filename=name,
+            content_type=mimetypes.guess_type(name)[0] or 'application/octet-stream',
+        )
+        FileStoreDataInterface().save_files([(upload, name)], [], user)
+    except ValueError as error:
+        log_event(
+            "api", "api.data_push_rejected", level=logging.WARNING,
+            user=user, reason="invalid_upload", error_type=type(error).__name__,
+            exc_info=True,
+        )
+        return jsonify({"error": str(error)}), 400
     log_event(
         "api", "api.data_pushed",
         user=user, name=name, bytes=len(plain_data),
@@ -217,17 +240,24 @@ def api_push():
 @_handle_api_error
 def api_pull():
     request_body = parse_request(require_login=True, require_admin=True)
-    name = _get_required_field(request_body, "name")
+    name = _get_file_name(request_body)
 
     username = request_body["username"]
     user = DataInterface().load_users()[username]
 
     try:
-        plain_data = APIDataInterface().read_data(name, user)
+        plain_data = FileStoreDataInterface().get_file_path(name, user).read_bytes()
+    except ValueError as error:
+        log_event(
+            "api", "api.data_pull_rejected", level=logging.WARNING,
+            user=user, reason="invalid_path", error_type=type(error).__name__, exc_info=True,
+        )
+        return jsonify({"error": str(error)}), 400
     except FileNotFoundError as e:
         log_event(
             "api", "api.data_pull_failed",
             level=logging.WARNING, user=user, name=name, reason="not_found",
+            error_type=type(e).__name__, exc_info=True,
         )
         return jsonify({"error": str(e)}), 404
 
@@ -246,17 +276,24 @@ def api_pull():
 @_handle_api_error
 def api_delete():
     request_body = parse_request(require_login=True, require_admin=True)
-    name = _get_required_field(request_body, "name")
+    name = _get_file_name(request_body)
 
     username = request_body["username"]
     user = DataInterface().load_users()[username]
 
     try:
-        APIDataInterface().delete_data(name, user)
+        FileStoreDataInterface().delete_file(name, user)
+    except ValueError as error:
+        log_event(
+            "api", "api.data_delete_rejected", level=logging.WARNING,
+            user=user, reason="invalid_path", error_type=type(error).__name__, exc_info=True,
+        )
+        return jsonify({"error": str(error)}), 400
     except FileNotFoundError as e:
         log_event(
             "api", "api.data_delete_failed",
             level=logging.WARNING, user=user, name=name, reason="not_found",
+            error_type=type(e).__name__, exc_info=True,
         )
         return jsonify({"error": str(e)}), 404
 
@@ -269,7 +306,7 @@ def api_list():
     request_body = parse_request(require_login=True, require_admin=True)
     username = request_body["username"]
     user = DataInterface().load_users()[username]
-    files = APIDataInterface().list_files(user)
+    files = FileStoreDataInterface().list_files(user)
 
     log_event("api", "api.data_listed", user=user, files=len(files))
     return jsonify({"success": True, "files": files}), 200
@@ -282,9 +319,9 @@ def api_upload_cookie():
     if not cookie:
         return jsonify({"error": "Missing cookie data"}), 400
 
-    APIDataInterface().atomic_write(ConfigManager().tubio.cookie_path, 
-                                    data=cookie.encode('utf-8'), 
-                                    mode="wb")
+    DataInterface().atomic_write(
+        ConfigManager().tubio.cookie_path, data=cookie.encode('utf-8'), mode="wb",
+    )
 
     log_event(
         "api", "api.cookie_uploaded",

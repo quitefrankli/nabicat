@@ -256,6 +256,9 @@ class DataInterface(BaseDataInterface):
         try:
             with self.edit_metadata() as metadata:
                 original_crcs = set(metadata.files)
+                self.validate_batch_quota(
+                    paths, sum(size for _, _, size, _, _ in streamed), user, metadata=metadata,
+                )
                 user_metadata = self._user_metadata(metadata, user)
                 existing_paths = {self._entry_path(entry) for entry in user_metadata.files}
                 required_folders = {
@@ -311,13 +314,13 @@ class DataInterface(BaseDataInterface):
 
     def get_file_path(self, filename: str, user: User) -> Path:
         """Get the full path to a file by its original name."""
+        target_path = self._normalise_path(filename)
         metadata = self.get_metadata()
         user_metadata = metadata.users.get(user.id)
 
         if not user_metadata:
             raise FileNotFoundError(f"User {user.id} has no files")
 
-        target_path = self._normalise_path(filename)
         for user_file in user_metadata.files:
             if self._entry_path(user_file) == target_path:
                 return self.files_dir / str(user_file.crc)
@@ -326,7 +329,17 @@ class DataInterface(BaseDataInterface):
 
     def delete_file(self, filename: str, user: User) -> None:
         """Delete a file from the user's storage."""
-        self.delete_path(filename, user)
+        target_path = self._normalise_path(filename)
+        with self.edit_metadata() as metadata:
+            user_metadata = metadata.users.get(user.id)
+            entry = next(
+                (entry for entry in user_metadata.files if self._entry_path(entry) == target_path),
+                None,
+            ) if user_metadata else None
+            if entry is None:
+                raise FileNotFoundError(f'File {filename} not found for user {user.id}')
+            user_metadata.files.remove(entry)
+            self._cleanup_unreferenced(metadata)
 
     def delete_path(self, path: str, user: User) -> None:
         """Delete one file or a folder and all of its contents."""
@@ -640,21 +653,28 @@ class DataInterface(BaseDataInterface):
 
         return total_size
 
-    def validate_batch_quota(self, paths: list[str], incoming_size: int, user: User) -> None:
-        metadata = self.get_metadata()
+    def validate_batch_quota(
+        self, paths: list[str], incoming_size: int, user: User,
+        *, metadata: Metadata | None = None,
+    ) -> None:
+        if metadata is None:
+            metadata = self.get_metadata()
         user_metadata = metadata.users.get(user.id)
         replaced_size = 0
+        current_size = 0
         if user_metadata:
             replacing = {self._normalise_path(path) for path in paths}
             for entry in user_metadata.files:
-                if self._entry_path(entry) in replacing and (file_meta := metadata.files.get(entry.crc)):
-                    replaced_size += file_meta.size
+                if file_meta := metadata.files.get(entry.crc):
+                    current_size += file_meta.size
+                    if self._entry_path(entry) in replacing:
+                        replaced_size += file_meta.size
         max_storage = (
             ConfigManager().file_store.admin_quota_bytes
             if user.has_elevated_access()
             else ConfigManager().file_store.non_admin_quota_bytes
         )
-        final_size = self.get_total_storage_size(user) - replaced_size + incoming_size
+        final_size = current_size - replaced_size + incoming_size
         if final_size > max_storage:
             raise ValueError(f'Upload exceeds the {format_file_size(max_storage)} storage limit')
 

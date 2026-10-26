@@ -259,6 +259,7 @@ def download(file: str, raw: bool) -> None:
             if raw:
                 sys.stdout.buffer.write(decompressed_data)
                 return
+            Path(file).parent.mkdir(parents=True, exist_ok=True)
             with open(file, 'wb') as f:
                 f.write(decompressed_data)
             print(f"File {file} downloaded and decompressed successfully.")

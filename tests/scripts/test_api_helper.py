@@ -22,6 +22,16 @@ def helper():
     return module
 
 
+def test_download_creates_parent_directories(helper, monkeypatch, tmp_path):
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"data": base64.b64encode(gzip.compress(b"notes")).decode()}
+    monkeypatch.setattr(helper, "send_request", lambda *args: response)
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(helper.cli, ["download", "docs/notes.txt"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "docs/notes.txt").read_bytes() == b"notes"
+
+
 def test_helper_runs_outside_project(tmp_path):
     source = Path(__file__).resolve().parents[2] / "scripts" / "api_helper.py"
     script = tmp_path / "api_helper.py"
