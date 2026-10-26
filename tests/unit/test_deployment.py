@@ -169,21 +169,34 @@ def test_non_debug_launcher_uses_normal_session_cookie():
         web_main.app.config["SESSION_COOKIE_NAME"] = previous_cookie_name
 
 
-def test_build_version_prefers_most_recent_tag_on_head(monkeypatch):
+def test_build_version_uses_nearest_ancestor_tag(monkeypatch, tmp_path):
     from web_app import app as app_module
 
-    calls = []
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", *args],
+            cwd=tmp_path, stderr=subprocess.DEVNULL,
+        ).decode().strip()
 
-    def fake_check_output(command, **kwargs):
-        calls.append(command)
-        if command[1] == "rev-parse":
-            return b"abc123def456789\n"
-        return b"release-2026.07.31\nrelease-2026.07.29\n"
-
-    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
-
-    assert app_module._load_build_version() == ("release-2026.07.31", True)
-    assert "--sort=-creatordate" in calls[1]
+    git("init", "-b", "main")
+    git("commit", "--allow-empty", "-m", "Initial")
+    monkeypatch.setattr(app_module, "__file__", str(tmp_path / "web_app" / "app.py"))
+    initial = git("rev-parse", "HEAD")
+    assert app_module._load_build_version() == (initial, False)
+    git("tag", "v1")
+    git("commit", "--allow-empty", "-m", "Next release")
+    git("tag", "v2")
+    assert app_module._load_build_version() == ("v2", True)
+    git("commit", "--allow-empty", "-m", "After release")
+    deployed = git("rev-parse", "HEAD")
+    assert app_module._load_build_version() == ("v2", True)
+    assert app_module._load_static_version() == deployed
+    assert deployed != initial
+    git("checkout", "-b", "other", initial)
+    git("commit", "--allow-empty", "-m", "Unrelated release")
+    git("tag", "v99")
+    git("checkout", "main")
+    assert app_module._load_build_version() == ("v2", True)
 
 
 def test_home_uses_build_version_loaded_at_server_start(client, monkeypatch):

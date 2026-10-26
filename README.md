@@ -131,13 +131,12 @@ to bring down the server
 
 ## Updating Server
 
-Push changes to `main` and wait for CI. To deploy, either:
+Push changes to `main`; CI deploys after tests pass. Superseded commits are skipped and deployments run one at a time. Alternatively:
 
-* Push a release tag pointing to the current `main` commit; CI validates and deploys it.
 * Run `uv run --locked python scripts/api_helper.py update` from the development checkout.
 * Run `bash update_server.sh` from the production checkout on the server.
 
-Pushing `main` alone runs tests; it does not automatically deploy.
+Tags do not trigger deployments. The homepage displays the nearest ancestor Git tag, falling back to the commit SHA when no tag is reachable. Static asset cache keys always use the deployed commit.
 
 The scheduled `Update yt-dlp` GitHub Actions workflow checks PyPI daily and can
 also be run manually. It validates the updater before committing a newer stable

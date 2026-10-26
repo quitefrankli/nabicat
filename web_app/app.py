@@ -71,8 +71,8 @@ app.wsgi_app = SetCookieNoStoreMiddleware(
 )
 
 
-def _load_build_version() -> tuple[str, bool]:
-    """Load the current commit's newest tag, or its SHA, once at startup."""
+def _load_static_version() -> str:
+    """Use the deployed commit as the asset cache key, even between tags."""
     repo_root = Path(__file__).resolve().parent.parent
     try:
         commit_hash = subprocess.check_output(
@@ -82,34 +82,29 @@ def _load_build_version() -> tuple[str, bool]:
             timeout=ConfigManager().git_command_timeout_s,
         ).decode().strip()
     except Exception:
-        return str(int(time.time())), False
-    if not commit_hash:
-        return str(int(time.time())), False
+        return str(int(time.time()))
+    return commit_hash or str(int(time.time()))
+
+
+def _load_build_version() -> tuple[str, bool]:
+    """Display the nearest reachable tag, falling back to the commit SHA."""
+    commit_hash = _load_static_version()
 
     try:
-        tags = subprocess.check_output(
-            [
-                "git",
-                "for-each-ref",
-                "--points-at",
-                "HEAD",
-                "--sort=-creatordate",
-                "--format=%(refname:short)",
-                "refs/tags",
-            ],
-            cwd=repo_root,
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
             stderr=subprocess.DEVNULL,
             timeout=ConfigManager().git_command_timeout_s,
-        ).decode().splitlines()
+        ).decode().strip()
     except Exception:
-        tags = []
+        tag = ""
 
-    newest_tag = next((tag.strip() for tag in tags if tag.strip()), None)
-    return (newest_tag, True) if newest_tag else (commit_hash, False)
+    return (tag, True) if tag else (commit_hash, False)
 
 
 BUILD_VERSION, BUILD_VERSION_IS_TAG = _load_build_version()
-STATIC_VERSION = BUILD_VERSION
+STATIC_VERSION = _load_static_version()
 
 
 @app.url_defaults
