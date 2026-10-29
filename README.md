@@ -23,8 +23,17 @@ create a `.env` file in the root of the project with the following content:
 
 ```bash
 uv sync --locked
-uv run --locked python -m web_app [--debug] [--port PORT]
+uv run --locked server --debug --port 5000
+
+# Use the shared environment for API client commands as well
+uv run --locked api-helper --help
+uv run --locked api-helper login
+uv run --locked api-helper ls
 ```
+
+`uv run server` and `uv run api-helper` are project console scripts, installed by
+`uv sync`. The existing `python -m web_app` and `python scripts/api_helper.py`
+forms still work. Run these commands from the repository root.
 
 Production installs use `uv sync --locked --no-dev`; development and production
 checkouts each have their own `.venv`. Do not synchronize a running production
@@ -133,7 +142,7 @@ to bring down the server
 
 Push changes to `main`; CI deploys after tests pass. Superseded commits are skipped and deployments run one at a time. Alternatively:
 
-* Run `uv run --locked python scripts/api_helper.py update` from the development checkout.
+* Run `uv run --locked api-helper update` from the development checkout.
 * Run `bash update_server.sh` from the production checkout on the server.
 
 Tags do not trigger deployments. The homepage displays the nearest ancestor Git tag, falling back to the commit SHA when no tag is reachable. Static asset cache keys always use the deployed commit.
