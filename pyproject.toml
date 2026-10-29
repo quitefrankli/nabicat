@@ -38,6 +38,14 @@ dependencies = [
     "pypdf>=6.21.2,<7",
 ]
 
+[project.scripts]
+server = "web_app.__main__:cli_start"
+api-helper = "scripts.api_helper:cli"
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
 [dependency-groups]
 dev = [
     "pytest",
@@ -47,5 +55,9 @@ dev = [
 ]
 
 [tool.uv]
-package = false
 python-preference = "only-managed"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["web_app*", "scripts*"]
+namespaces = true
