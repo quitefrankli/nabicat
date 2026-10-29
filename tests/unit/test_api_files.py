@@ -2,6 +2,7 @@
 import base64
 import gzip
 import io
+from datetime import datetime, timedelta
 
 import pytest
 from werkzeug.datastructures import FileStorage
@@ -84,19 +85,21 @@ def test_list_includes_latest_upload_dates_in_newest_first_order(storage):
     store, (alice, _), request = storage
     for name in ('old.txt', 'docs/new.txt'):
         store.save_file(FileStorage(io.BytesIO(name.encode()), name), alice)
+    # Use dates safely in the past so a real overwrite is always the newest.
+    now = datetime.now()
+    old_date = (now - timedelta(days=2)).isoformat()
+    new_date = (now - timedelta(days=1)).isoformat()
     with store.edit_metadata() as metadata:
-        for entry, date in zip(metadata.users[alice.id].files, (
-            '2026-01-01T10:00:00', '2026-10-29T12:30:00',
-        )):
+        for entry, date in zip(metadata.users[alice.id].files, (old_date, new_date)):
             entry.uploaded_at = date
     assert request('list').json['file_details'] == [
-        {'name': 'docs/new.txt', 'uploaded_at': '2026-10-29T12:30:00'},
-        {'name': 'old.txt', 'uploaded_at': '2026-01-01T10:00:00'},
+        {'name': 'docs/new.txt', 'uploaded_at': new_date},
+        {'name': 'old.txt', 'uploaded_at': old_date},
     ]
     assert request('push', name='old.txt', data=encoded(b'updated')).status_code == 200
     details = request('list').json['file_details']
     assert details[0]['name'] == 'old.txt'
-    assert details[0]['uploaded_at'] > '2026-10-29T12:30:00'
+    assert details[0]['uploaded_at'] > new_date
 
 
 @pytest.mark.parametrize("operation", ["push", "pull", "delete"])
