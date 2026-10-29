@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.13,<3.14"
-# dependencies = [
-#     "click==8.1.8",
-#     "cryptography>=44.0.0",
-#     "gitpython>=3.1.45",
-#     "keyring==25.7.0",
-#     "requests>=2.32.5",
-#     "yt-dlp[default]>=2026.8.19",
-# ]
-# ///
-
 import subprocess
 import requests
 import click
