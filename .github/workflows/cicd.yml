@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   pytest:
+    if: ${{ !startsWith(github.ref, 'refs/tags/deploy-now/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -31,11 +32,16 @@ jobs:
           sudo apt-get install --yes redis-server
 
       - name: Run tests
-        run: uv run --locked pytest -q -m "not ffmpeg"
+        run: |
+          SLOW_TEST_COUNT=$(uv run --locked python -c 'from web_app.config import ConfigManager; print(ConfigManager().ci_slow_test_count)')
+          uv run --locked pytest -q -m "not ffmpeg" --durations="$SLOW_TEST_COUNT"
 
   deploy:
     needs: pytest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{ !cancelled() && github.event_name == 'push' && !github.event.deleted &&
+          ((github.ref == 'refs/heads/main' && needs.pytest.result == 'success') ||
+           startsWith(github.ref, 'refs/tags/deploy-now/')) }}
     runs-on: ubuntu-latest
     environment: Prod
     concurrency:
@@ -69,21 +75,10 @@ jobs:
         if: steps.candidate.outputs.current == 'true'
         run: uv sync --locked --no-dev
 
-      - name: Deploy main
+      - name: Deploy main unless already live, then verify
         if: steps.candidate.outputs.current == 'true'
         env:
           ADMIN_USER: ${{ secrets.ADMIN_USER }}
           ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
         run: |
-          python -c 'import json, os; print(json.dumps({
-            "username": os.environ["ADMIN_USER"],
-            "password": os.environ["ADMIN_PASS"],
-          }))' |
-            curl --fail --show-error --silent \
-              --header "Content-Type: application/json" \
-              --data-binary @- \
-              https://nabicat.site/api/update
-
-      - name: Verify public deployment commit
-        if: steps.candidate.outputs.current == 'true'
-        run: uv run --locked --no-dev python -m scripts.verify_deployment "$GITHUB_SHA"
+          uv run --locked --no-dev python -m scripts.deploy "$(git rev-parse HEAD)"

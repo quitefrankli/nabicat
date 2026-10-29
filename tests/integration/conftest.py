@@ -5,16 +5,30 @@ import subprocess
 import sys
 import time
 import socket
-import signal
 import os
+import tempfile
 from pathlib import Path
+import requests
 
 # Import and disable rate limiter
 import web_app.__main__ as main_module
 from web_app.helpers import limiter
+from web_app.config import ConfigManager
 
 # Disable rate limiting for integration tests
 limiter.enabled = False
+
+
+@pytest.fixture(autouse=True)
+def bounded_http_requests(monkeypatch):
+    """Prevent a stalled integration server from hanging pytest indefinitely."""
+    original_request = requests.Session.request
+
+    def request(session, *args, **kwargs):
+        kwargs.setdefault('timeout', ConfigManager().integration_request_timeout_s)
+        return original_request(session, *args, **kwargs)
+
+    monkeypatch.setattr(requests.Session, 'request', request)
 
 # Port for the test server
 TEST_PORT = 54321
@@ -72,33 +86,25 @@ from web_app.__main__ import cli_start
 cli_start(["--port", "{port}", "--debug"])
 '''
     
-    process = subprocess.Popen(
-        [sys.executable, "-c", startup_script],
-        cwd=str(project_root),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-    )
-    
-    # Wait for server to be ready
-    if not wait_for_server("127.0.0.1", port, timeout=30.0):
-        process.terminate()
-        try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
-        output = b"\n".join(part for part in (stdout, stderr) if part).decode(
-            "utf-8", errors="replace"
+    # A file cannot fill up like an undrained PIPE and block the server mid-request.
+    with tempfile.TemporaryFile() as server_log:
+        process = subprocess.Popen(
+            [sys.executable, "-u", "-c", startup_script],
+            cwd=str(project_root),
+            stdout=server_log,
+            stderr=subprocess.STDOUT,
+            env=env,
         )
-        raise RuntimeError(f"Server failed to start on port {port}\n{output}")
-    
-    yield base_url
-    
-    # Cleanup: terminate the server
-    process.terminate()
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
+        try:
+            if not wait_for_server("127.0.0.1", port, timeout=30.0):
+                server_log.seek(0)
+                output = server_log.read().decode('utf-8', errors='replace')
+                raise RuntimeError(f"Server failed to start on port {port}\n{output}")
+            yield base_url
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()

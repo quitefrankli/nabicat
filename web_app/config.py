@@ -783,6 +783,10 @@ class ConfigManager:
         self.deployment_verification_timeout_s = 900
         self.deployment_verification_interval_s = 5
         self.deployment_verification_request_timeout_s = 10
+        self.deployment_trigger_timeout_s = 30
+        self.deployment_git_timeout_s = 60
+        self.ci_slow_test_count = 20
+        self.integration_request_timeout_s = 15
         self.deployment_lock_path = Path.home() / ".nabicat" / "update.lock"
         self.scheduled_job_service_unit_name = "nabicat-scheduled-job@.service"
         self.scheduled_job_timeout_s = 3600
