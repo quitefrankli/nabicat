@@ -76,6 +76,21 @@ function setupFolderUpload() {
     });
 }
 
+function setupRenameModal() {
+    const modal = document.getElementById('renameModal');
+    if (!modal) return;
+    const name = document.getElementById('renameName');
+    modal.addEventListener('show.bs.modal', (event) => {
+        document.getElementById('renameSource').value = event.relatedTarget.dataset.renameSource;
+        name.value = event.relatedTarget.dataset.renameName;
+    });
+    modal.addEventListener('shown.bs.modal', () => {
+        name.focus();
+        const extension = name.value.lastIndexOf('.');
+        name.setSelectionRange(0, extension > 0 ? extension : name.value.length);
+    });
+}
+
 function setupBulkActions() {
     const selectAll = document.getElementById('selectAllFiles');
     const actions = document.getElementById('fileBulkActions');
@@ -251,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fill.style.width = `${Number(fill.dataset.usagePercent) || 0}%`;
     });
     setupFolderUpload();
+    setupRenameModal();
     setupBulkActions();
     setupImageModal();
     setupStaggeredThumbnails();

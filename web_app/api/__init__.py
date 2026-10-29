@@ -8,6 +8,7 @@ import os
 import uuid
 import tempfile
 import time
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
@@ -306,10 +307,33 @@ def api_list():
     request_body = parse_request(require_login=True, require_admin=True)
     username = request_body["username"]
     user = DataInterface().load_users()[username]
-    files = FileStoreDataInterface().list_files(user)
+    if 'path' in request_body:
+        path = request_body['path']
+        if not isinstance(path, str):
+            raise APIError('Path must be a relative directory path')
+        try:
+            directory = FileStoreDataInterface().list_directory(path, user, recent=True)
+        except ValueError as error:
+            raise APIError(str(error)) from error
+        entries = [
+            {
+                'name': item['name'], 'path': item['path'], 'kind': item['kind'],
+                'uploaded_at': datetime.fromtimestamp(item['_modified']).isoformat()
+                if item['_modified'] != float('-inf') else '',
+            }
+            for item in directory.get('items', [])
+        ]
+        log_event('api', 'api.data_listed', user=user, entries=len(entries))
+        return jsonify({'success': True, 'entries': entries}), 200
+    details = FileStoreDataInterface().list_files_with_metadata(user)
+    files = [file['name'] for file in details]
+    file_details = [
+        {'name': file['name'], 'uploaded_at': file['modified'].isoformat()}
+        for file in details
+    ]
 
     log_event("api", "api.data_listed", user=user, files=len(files))
-    return jsonify({"success": True, "files": files}), 200
+    return jsonify({"success": True, "files": files, "file_details": file_details}), 200
 
 @api_api.route("/push_cookie", methods=["POST"])
 @_handle_api_error

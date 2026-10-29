@@ -461,6 +461,7 @@ input[type="file"].form-control:hover {
 .directory-item:last-child { border-bottom: 0; }
 .directory-link { display: flex; min-width: 0; align-items: center; gap: .75rem; color: var(--hw-text-primary); text-align: left; text-decoration: none; }
 .directory-actions { flex-shrink: 0; margin-left: auto; }
+.file-rename-button { min-width: 2.5rem; min-height: 2.5rem; }
 .directory-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .directory-link i { color: var(--hw-sage-dark); font-size: 1.25rem; }
 .directory-link small { color: var(--hw-text-muted); }

@@ -79,8 +79,68 @@ def data_interface(tmp_path):
     return di
 
 
+@pytest.mark.parametrize('name,expected', [('renamed.csv', 'success'), ('../escape.csv', 'rejected'), ('taken.csv', 'rejected')])
+def test_rename_route_updates_listing_and_download(client, auth_mock, data_interface, name, expected, caplog):
+    data_interface.save_file(
+        FileStorage(io.BytesIO(b'budget'), 'budget.csv'), auth_mock,
+        relative_path='reports/budget.csv',
+    )
+    data_interface.save_file(
+        FileStorage(io.BytesIO(b'existing'), 'taken.csv'), auth_mock,
+        relative_path='reports/taken.csv',
+    )
+    with client.session_transaction() as session:
+        session['_user_id'] = auth_mock.id
+    caplog.set_level(logging.INFO)
+    with patch('web_app.file_store.DataInterface', return_value=data_interface):
+        response = client.post('/file_store/rename', data={
+            'source': 'reports/budget.csv', 'name': name, 'parent': 'reports',
+        })
+        assert response.status_code == 302
+        assert 'path=reports' in response.location
+        filename = name if expected == 'success' else 'budget.csv'
+        listing = client.get('/file_store/?path=reports')
+        assert f'data-rename-name="{filename}"' in listing.text
+        download = client.get(f'/file_store/download/reports/{filename}')
+        assert download.data == b'budget'
+        assert f'filename={filename}' in download.headers['Content-Disposition']
+    event = 'file_store.rename' if expected == 'success' else 'file_store.rename_rejected'
+    assert f'"event": "{event}"' in caplog.text
+
+
 class TestDataInterface:
     """Tests for FileStoreDataInterface with metadata-based storage"""
+
+    def test_rename_preserves_content_and_other_users_names(self, data_interface, test_user, test_user2):
+        for user in (test_user, test_user2):
+            data_interface.save_file(
+                FileStorage(io.BytesIO(b'budget'), 'budget.csv'), user,
+                relative_path='reports/budget.csv',
+            )
+
+        data_interface.rename_file('reports/budget.csv', 'Final budget.csv', test_user)
+
+        assert data_interface.list_files(test_user) == ['reports/Final budget.csv']
+        assert data_interface.get_file_path('reports/Final budget.csv', test_user).read_bytes() == b'budget'
+        assert data_interface.list_files(test_user2) == ['reports/budget.csv']
+        with pytest.raises(FileNotFoundError):
+            data_interface.rename_file('reports/Final budget.csv', 'stolen.csv', test_user2)
+        data_interface.rename_file('reports/Final budget.csv', 'Final budget.csv', test_user)
+        assert data_interface.list_files(test_user) == ['reports/Final budget.csv']
+        with pytest.raises(FileNotFoundError):
+            data_interface.get_file_path('reports/budget.csv', test_user)
+
+    @pytest.mark.parametrize('name', ['', ' ', '.', '..', '../escape.csv', 'sub/file.csv', 'sub\\file.csv', 'bad\x00.csv', 'taken.csv', 'folder'])
+    def test_rename_rejects_invalid_names_and_collisions(self, data_interface, test_user, name):
+        data_interface.save_file(FileStorage(io.BytesIO(b'original'), 'budget.csv'), test_user)
+        data_interface.save_file(FileStorage(io.BytesIO(b'existing'), 'taken.csv'), test_user)
+        data_interface.create_folder('folder', test_user)
+
+        with pytest.raises(ValueError):
+            data_interface.rename_file('budget.csv', name, test_user)
+
+        assert data_interface.get_file_path('budget.csv', test_user).read_bytes() == b'original'
+        assert data_interface.get_file_path('taken.csv', test_user).read_bytes() == b'existing'
 
     def test_nested_folder_file_can_be_moved_and_deleted(self, data_interface, test_user):
         data_interface.create_folder('reports/2026', test_user)

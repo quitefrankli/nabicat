@@ -22,6 +22,7 @@ import sys
 import zipfile
 import json
 import os
+from datetime import datetime
 
 from git import Repo
 from pathlib import Path
@@ -268,15 +269,22 @@ def download(file: str, raw: bool) -> None:
     else:
         print(f"Failed to download file: {response.status_code} - {response.text}")
 
-@cli.command()
-def list_files() -> None:
-    response = send_request("api/list")
+@cli.command(name="ls")
+@click.argument('path', default='')
+def list_files(path: str) -> None:
+    """List immediate files and folders in PATH (default: root), newest first."""
+    response = send_request("api/list", {'path': path})
 
     if response.status_code == 200:
-        files = response.json().get("files", [])
-        print("Files available:")
+        files = response.json().get('entries')
+        if files is None:
+            raise click.ClickException('Server does not support directory listings; update the server first.')
+        files.sort(key=lambda file: datetime.fromisoformat(file['uploaded_at']).timestamp()
+                   if file.get('uploaded_at') else float('-inf'), reverse=True)
+        print("Files available (newest first):")
         for file in files:
-            print(f"- {file}")
+            suffix = '/' if file['kind'] == 'folder' else ''
+            print(f"{file.get('uploaded_at') or 'Unknown date'}  {file['name']}{suffix}")
     else:
         print(f"Failed to list files: {response.status_code} - {response.text}")
 

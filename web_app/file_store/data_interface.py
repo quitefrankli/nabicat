@@ -475,6 +475,24 @@ class DataInterface(BaseDataInterface):
         )
         return result
 
+    def rename_file(self, source: str, name: str, user: User) -> None:
+        """Rename a user's file within its folder without changing its stored content."""
+        source_path = self._normalise_path(source)
+        if not name.strip() or name in ('.', '..') or any(
+            character in name for character in ('/', '\\', '\x00', '\r', '\n')
+        ):
+            raise ValueError('Enter a file name without path separators or control characters')
+        destination = str(PurePosixPath(source_path).with_name(name))
+        with self.edit_metadata() as metadata:
+            user_metadata = self._user_metadata(metadata, user)
+            if not any(self._entry_path(entry) == source_path for entry in user_metadata.files):
+                raise FileNotFoundError('File not found')
+            if destination == source_path:
+                return
+            if destination in self._folder_paths(user_metadata):
+                raise ValueError('Destination already exists')
+            self._move_path_locked(metadata, source_path, destination, user)
+
     def move_path(self, source: str, destination: str, user: User) -> None:
         source_path = self._normalise_path(source)
         destination_path = self._normalise_path(destination)

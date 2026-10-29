@@ -309,6 +309,26 @@ def create_folder():
     return redirect(url_for('.index', path=request.form.get('parent', '')))
 
 
+@file_store_api.route('/rename', methods=['POST'])
+def rename_file():
+    user = cur_user()
+    source = request.form.get('source', '')
+    name = request.form.get('name', '')
+    try:
+        DataInterface().rename_file(source, name, user)
+    except (ValueError, FileNotFoundError) as error:
+        log_event(
+            "file_store", "file_store.rename_rejected",
+            level=logging.WARNING, user=user, reason="invalid_rename",
+            error_type=type(error).__name__, exc_info=True,
+        )
+        flash(str(error), 'error')
+    else:
+        log_event("file_store", "file_store.rename", user=user, source=source)
+        flash('File renamed successfully!', 'success')
+    return redirect(url_for('.index', path=request.form.get('parent', ''), mode='list'))
+
+
 @file_store_api.route('/move', methods=['POST'])
 def move_path():
     user = cur_user()

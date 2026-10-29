@@ -56,6 +56,19 @@ def test_api_and_file_store_share_files_and_preserve_user_isolation(storage):
     assert store.list_files(alice) == []
 
 
+def test_list_directory_shows_only_immediate_files_and_folders(storage):
+    store, (alice, _), request = storage
+    for name in ('root.txt', 'docs/notes.txt', 'docs/deep/hidden.txt'):
+        store.save_file(FileStorage(io.BytesIO(name.encode()), name), alice)
+    root = request('list', path='').json['entries']
+    assert {(item['name'], item['kind']) for item in root} == {('root.txt', 'file'), ('docs', 'folder')}
+    nested = request('list', path='docs').json['entries']
+    assert {(item['name'], item['kind']) for item in nested} == {('notes.txt', 'file'), ('deep', 'folder')}
+    assert all(item['uploaded_at'] for item in nested)
+    assert request('list', path='../outside').status_code == 400
+    assert request('list', path=42).status_code == 400
+
+
 def test_api_upload_obeys_shared_quota_and_preserves_rejected_overwrite(storage, monkeypatch):
     store, (alice, _), request = storage
     monkeypatch.setattr(ConfigManager().file_store, "admin_quota_bytes", 8)
@@ -65,6 +78,25 @@ def test_api_upload_obeys_shared_quota_and_preserves_rejected_overwrite(storage,
     assert store.list_files(alice) == ["a.txt"]
     assert store.get_file_path("a.txt", alice).read_bytes() == b"1234"
     assert request("push", name="a.txt", data=encoded(b"12345678")).status_code == 200
+
+
+def test_list_includes_latest_upload_dates_in_newest_first_order(storage):
+    store, (alice, _), request = storage
+    for name in ('old.txt', 'docs/new.txt'):
+        store.save_file(FileStorage(io.BytesIO(name.encode()), name), alice)
+    with store.edit_metadata() as metadata:
+        for entry, date in zip(metadata.users[alice.id].files, (
+            '2026-01-01T10:00:00', '2026-10-29T12:30:00',
+        )):
+            entry.uploaded_at = date
+    assert request('list').json['file_details'] == [
+        {'name': 'docs/new.txt', 'uploaded_at': '2026-10-29T12:30:00'},
+        {'name': 'old.txt', 'uploaded_at': '2026-01-01T10:00:00'},
+    ]
+    assert request('push', name='old.txt', data=encoded(b'updated')).status_code == 200
+    details = request('list').json['file_details']
+    assert details[0]['name'] == 'old.txt'
+    assert details[0]['uploaded_at'] > '2026-10-29T12:30:00'
 
 
 @pytest.mark.parametrize("operation", ["push", "pull", "delete"])

@@ -104,6 +104,7 @@
         <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ item.name }}</span><small>{{ item.size_formatted }}</small></div>
         <div class="directory-actions">
           <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=item.path) }}" title="Download"><i class="bi bi-download"></i></a>
+          <button type="button" class="btn btn-outline-success btn-sm file-rename-button" data-bs-toggle="modal" data-bs-target="#renameModal" data-rename-source="{{ item.path }}" data-rename-name="{{ item.name }}" aria-label="Rename {{ item.name }}" title="Rename"><i class="bi bi-pencil" aria-hidden="true"></i></button>
         </div>
       </article>
       {% endif %}
@@ -135,6 +136,18 @@
   <div class="modal-header"><h2 class="modal-title fs-5">New folder</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body"><input type="hidden" name="parent" value="{{ current_path }}"><label class="form-label" for="newFolderName">Folder name</label><input class="form-control" id="newFolderName" name="path" required pattern="[^/\\]+" autocomplete="off"></div>
   <div class="modal-footer"><button class="btn btn-primary">Create folder</button></div>
+</form></div></div></div>
+
+<div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalTitle" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.rename_file') }}">
+  <div class="modal-header"><h2 class="modal-title fs-5" id="renameModalTitle">Rename file</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="parent" value="{{ current_path }}">
+    <input type="hidden" name="source" id="renameSource">
+    <label class="form-label" for="renameName">File name</label>
+    <input class="form-control" id="renameName" name="name" required pattern="[^/\\]+" autocomplete="off">
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Rename</button></div>
 </form></div></div></div>
 
 <div class="modal fade" id="bulkMoveModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('.move_selected') }}">

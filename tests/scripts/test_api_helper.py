@@ -148,7 +148,24 @@ def test_commit_patch_upload_round_trips_binary_zip(monkeypatch, helper):
         assert patches.read("0001-abcdef1.patch") == b"patch contents\n"
 
 
-@pytest.mark.parametrize("command", ["list-files", "test-handshake", "config"])
+@pytest.mark.parametrize('path', ['', 'docs'])
+def test_ls_shows_dates_newest_first(helper, monkeypatch, path):
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"entries": [
+        {"name": "old.txt", "kind": "file", "uploaded_at": "2026-01-01T10:00:00"},
+        {"name": "new.txt", "kind": "file", "uploaded_at": "2026-10-29T12:30:00"},
+        {"name": "archive", "kind": "folder", "uploaded_at": ""},
+    ]}
+    send = MagicMock(return_value=response)
+    monkeypatch.setattr(helper, "send_request", send)
+    result = CliRunner().invoke(helper.cli, ["ls", *([path] if path else [])])
+    assert result.exit_code == 0, result.output
+    assert result.output == "Files available (newest first):\n2026-10-29T12:30:00  new.txt\n2026-01-01T10:00:00  old.txt\nUnknown date  archive/\n"
+    send.assert_called_once_with('api/list', {'path': path})
+    assert 'list-files' not in CliRunner().invoke(helper.cli, ['--help']).output
+
+
+@pytest.mark.parametrize("command", ["ls", "test-handshake", "config"])
 @pytest.mark.parametrize("error", [requests.ConnectionError, requests.Timeout])
 def test_network_failures_are_cli_errors(monkeypatch, helper, command, error):
     monkeypatch.setattr(helper.keyring, "get_password", lambda *args: "saved")
