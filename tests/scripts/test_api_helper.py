@@ -5,6 +5,8 @@ import importlib.util
 import base64
 import gzip
 import io
+import json
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -14,7 +16,15 @@ from click.testing import CliRunner
 
 
 @pytest.fixture
-def helper():
+def helper(monkeypatch, tmp_path):
+    from web_app.config import ConfigManager
+
+    path = tmp_path / "api-helper.json"
+    monkeypatch.setattr(ConfigManager(), "api_helper_config_path", path)
+    path.write_text(json.dumps({
+        "base_url": "https://saved.invalid", "username": "saved-user",
+        "access_token": "saved-token", "expires_at": time.time() + 86400,
+    }))
     source = Path(__file__).resolve().parents[2] / "scripts" / "api_helper.py"
     spec = importlib.util.spec_from_file_location("api_helper", source)
     module = importlib.util.module_from_spec(spec)
@@ -86,8 +96,7 @@ def test_helper_runs_outside_project(tmp_path):
     ([], "gpt-6-luna", "low"),
     (["--model", "model", "--effort", "high"], "model", "high"),
 ])
-def test_llm_always_uses_cached_credentials(monkeypatch, helper, options, model, effort):
-    monkeypatch.setattr(helper, "generate_cred_payload", lambda: {"username": "saved-user", "password": "saved-password"})
+def test_llm_uses_authenticated_request(monkeypatch, helper, options, model, effort):
     sent = []
 
     class Response:
@@ -111,21 +120,8 @@ def test_llm_always_uses_cached_credentials(monkeypatch, helper, options, model,
     assert result.exit_code == 0, result.output
     assert result.output == "answer\n"
     assert sent == [("api/llm", {
-        "username": "saved-user", "password": "saved-password",
         "model": model, "effort": effort, "input": "hello",
-    }, {"require_cred": False, "base_url": None, "timeout": 130.0})]
-
-
-def test_handshake_command_uses_saved_url(monkeypatch, helper):
-    monkeypatch.setattr(helper, "get_base_url", lambda: "https://saved.invalid")
-    post = MagicMock()
-    post.return_value.status_code = 200
-    post.return_value.json.return_value = {"success": True, "session_id": "session", "public_key": "key"}
-    monkeypatch.setattr(helper.requests, "post", post)
-    result = CliRunner().invoke(helper.cli, ["test-handshake"])
-    assert result.exit_code == 0, result.output
-    assert "Handshake successful!" in result.output
-    post.assert_called_once_with("https://saved.invalid/api/handshake", timeout=10)
+    }, {"base_url": None, "timeout": 130.0})]
 
 
 def test_commit_patch_upload_round_trips_binary_zip(monkeypatch, helper):
@@ -165,12 +161,11 @@ def test_ls_shows_dates_newest_first(helper, monkeypatch, path):
     assert 'list-files' not in CliRunner().invoke(helper.cli, ['--help']).output
 
 
-@pytest.mark.parametrize("command", ["ls", "test-handshake", "config"])
+@pytest.mark.parametrize("command", ["ls", "login"])
 @pytest.mark.parametrize("error", [requests.ConnectionError, requests.Timeout])
 def test_network_failures_are_cli_errors(monkeypatch, helper, command, error):
-    monkeypatch.setattr(helper.keyring, "get_password", lambda *args: "saved")
     monkeypatch.setattr(helper.requests, "post", MagicMock(side_effect=error("offline")))
-    result = CliRunner().invoke(helper.cli, [command])
+    result = CliRunner().invoke(helper.cli, [command], input="admin\npass\nhttps://saved.invalid\n")
     assert result.exit_code == 1
     assert "Error:" in result.output
     assert error.__name__ in result.output
@@ -179,13 +174,56 @@ def test_network_failures_are_cli_errors(monkeypatch, helper, command, error):
 
 @pytest.mark.parametrize("timeout", [None, 42.0])
 def test_api_request_has_timeout_and_handles_network_failure(monkeypatch, helper, timeout):
-    monkeypatch.setattr(helper, "do_handshake", lambda base_url: ("session", "key"))
-    monkeypatch.setattr(helper, "hybrid_encrypt", lambda *args: {"encrypted": "data"})
     post = MagicMock()
     monkeypatch.setattr(helper.requests, "post", post)
     kwargs = {} if timeout is None else {"timeout": timeout}
-    helper.send_request("api/list", require_cred=False, base_url="https://saved.invalid", **kwargs)
+    helper.send_request("api/list", base_url="https://saved.invalid", **kwargs)
     assert post.call_args.kwargs["timeout"] == (130.0 if timeout is None else timeout)
     post.side_effect = requests.Timeout("offline")
     with pytest.raises(helper.click.ClickException, match="Timeout"):
-        helper.send_request("api/list", require_cred=False, base_url="https://saved.invalid", **kwargs)
+        helper.send_request("api/list", base_url="https://saved.invalid", **kwargs)
+
+
+@pytest.mark.parametrize("failure", ["expired", "other-server", "http"])
+def test_token_is_not_sent_when_expired_or_server_does_not_match(helper, monkeypatch, failure):
+    from web_app.config import ConfigManager
+
+    path = ConfigManager().api_helper_config_path
+    saved = json.loads(path.read_text())
+    if failure == "expired":
+        saved["expires_at"] = 0
+        path.write_text(json.dumps(saved))
+    post = MagicMock()
+    monkeypatch.setattr(helper.requests, "post", post)
+    options = {"base_url": "https://other.invalid"} if failure == "other-server" else {}
+    if failure == "http":
+        options["base_url"] = "http://saved.invalid"
+    with pytest.raises(helper.click.ClickException):
+        helper.send_request("api/list", **options)
+    post.assert_not_called()
+
+
+def test_server_rejection_prompts_for_login_and_does_not_retry(helper, monkeypatch):
+    post = MagicMock(return_value=MagicMock(status_code=401))
+    monkeypatch.setattr(helper.requests, "post", post)
+    result = CliRunner().invoke(helper.cli, ["ls"])
+    assert result.exit_code == 1
+    assert "api-helper login" in result.output
+    assert post.call_count == 1
+    assert post.call_args.kwargs["allow_redirects"] is False
+
+
+def test_config_and_logout_do_not_expose_token(helper):
+    from web_app.config import ConfigManager
+
+    runner = CliRunner()
+    result = runner.invoke(helper.cli, ["config"])
+    assert result.exit_code == 0, result.output
+    assert "saved-user" in result.output
+    assert "saved-token" not in result.output
+    result = runner.invoke(helper.cli, ["logout"])
+    assert result.exit_code == 0, result.output
+    assert not ConfigManager().api_helper_config_path.exists()
+    result = runner.invoke(helper.cli, ["ls"])
+    assert result.exit_code == 1
+    assert "api-helper login" in result.output

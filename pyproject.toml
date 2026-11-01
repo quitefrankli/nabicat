@@ -23,7 +23,7 @@ dependencies = [
     "Flask-WTF>=1.2.0",
     "gitpython>=3.2.1",
     "yt-dlp[default]>=2026.10.26",
-    "keyring==25.7.0",
+    "PyJWT>=2.10,<3",
     "pydub>=0.25.1",
     "requests>=2.32.5",
     "python-dotenv>=1.0.0",

@@ -17,10 +17,11 @@ from werkzeug.datastructures import FileStorage
 
 from web_app.data_interface import DataInterface
 from web_app.helpers import parse_request, authenticate_user, \
-    generate_ephemeral_keypair, get_all_data_interfaces, codex_cli_text, CodexCLIError
+    generate_ephemeral_keypair, get_all_data_interfaces, codex_cli_text, CodexCLIError, limiter
 from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
 from web_app.config import ConfigManager
-from web_app.errors import APIError
+from web_app.errors import APIError, AuthenticationError
+from web_app.api_auth import issue_api_token
 from web_app.logging_utils import log_event
 
 
@@ -38,12 +39,13 @@ def _handle_api_error(func):
         try:
             return func(*args, **kwargs)
         except APIError as e:
+            status = e.status if isinstance(e, AuthenticationError) else 400
             log_event(
                 "api", "api.request_rejected",
-                level=logging.WARNING, reason="invalid_request",
-                error_type=type(e).__name__,
+                level=logging.WARNING, reason=e.reason, status=status,
+                operation=request.endpoint, error_type=type(e).__name__, exc_info=True,
             )
-            return jsonify({"error": str(e)}), 400
+            return jsonify({"error": str(e)}), status
     return wrapper
 
 
@@ -100,6 +102,30 @@ def health():
         "commit": current_app.config.get("DEPLOY_COMMIT", "unknown"),
         "pid": os.getpid(),
     })
+
+
+@api_api.route("/token", methods=["POST"])
+@limiter.limit(lambda: ConfigManager().api_token_login_rate_limit)
+@_handle_api_error
+def api_token():
+    body = parse_request(require_login=False, require_admin=False)
+    username, password = body.get("username"), body.get("password")
+    if (
+        not isinstance(username, str) or not isinstance(password, str)
+        or not username or not password
+        or not authenticate_user(username, password, require_admin=False)
+    ):
+        log_event("api", "api.token_login_rejected", level=logging.WARNING,
+                  reason="invalid_credentials", status=401)
+        raise AuthenticationError("Invalid credentials", status=401)
+    token = issue_api_token(username)
+    log_event("api", "api.token_issued", user=username,
+              lifetime_s=ConfigManager().api_jwt_lifetime_s, status=200)
+    response = jsonify(access_token=token, token_type="Bearer",
+                       expires_in=ConfigManager().api_jwt_lifetime_s)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 def handle_github_webhook():
     # for the webhook, login creds are supplied in the authorization header
@@ -394,10 +420,13 @@ def api_llm():
             value = body.get(field)
             if not isinstance(value, str) or not value.strip():
                 raise APIError(f"Invalid field: {field}")
-    except APIError:
+    except APIError as error:
         log_event("api", "api.llm.rejected", level=logging.WARNING,
-                  user=username, reason="invalid_request")
-        return jsonify({"error": "Invalid credentials or request fields"}), 400
+                  user=username, reason=error.reason,
+                  error_type=type(error).__name__, exc_info=True)
+        return jsonify({"error": "Invalid credentials or request fields"}), (
+            error.status if isinstance(error, AuthenticationError) else 400
+        )
 
     try:
         with tempfile.TemporaryDirectory() as directory:

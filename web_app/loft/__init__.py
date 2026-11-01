@@ -9,7 +9,7 @@ from io import BytesIO
 
 import flask_login
 from flask import (
-    Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for,
+    Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for,
 )
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from flask_wtf.csrf import CSRFError
@@ -31,6 +31,27 @@ loft_api = Blueprint(
 
 
 register_app_name(loft_api, 'Loft')
+
+quitefrankli_api = Blueprint('quitefrankli', __name__)
+
+
+@quitefrankli_api.route('/quitefrankli')
+def quitefrankli_page():
+    di = DataInterface()
+    slug = ConfigManager().loft.quitefrankli_slug
+    if not di.user_can_view(flask_login.current_user, slug, slug):
+        abort(404)
+    try:
+        content = di.get_post_content(slug, slug)
+    except FileNotFoundError:
+        abort(404)
+    return Response(content, mimetype='text/html')
+
+
+@quitefrankli_api.route('/loft/quitefrankli', strict_slashes=False)
+@quitefrankli_api.route('/loft/quitefrankli/quitefrankli', strict_slashes=False)
+def quitefrankli_redirect():
+    return redirect(url_for('quitefrankli.quitefrankli_page'), code=301)
 
 
 def _audit_failure(reason: str, *, error: Exception | None = None, status: int = 400) -> None:
@@ -451,8 +472,9 @@ def upload_post():
         request_body = parse_request(require_login=True, require_admin=True)
     except APIError as e:
         reason = "authentication_failed" if isinstance(e, AuthenticationError) else "invalid_api_request"
-        _audit_failure(reason, error=e)
-        return jsonify({"error": str(e)}), 400
+        status = e.status if isinstance(e, AuthenticationError) else 400
+        _audit_failure(reason, error=e, status=status)
+        return jsonify({"error": str(e)}), status
 
     project = request_body.get("project")
     post_name = request_body.get("post_name")

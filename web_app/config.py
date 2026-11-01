@@ -579,6 +579,7 @@ class CrosswordsConfig:
 
 @dataclass
 class LoftConfig:
+    quitefrankli_slug: str = "quitefrankli"
     request_path_prefix: str = "/loft/"
     non_admin_quota_bytes: int = 50 * 1024 * 1024
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
@@ -770,6 +771,18 @@ class ConfigManager:
         self.redis_readiness_poll_s = 0.1
         self.password_hash_method = "scrypt"
         self.password_hash_prefix = "nabicat$"
+        self.api_jwt_lifetime_s = 24 * 60 * 60
+        self.api_jwt_algorithm = "HS256"
+        self.api_jwt_issuer = "nabicat"
+        self.api_jwt_audience = "nabicat-api"
+        self.api_jwt_key_context = b"nabicat-api-jwt"
+        self.api_token_login_rate_limit = "5/minute"
+        self.api_helper_config_path = Path.home() / ".config" / "nabicat" / "api-helper.json"
+        self.api_helper_config_file_mode = 0o600
+        self.api_helper_config_dir_mode = 0o700
+        self.api_helper_default_base_url = "https://nabicat.site"
+        self.api_helper_login_timeout_s = 10.0
+        self.api_helper_payload_confirm_bytes = 1000
         self.api_llm_timeout_s = 120.0
         self.api_llm_client_timeout_s = 130.0
         self.api_llm_approval_policy = "never"

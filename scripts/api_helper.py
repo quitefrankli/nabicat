@@ -3,149 +3,107 @@ import requests
 import click
 import base64
 import gzip
-import getpass
-import keyring
 import io
 import sys
 import zipfile
 import json
 import os
+import tempfile
+import time
+from urllib.parse import urlsplit
 from datetime import datetime
 
 from git import Repo
 from pathlib import Path
 from yt_dlp.cookies import extract_cookies_from_browser
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-KEYRING_APP_ID = "nabicat"
-DEFAULT_BASE_URL = "https://nabicat.site"
+from web_app.config import ConfigManager
 
 
-def hybrid_encrypt(data: bytes, public_key_pem: str, session_id: str) -> dict:
-    """
-    Encrypt data using hybrid encryption (RSA + AES-GCM).
-    
-    1. Generate random 256-bit AES key
-    2. Compress and encrypt data with AES-GCM
-    3. Encrypt AES key with RSA public key
-    4. Return payload dict for server
-    """
-    # Generate random 256-bit AES key
-    aes_key = AESGCM.generate_key(bit_length=256)
-    aesgcm = AESGCM(aes_key)
-    
-    # Compress data
-    compressed_data = gzip.compress(data)
-    
-    # Encrypt with AES-GCM (nonce is auto-generated)
-    nonce = os.urandom(12)  # 96-bit nonce for GCM
-    encrypted_data = aesgcm.encrypt(nonce, compressed_data, None)
-    
-    # Load RSA public key
-    public_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'))
-    
-    # Encrypt AES key with RSA-OAEP
-    encrypted_key = public_key.encrypt(
-        aes_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
-    
-    return {
-        "session_id": session_id,
-        "encrypted_key": base64.b64encode(encrypted_key).decode('utf-8'),
-        "encrypted_data": base64.b64encode(encrypted_data).decode('utf-8'),
-        "nonce": base64.b64encode(nonce).decode('utf-8')
-    }
-
-
-def do_handshake(base_url: str | None = None) -> tuple[str, str]:
-    """
-    Perform handshake with server to get ephemeral RSA public key.
-    
-    Returns:
-        tuple: (session_id, public_key_pem)
-    """
-    url = f"{base_url or get_base_url()}/api/handshake"
-    
+def _validate_base_url(value: str) -> str:
+    if not isinstance(value, str):
+        raise click.ClickException("Invalid server URL. Run 'api-helper login' again.")
+    value = value.rstrip("/")
     try:
-        response = requests.post(url, timeout=10)
-    except requests.RequestException as error:
-        raise click.ClickException(
-            f"Handshake request failed ({type(error).__name__})."
-        ) from None
-    
-    if response.status_code != 200:
-        raise ConnectionError(f"Handshake failed: {response.status_code} - {response.text}")
-    
-    data = response.json()
-    if not data.get("success"):
-        raise ConnectionError(f"Handshake failed: {data.get('error', 'Unknown error')}")
-    
-    return data["session_id"], data["public_key"]
+        parsed = urlsplit(value)
+    except ValueError:
+        raise click.ClickException("Invalid server URL. Run 'api-helper login' again.") from None
+    local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if (
+        (parsed.scheme != "https" and not local_http) or not parsed.hostname
+        or parsed.username or parsed.password or parsed.query or parsed.fragment
+        or parsed.path
+    ):
+        raise click.ClickException("Use an HTTPS server URL (HTTP is allowed only for localhost).")
+    return value
 
-def generate_cred_payload() -> dict:
-    username = keyring.get_password(KEYRING_APP_ID, "username")
-    password = keyring.get_password(KEYRING_APP_ID, "password")
-    if username is None or password is None:
-        raise ValueError("No credentials found. Please login first using the 'login' command.")
-    return {
-        "username": username,
-        "password": password
-    }
+
+def _load_config() -> dict:
+    try:
+        saved = json.loads(ConfigManager().api_helper_config_path.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError):
+        raise click.ClickException("Cannot read saved API configuration. Run 'api-helper login' again.") from None
+    if not isinstance(saved, dict):
+        raise click.ClickException("Invalid API configuration. Run 'api-helper login' again.")
+    return saved
+
+
+def _save_config(saved: dict) -> None:
+    config = ConfigManager()
+    path = config.api_helper_config_path
+    path.parent.mkdir(parents=True, exist_ok=True, mode=config.api_helper_config_dir_mode)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as output:
+            temporary = Path(output.name)
+            os.fchmod(output.fileno(), config.api_helper_config_file_mode)
+            json.dump(saved, output)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
 
 def get_base_url() -> str:
-    base_url = keyring.get_password(KEYRING_APP_ID, "base_url")
-    return base_url if base_url else DEFAULT_BASE_URL
-
-def _send_request_internal(
-    endpoint: str, payload: dict = dict(), require_cred: bool = True,
-    *, base_url: str | None = None, timeout: float | None = None,
-) -> requests.Response:
-    url = f"{base_url or get_base_url()}/{endpoint}"
-    if require_cred:
-        payload = generate_cred_payload() | payload
-
-    # Step 1: Handshake to get ephemeral public key
-    session_id, public_key = do_handshake(base_url)
-    
-    # Step 2: Encrypt payload with hybrid encryption
-    unencrypted_payload = json.dumps(payload).encode('utf-8')
-    encrypted_payload = hybrid_encrypt(unencrypted_payload, public_key, session_id)
-    
-    # Calculate size for confirmation
-    payload_json = json.dumps(encrypted_payload)
-    if len(payload_json) > 1e3:
-        size_kb = len(payload_json) / 1e3
-        if input(f"Payload size is {size_kb:.2f} kB. Do you want to continue? (y/n): ").strip().lower() != 'y':
-            print("Request cancelled.")
-            sys.exit(0)
-
-    return requests.post(
-        url, json={"req": encrypted_payload},
-        timeout=timeout if timeout is not None else 130.0,
-    )
+    return _validate_base_url(_load_config().get("base_url") or ConfigManager().api_helper_default_base_url)
 
 
 def send_request(
-    endpoint: str, payload: dict = dict(), require_cred: bool = True,
+    endpoint: str, payload: dict | None = None,
     *, base_url: str | None = None, timeout: float | None = None,
 ) -> requests.Response:
+    saved = _load_config()
+    token = saved.get("access_token")
+    expires_at = saved.get("expires_at")
+    if not isinstance(token, str) or not token or not isinstance(expires_at, (int, float)):
+        raise click.ClickException("No saved API token. Run 'api-helper login'.")
+    if time.time() >= expires_at:
+        raise click.ClickException("API token has expired. Run 'api-helper login' again.")
+    saved_url = get_base_url()
+    target = _validate_base_url(base_url) if base_url else saved_url
+    if target != saved_url:
+        raise click.ClickException("The token belongs to a different server. Run 'api-helper login' for that server.")
+    payload = payload if payload is not None else {}
+    payload_size = len(json.dumps(payload))
+    if payload_size > ConfigManager().api_helper_payload_confirm_bytes:
+        if input(f"Payload size is {payload_size / 1000:.2f} kB. Do you want to continue? (y/n): ").strip().lower() != 'y':
+            raise click.ClickException("Request cancelled.")
     try:
-        return _send_request_internal(endpoint, payload, require_cred, base_url=base_url, timeout=timeout)
+        response = requests.post(
+            f"{target}/{endpoint}", json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=timeout if timeout is not None else ConfigManager().api_llm_client_timeout_s,
+            allow_redirects=False,
+        )
     except requests.RequestException as error:
-        raise click.ClickException(
-            f"API request failed ({type(error).__name__})."
-        ) from None
-    except ConnectionError as e:
-        raise click.ClickException(str(e)) from None
+        raise click.ClickException(f"API request failed ({type(error).__name__}).") from None
+    if response.status_code == 401:
+        raise click.ClickException("API token was rejected or expired. Run 'api-helper login' again.")
+    return response
 
-@click.group(help="cli helper for interacting with backend all data (including credentials) are encrypted")
+
+@click.group(help="Interact with NabiCat using a one-day API token over HTTPS.")
 def cli():
     pass
 
@@ -161,14 +119,13 @@ def cli():
 def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: str) -> None:
     """Ask the LLM API. Use - as PROMPT to read input from stdin."""
     try:
-        credentials = generate_cred_payload()
         if prompt == "-":
             prompt = click.get_text_stream("stdin").read()
         if not prompt.strip():
             raise click.ClickException("Prompt must not be empty.")
         response = send_request(
-            "api/llm", credentials | {"model": model, "effort": effort, "input": prompt},
-            require_cred=False, base_url=base_url,
+            "api/llm", {"model": model, "effort": effort, "input": prompt},
+            base_url=base_url,
             timeout=timeout,
         )
         if response.status_code != 200:
@@ -176,28 +133,50 @@ def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: s
         result = response.json()
         if not result.get("success") or not isinstance(result.get("output"), str):
             raise click.ClickException("Server returned an invalid LLM response.")
-    except (requests.RequestException, ValueError, keyring.errors.KeyringError) as error:
+    except (requests.RequestException, ValueError) as error:
         raise click.ClickException(
             f"LLM request could not complete ({type(error).__name__}). "
-            "Check your keyring and connection; use 'login' to save credentials."
+            "Check your connection; use 'login' to obtain an API token."
         ) from None
     click.echo(result["output"])
 
 
 @cli.command()
 def login() -> None:
-    """
-    Stores the username and password in the keyring for future use.
-    Optionally, you can specify the base URL for the API.
-    """
-    
-    username = input("Enter your username: ")
-    password = getpass.getpass("Enter password: ")
-    base_url = input(f"Enter base URL (default: {DEFAULT_BASE_URL}): ") or DEFAULT_BASE_URL
-    keyring.set_password(KEYRING_APP_ID, "username", username)
-    keyring.set_password(KEYRING_APP_ID, "password", password)
-    keyring.set_password(KEYRING_APP_ID, "base_url", base_url)
-    print("Login credentials saved successfully.")
+    """Log in for one day without saving your password."""
+    username = click.prompt("Enter your username")
+    password = click.prompt("Enter password", hide_input=True)
+    base_url = _validate_base_url(click.prompt(
+        "Enter base URL", default=get_base_url(),
+    ))
+    try:
+        response = requests.post(
+            f"{base_url}/api/token", json={"username": username, "password": password},
+            timeout=ConfigManager().api_helper_login_timeout_s, allow_redirects=False,
+        )
+        if response.status_code != 200:
+            raise click.ClickException(f"Login failed (HTTP {response.status_code}).")
+        result = response.json()
+        if not isinstance(result, dict):
+            raise click.ClickException("Server returned an invalid login response.")
+        token, lifetime = result.get("access_token"), result.get("expires_in")
+        if not isinstance(token, str) or not token or not isinstance(lifetime, (int, float)) or lifetime <= 0:
+            raise click.ClickException("Server returned an invalid login response.")
+        _save_config({
+            "base_url": base_url, "username": username, "access_token": token,
+            "expires_at": time.time() + lifetime,
+        })
+    except (requests.RequestException, ValueError, OSError) as error:
+        raise click.ClickException(f"Login failed ({type(error).__name__}).") from None
+    click.echo("Logged in. API token saved for one day; your password was not saved.")
+
+
+@cli.command()
+def logout() -> None:
+    """Remove the locally saved API token."""
+    ConfigManager().api_helper_config_path.unlink(missing_ok=True)
+    click.echo("Saved API token removed.")
+
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
@@ -561,20 +540,6 @@ def upload_post(post_folder: str, project: str, post_name: str | None, date: str
     response = send_request("loft/api/upload_post", payload)
     print(f"Response: {response.status_code} - {response.text}")
 
-@cli.command()
-def test_handshake() -> None:
-    """
-    Test the encryption handshake with the server.
-    """
-    try:
-        session_id, public_key = do_handshake()
-        print(f"Handshake successful!")
-        print(f"Session ID: {session_id}")
-        print(f"Public Key (first 100 chars): {public_key[:100]}...")
-    except ConnectionError as e:
-        raise click.ClickException(f"Handshake failed: {e}") from None
-
-
 @cli.command(name="sync-data-from-prod")
 @click.option("--dest", default=str(Path.home()), show_default=True,
               help="Local destination directory (receives .nabicat/)")
@@ -601,24 +566,18 @@ def sync_data_from_prod(dest: str, dry_run: bool, exclude: tuple[str, ...]) -> N
 
 @cli.command(name="config")
 def show_config() -> None:
-    """
-    Show current configuration (base URL, username).
-    """
-    base_url = keyring.get_password(KEYRING_APP_ID, "base_url")
-    username = keyring.get_password(KEYRING_APP_ID, "username")
-    
-    print(f"Current configuration:")
-    print(f"  Base URL: {base_url or '(not set)'}")
-    print(f"  Username: {username or '(not set)'}")
-    
-    # Test connection
-    print(f"\nTesting connection to {base_url or DEFAULT_BASE_URL}...")
-    try:
-        session_id, public_key = do_handshake(base_url)
-        print(f"  ✓ Server is reachable")
-        print(f"  ✓ Handshake successful (session: {session_id[:8]}...)")
-    except ConnectionError as e:
-        raise click.ClickException(str(e)) from None
+    """Show the saved server, username, and token expiry without exposing the token."""
+    saved = _load_config()
+    click.echo(f"Base URL: {get_base_url()}")
+    click.echo(f"Username: {saved.get('username') or '(not set)'}")
+    expires_at = saved.get("expires_at")
+    if isinstance(expires_at, (int, float)):
+        expiry = datetime.fromtimestamp(expires_at).astimezone().isoformat()
+        state = "expired" if time.time() >= expires_at else "valid"
+        click.echo(f"Token: {state}; expires {expiry}")
+    else:
+        click.echo("Token: not set; run 'api-helper login'.")
+
 
 if __name__ == "__main__":
     cli()

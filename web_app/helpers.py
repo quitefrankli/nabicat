@@ -59,7 +59,7 @@ def register_all_blueprints(app):
     from web_app.file_store import file_store_api
     from web_app.api import api_api
     from web_app.proxy import proxy_api
-    from web_app.loft import loft_api
+    from web_app.loft import loft_api, quitefrankli_api
     from web_app.dev import dev_api
     from web_app.simulations import simulations_api
     from web_app.oauth import oauth_api
@@ -78,6 +78,7 @@ def register_all_blueprints(app):
         api_api,
         proxy_api,
         loft_api,
+        quitefrankli_api,
         dev_api,
         simulations_api,
         oauth_api,
@@ -371,6 +372,12 @@ def parse_request(require_login: bool = True, require_admin: bool = True) -> dic
         raise APIError("Invalid request_body")
 
     if require_login:
+        authorization = request.headers.get("Authorization")
+        if authorization:
+            from web_app.api_auth import authenticate_api_token
+
+            user = authenticate_api_token(authorization, require_admin=require_admin)
+            return request_body | {"username": user.id}
         username = request_body.get("username", "")
         password = request_body.get("password", "")
         if not isinstance(username, str) or not isinstance(password, str):
