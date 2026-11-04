@@ -10,13 +10,102 @@ import json
 import os
 import tempfile
 import time
+import binascii
+import math
+import zlib
+from contextlib import redirect_stdout
 from urllib.parse import urlsplit
 from datetime import datetime
 
-from git import Repo
+from git import Repo, GitError
 from pathlib import Path
-from yt_dlp.cookies import extract_cookies_from_browser
+from yt_dlp.cookies import CookieLoadError, extract_cookies_from_browser
+from yt_dlp.utils import DownloadError
 from web_app.config import ConfigManager
+
+
+class HelperCommand(click.Command):
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (OSError, ValueError, GitError, zipfile.BadZipFile) as error:
+            raise click.ClickException(str(error) or type(error).__name__) from None
+
+
+class HelperGroup(click.Group):
+    command_class = HelperCommand
+
+
+def _set_yes(ctx, param, value):
+    ctx.ensure_object(dict)
+    if value:
+        ctx.obj["yes"] = True
+
+
+def yes_option(function):
+    return click.option("-y", "--yes", is_flag=True, expose_value=False,
+                        callback=_set_yes, help="Accept confirmation prompts (does not skip login).")(function)
+
+
+def _confirm(message):
+    ctx = click.get_current_context(silent=True)
+    while ctx is not None:
+        if ctx.obj and ctx.obj.get("yes"):
+            return True
+        ctx = ctx.parent
+    with redirect_stdout(click.get_text_stream("stderr")):
+        return click.confirm(message, err=True)
+
+
+def _prompt(message, **kwargs):
+    # Click's terminal input functions can echo to stdout even with err=True.
+    with redirect_stdout(click.get_text_stream("stderr")):
+        return click.prompt(message, err=True, **kwargs)
+
+
+def _response_json(response):
+    try:
+        result = response.json()
+    except ValueError:
+        raise click.ClickException("Server returned invalid JSON.") from None
+    if not isinstance(result, dict):
+        raise click.ClickException("Server returned an invalid response; expected an object.")
+    return result
+
+
+def _download_data(response):
+    data = _response_json(response).get("data")
+    if not isinstance(data, str):
+        raise click.ClickException("Server returned an invalid file response.")
+    try:
+        return gzip.decompress(base64.b64decode(data, validate=True))
+    except (ValueError, OSError, EOFError, binascii.Error, zlib.error):
+        raise click.ClickException("Server returned corrupt file data.") from None
+
+
+def _token_valid(saved):
+    expiry = saved.get("expires_at")
+    return (isinstance(saved.get("access_token"), str) and bool(saved["access_token"])
+            and isinstance(expiry, (int, float)) and math.isfinite(expiry)
+            and time.time() < expiry)
+
+
+def _authenticate(*, base_url=None, allow_prompt=True):
+    saved = _load_config()
+    saved_url = get_base_url()
+    target = _validate_base_url(base_url) if base_url else saved_url
+    if target != saved_url:
+        raise click.ClickException("The token belongs to a different server. Run 'api-helper login' for that server.")
+    if not _token_valid(saved):
+        if not allow_prompt:
+            raise click.ClickException("Run 'api-helper login' before reading a prompt from stdin.")
+        click.echo("API token missing or expired. Please log in.", err=True)
+        try:
+            _login(base_url=target)
+        except click.Abort:
+            raise click.ClickException("Login required. Run 'api-helper login'.") from None
+        saved = _load_config()
+    return target, saved["access_token"]
 
 
 def _validate_base_url(value: str) -> str:
@@ -72,22 +161,13 @@ def get_base_url() -> str:
 def send_request(
     endpoint: str, payload: dict | None = None,
     *, base_url: str | None = None, timeout: float | None = None,
+    confirm_payload: bool = True,
 ) -> requests.Response:
-    saved = _load_config()
-    token = saved.get("access_token")
-    expires_at = saved.get("expires_at")
-    if not isinstance(token, str) or not token or not isinstance(expires_at, (int, float)):
-        raise click.ClickException("No saved API token. Run 'api-helper login'.")
-    if time.time() >= expires_at:
-        raise click.ClickException("API token has expired. Run 'api-helper login' again.")
-    saved_url = get_base_url()
-    target = _validate_base_url(base_url) if base_url else saved_url
-    if target != saved_url:
-        raise click.ClickException("The token belongs to a different server. Run 'api-helper login' for that server.")
+    target, token = _authenticate(base_url=base_url)
     payload = payload if payload is not None else {}
     payload_size = len(json.dumps(payload))
-    if payload_size > ConfigManager().api_helper_payload_confirm_bytes:
-        if input(f"Payload size is {payload_size / 1000:.2f} kB. Do you want to continue? (y/n): ").strip().lower() != 'y':
+    if confirm_payload and payload_size > ConfigManager().api_helper_payload_confirm_bytes:
+        if not _confirm(f"Send payload ({payload_size:,} bytes)?"):
             raise click.ClickException("Request cancelled.")
     try:
         response = requests.post(
@@ -100,26 +180,34 @@ def send_request(
         raise click.ClickException(f"API request failed ({type(error).__name__}).") from None
     if response.status_code == 401:
         raise click.ClickException("API token was rejected or expired. Run 'api-helper login' again.")
+    if response.status_code != 200:
+        raise click.ClickException(f"API request failed (HTTP {response.status_code}): {response.text}")
+    result = _response_json(response)
+    if result.get("success") is False or result.get("error"):
+        raise click.ClickException(f"API request rejected: {result.get('error') or result.get('message') or 'unknown reason'}")
     return response
 
 
-@click.group(help="Interact with NabiCat using a one-day API token over HTTPS.")
+@click.group(cls=HelperGroup, help="Interact with NabiCat using a one-day API token over HTTPS.")
+@yes_option
 def cli():
     pass
 
 @cli.command()
-@click.option("--model", default="gpt-6-luna", show_default=True,
+@click.option("--model", default=ConfigManager().api_helper_default_model, show_default=True,
               help="Codex model to request; defaults to Luna 6.0.")
-@click.option("--effort", default="low", show_default=True,
+@click.option("--effort", default=ConfigManager().api_helper_default_effort, show_default=True,
               help="Codex reasoning effort to request.")
 @click.option("--base-url", help="Server URL; defaults to the saved URL or production.")
-@click.option("--timeout", type=click.FloatRange(min=0, min_open=True), default=130.0,
+@click.option("--timeout", type=click.FloatRange(min=0, min_open=True), default=ConfigManager().api_llm_client_timeout_s,
               show_default=True, help="LLM request timeout in seconds.")
 @click.argument("prompt")
+@yes_option
 def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: str) -> None:
     """Ask the LLM API. Use - as PROMPT to read input from stdin."""
     try:
         if prompt == "-":
+            _authenticate(base_url=base_url, allow_prompt=click.get_text_stream("stdin").isatty())
             prompt = click.get_text_stream("stdin").read()
         if not prompt.strip():
             raise click.ClickException("Prompt must not be empty.")
@@ -128,9 +216,7 @@ def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: s
             base_url=base_url,
             timeout=timeout,
         )
-        if response.status_code != 200:
-            raise click.ClickException(f"LLM request failed (HTTP {response.status_code}): {response.text}")
-        result = response.json()
+        result = _response_json(response)
         if not result.get("success") or not isinstance(result.get("output"), str):
             raise click.ClickException("Server returned an invalid LLM response.")
     except (requests.RequestException, ValueError) as error:
@@ -142,13 +228,20 @@ def llm(model: str, effort: str, base_url: str | None, timeout: float, prompt: s
 
 
 @cli.command()
-def login() -> None:
+@click.option("--username", help="Account username; prompted when omitted.")
+@click.option("--base-url", help="HTTPS server URL; prompted when omitted.")
+def login(username: str | None, base_url: str | None) -> None:
     """Log in for one day without saving your password."""
-    username = click.prompt("Enter your username")
-    password = click.prompt("Enter password", hide_input=True)
-    base_url = _validate_base_url(click.prompt(
-        "Enter base URL", default=get_base_url(),
-    ))
+    _login(username=username, base_url=base_url, prompt_url=base_url is None)
+
+
+def _login(*, username=None, base_url=None, prompt_url=False):
+    saved = _load_config()
+    username = username or _prompt("Enter your username", default=saved.get("username"))
+    password = _prompt("Enter password", hide_input=True)
+    if prompt_url:
+        base_url = _prompt("Enter base URL", default=get_base_url())
+    base_url = _validate_base_url(base_url or get_base_url())
     try:
         response = requests.post(
             f"{base_url}/api/token", json={"username": username, "password": password},
@@ -156,11 +249,9 @@ def login() -> None:
         )
         if response.status_code != 200:
             raise click.ClickException(f"Login failed (HTTP {response.status_code}).")
-        result = response.json()
-        if not isinstance(result, dict):
-            raise click.ClickException("Server returned an invalid login response.")
+        result = _response_json(response)
         token, lifetime = result.get("access_token"), result.get("expires_in")
-        if not isinstance(token, str) or not token or not isinstance(lifetime, (int, float)) or lifetime <= 0:
+        if not isinstance(token, str) or not token or not isinstance(lifetime, (int, float)) or not math.isfinite(lifetime) or lifetime <= 0:
             raise click.ClickException("Server returned an invalid login response.")
         _save_config({
             "base_url": base_url, "username": username, "access_token": token,
@@ -168,7 +259,7 @@ def login() -> None:
         })
     except (requests.RequestException, ValueError, OSError) as error:
         raise click.ClickException(f"Login failed ({type(error).__name__}).") from None
-    click.echo("Logged in. API token saved for one day; your password was not saved.")
+    click.echo("Logged in. API token saved; your password was not saved.", err=True)
 
 
 @cli.command()
@@ -178,92 +269,133 @@ def logout() -> None:
     click.echo("Saved API token removed.")
 
 
-@cli.command()
-@click.argument("file", type=click.Path(exists=True))
-def upload(file: str) -> None:
-    file = Path(file)
-    if file.is_dir():
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file_obj:
-            for path in file.rglob('*'):
-                if path.is_file():
-                    zip_file_obj.write(path, arcname=path.relative_to(file))
-        zip_buffer.seek(0)
-        data = zip_buffer.read()
-        mb = len(data) / (1024 * 1024)
-        should_send = input(f"Confirm upload of {file} ({mb:.2f} MB) (y/n): ").strip().lower()
-        if should_send != 'y':
-            print("Upload cancelled.")
-            return
-        base_filename = file.with_suffix('.zip').name
-    else:
-        if not file.is_file():
-            raise ValueError(f"Invalid file: {file}")
-        with open(file, 'rb') as f:
-            data = f.read()
-        base_filename = file.name
+def _encode_upload(data):
+    return base64.b64encode(gzip.compress(data)).decode("ascii")
 
-    compressed_data = gzip.compress(data)
-    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
-    payload = {
-        "name": base_filename,
-        "data": encoded_data
-    }
-    
-    response = send_request("api/push", payload)
-    print(f"Response: {response.status_code} - {response.text}")
+
+def _prepare_upload(path: Path, max_size: int):
+    if not path.is_file() and not path.is_dir():
+        raise click.ClickException(f"Not a regular file or directory: {path}")
+    paths = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
+    size = sum(p.stat().st_size for p in paths)
+    if size > max_size:
+        raise click.ClickException(
+            f"Upload is {size:,} bytes; limit is {max_size:,}. Use --max-size to change the limit."
+        )
+    if path.is_dir() or size > ConfigManager().api_helper_upload_confirm_bytes:
+        if not _confirm(f"Upload {path} ({size:,} bytes before compression)?"):
+            raise click.ClickException("Upload cancelled.")
+    click.echo(f"Compressing {path} ({size:,} bytes)...", err=True)
+    if path.is_dir():
+        with io.BytesIO() as buffer:
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+                for item in paths:
+                    archive.write(item, arcname=item.relative_to(path))
+            data = buffer.getvalue()
+    else:
+        data = path.read_bytes()
+    # Check again in case a file changed while being read or archived.
+    if len(data) > max_size:
+        raise click.ClickException("Prepared upload exceeds --max-size.")
+    return _encode_upload(data)
+
+
+def upload_size_option(function):
+    return click.option("--max-size", type=click.IntRange(min=1),
+                        default=ConfigManager().api_helper_max_upload_bytes, show_default=True,
+                        help="Maximum size in bytes before encoding; checked before reading files.")(function)
+
+
+@cli.command()
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option("--to", "destination", help="Remote file path, or directory ending in / for multiple files.")
+@upload_size_option
+@yes_option
+def upload(files: tuple[Path, ...], destination: str | None, max_size: int) -> None:
+    """Upload FILES; directories are uploaded as ZIP archives."""
+    if destination and len(files) > 1 and not destination.endswith("/"):
+        raise click.UsageError("With multiple files, --to must be a directory ending in /.")
+    names = [(path.name or path.resolve().name) + ".zip" if path.is_dir() else path.name for path in files]
+    if len(set(names)) != len(names):
+        raise click.ClickException("Uploads have duplicate remote names; upload them separately with --to.")
+    for path, name in zip(files, names, strict=True):
+        data = _prepare_upload(path, max_size)
+        if destination:
+            name = destination + name if destination.endswith("/") else destination
+        click.echo(f"Uploading {name}...", err=True)
+        send_request("api/push", {"name": name, "data": data}, confirm_payload=False)
+        click.echo(f"Uploaded {name}.")
+
 
 @cli.command()
 @click.argument("file", type=str)
-@click.option("--raw", is_flag=True, default=False, help="print to stdout instead of saving to a file")
-def download(file: str, raw: bool) -> None:
-    response = send_request("api/pull", { "name": file })
-
-    if response.status_code == 200:
-        compressed_data = response.json().get("data")
-        if compressed_data:
-            decoded_data = base64.b64decode(compressed_data)
-            decompressed_data = gzip.decompress(decoded_data)
-            if raw:
-                sys.stdout.buffer.write(decompressed_data)
-                return
-            Path(file).parent.mkdir(parents=True, exist_ok=True)
-            with open(file, 'wb') as f:
-                f.write(decompressed_data)
-            print(f"File {file} downloaded and decompressed successfully.")
-        else:
-            print("No data received.")
-    else:
-        print(f"Failed to download file: {response.status_code} - {response.text}")
+@click.option("--raw", is_flag=True, help="Write file bytes to stdout instead of saving.")
+@click.option("-o", "--output", type=click.Path(path_type=Path), help="Local destination path.")
+@click.option("--force", is_flag=True, help="Replace an existing local file without prompting.")
+@yes_option
+def download(file: str, raw: bool, output: Path | None, force: bool) -> None:
+    """Download a remote FILE, preserving its path unless -o is supplied."""
+    if raw and output is not None:
+        raise click.UsageError("--raw and --output cannot be used together.")
+    destination = output or Path(file)
+    if not raw:
+        if destination.is_dir():
+            raise click.ClickException(f"Destination is a directory: {destination}")
+        if destination.exists() and not force and not _confirm(f"Replace {destination}?"):
+            raise click.ClickException("Download cancelled.")
+        click.echo(f"Downloading {file}...", err=True)
+    data = _download_data(send_request("api/pull", {"name": file}))
+    if raw:
+        click.get_binary_stream("stdout").write(data)
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(data)
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    click.echo(f"Downloaded {file} to {destination}.")
 
 @cli.command(name="ls")
-@click.argument('path', default='')
-def list_files(path: str) -> None:
+@click.argument("path", default="")
+@click.option("--json", "as_json", is_flag=True, help="Output directory entries as JSON.")
+def list_files(path: str, as_json: bool) -> None:
     """List immediate files and folders in PATH (default: root), newest first."""
-    response = send_request("api/list", {'path': path})
-
-    if response.status_code == 200:
-        files = response.json().get('entries')
-        if files is None:
-            raise click.ClickException('Server does not support directory listings; update the server first.')
-        files.sort(key=lambda file: datetime.fromisoformat(file['uploaded_at']).timestamp()
-                   if file.get('uploaded_at') else float('-inf'), reverse=True)
-        print("Files available (newest first):")
-        for file in files:
-            suffix = '/' if file['kind'] == 'folder' else ''
-            print(f"{file.get('uploaded_at') or 'Unknown date'}  {file['name']}{suffix}")
-    else:
-        print(f"Failed to list files: {response.status_code} - {response.text}")
+    result = _response_json(send_request("api/list", {"path": path}))
+    entries = result.get("entries")
+    if not isinstance(entries, list):
+        raise click.ClickException("Server returned an invalid directory listing; update the server if necessary.")
+    try:
+        for entry in entries:
+            if (not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+                    or entry.get("kind") not in {"file", "folder"}
+                    or not isinstance(entry.get("uploaded_at", ""), str)):
+                raise ValueError()
+        entries.sort(key=lambda entry: datetime.fromisoformat(entry["uploaded_at"]).timestamp()
+                     if entry.get("uploaded_at") else float("-inf"), reverse=True)
+    except (ValueError, TypeError, OverflowError):
+        raise click.ClickException("Server returned an invalid directory listing.") from None
+    if as_json:
+        click.echo(json.dumps(entries))
+        return
+    click.echo("Files available (newest first):")
+    for entry in entries:
+        suffix = "/" if entry["kind"] == "folder" else ""
+        size = entry.get("size")
+        size_text = f"  {size:,} bytes" if isinstance(size, int) else ""
+        click.echo(f"{entry.get('uploaded_at') or 'Unknown date'}  {entry['name']}{suffix}{size_text}")
 
 @cli.command()
 def backup() -> None:
-    response = send_request("api/backup")
-    if response.status_code == 200:
-        print("Backup completed successfully.")
-    else:
-        print(f"Failed to create backup: {response.status_code} - {response.text}")
+    send_request("api/backup")
+    click.echo("Backup completed successfully.")
 
 @cli.command()
+@yes_option
 def update() -> None:
     """
     Update the server automatically via the API, bypassing GitHub Actions.
@@ -277,8 +409,7 @@ def update() -> None:
     
     repo = Repo(".")
     if repo.is_dirty(untracked_files=True):
-        print("Repository has uncommitted changes. Please commit or stash them before updating.")
-        return
+        raise click.ClickException("Repository has uncommitted changes. Commit or stash them before updating.")
 
     origin = repo.remotes.origin
     origin.fetch()
@@ -286,27 +417,23 @@ def update() -> None:
     remote_commit = origin.refs.main.commit
 
     payload = {}
-    prompt = "Ask server to pull the latest main? (y/n): "
+    prompt = "Ask server to pull the latest main?"
     if local_commit.hexsha != remote_commit.hexsha:
         ahead_commits = list(repo.iter_commits(f'{remote_commit.hexsha}..{local_commit.hexsha}'))
         if len(ahead_commits) <= 0:
-            print("Invalid git state detected, aborting update")
-            return
+            raise click.ClickException("Local HEAD is not ahead of origin/main; update aborted.")
         payload["patch"] = repo.git.format_patch(f"{remote_commit.hexsha}..{local_commit.hexsha}", stdout=True)
-        prompt = f"Apply update with {len(ahead_commits)} commits ahead? (y/n): "
+        prompt = f"Apply update with {len(ahead_commits)} commits ahead?"
     
-    if input(prompt).strip().lower() != 'y':
+    if not _confirm(prompt):
         print("Update cancelled.")
         return
     
-    response = send_request("api/update", payload)
-
-    if response.status_code == 200:
-        print("Update requested successfully.")
-    else:
-        print(f"Failed to request update: {response.status_code} - {response.text}")
+    send_request("api/update", payload, confirm_payload=False)
+    click.echo("Update requested successfully.")
 
 @cli.command()
+@yes_option
 def upload_commit_patches() -> None:
     """
     Generates and uploads commit patches for all commits between the tracking branch and current branch (assuming current is ahead)
@@ -314,8 +441,7 @@ def upload_commit_patches() -> None:
     
     repo = Repo(".")
     if repo.is_dirty(untracked_files=True):
-        print("Repository has uncommitted changes. Please commit or stash them before generating patches.")
-        return
+        raise click.ClickException("Repository has uncommitted changes. Commit or stash them before generating patches.")
 
     origin = repo.remotes.origin
     origin.fetch()
@@ -324,8 +450,7 @@ def upload_commit_patches() -> None:
     tracking_branch = current_branch.tracking_branch()
     
     if tracking_branch is None:
-        print(f"Current branch '{current_branch.name}' has no tracking branch set.")
-        return
+        raise click.ClickException(f"Current branch '{current_branch.name}' has no tracking branch set.")
 
     local_commit = repo.head.commit
     remote_commit = tracking_branch.commit
@@ -350,120 +475,76 @@ def upload_commit_patches() -> None:
     zip_buffer.seek(0)
     zip_data = zip_buffer.read()
 
-    if input(f"Upload {len(ahead_commits)} patches? (y/n): ").strip().lower() != 'y':
+    if not _confirm(f"Upload {len(ahead_commits)} patches?"):
         print("Upload cancelled.")
         return
     
-    response = send_request("api/push", {
-        "name": "_commit_patches.zip",
-        "data": base64.b64encode(gzip.compress(zip_data)).decode('ascii')
-    })
+    send_request("api/push", {
+        "name": ConfigManager().api_helper_patch_archive,
+        "data": _encode_upload(zip_data)
+    }, confirm_payload=False)
     
-    if response.status_code == 200:
-        print("Patches uploaded successfully.")
-    else:
-        print(f"Failed to upload patches: {response.status_code} - {response.text}")
+    click.echo("Patches uploaded successfully.")
 
 @cli.command()
+@yes_option
 def apply_remote_patches() -> None:
-    """
-    Downloads patch file from the server and applies it to the current repo
-    """
-    
+    """Download and apply patches; earlier successful patches remain if a later one fails."""
     repo = Repo(".")
     if repo.is_dirty(untracked_files=True):
-        print("Repository has uncommitted changes. Please commit or stash them before applying patches.")
+        raise click.ClickException("Repository has uncommitted changes. Commit or stash them before applying patches.")
+    response = send_request("api/pull", {"name": ConfigManager().api_helper_patch_archive})
+    with zipfile.ZipFile(io.BytesIO(_download_data(response))) as archive:
+        names = sorted(archive.namelist())
+        if not names or any(not name.endswith(".patch") for name in names):
+            raise click.ClickException("Archive must contain patch files only and must not be empty.")
+        patches = [(name, archive.read(name).decode("utf-8")) for name in names]
+    if not _confirm(f"Apply {len(patches)} patches?"):
+        click.echo("Apply cancelled.")
         return
-
-    # Download the patch file from server
-    response = send_request("api/pull", { "name": "_commit_patches.zip" })
-
-    if response.status_code != 200:
-        print(f"Failed to download patches: {response.status_code} - {response.text}")
-        return
-
-    compressed_data = response.json().get("data")
-    if not compressed_data:
-        print("No patch data received.")
-        return
-
-    # Decompress and decode
-    decoded_data = base64.b64decode(compressed_data)
-    decompressed_data = gzip.decompress(decoded_data)
-
-    # Extract patches from zip
-    zip_buffer = io.BytesIO(decompressed_data)
-    patch_files = []
-    with zipfile.ZipFile(zip_buffer, 'r') as zip_file_obj:
-        patch_files = sorted(zip_file_obj.namelist())
-        print(f"Found {len(patch_files)} patches to apply.")
-        
-        if len(patch_files) == 0:
-            print("No patches found in archive.")
-            return
-        
-        # Confirm before applying
-        if input(f"Apply {len(patch_files)} patches? (y/n): ").strip().lower() != 'y':
-            print("Apply cancelled.")
-            return
-        
-        # Apply each patch
-        for patch_filename in patch_files:
-            patch_data = zip_file_obj.read(patch_filename).decode('utf-8')
+    applied = 0
+    for name, patch in patches:
+        try:
+            subprocess.run(["git", "am"], input=patch, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as error:
+            details = (error.stderr or error.stdout or str(error)).strip()
             try:
-                run_result = subprocess.run(['git', 'am'], 
-                                input=patch_data, 
-                                check=True, 
-                                capture_output=True,
-                                text=True)
-                print(run_result.stderr, run_result.stdout)
-                print(f"✓ Applied {patch_filename}")
-            except Exception as e:
-                print(f"✗ Failed to apply {patch_filename}: {e}")
-                # Optionally abort the am process on first failure
-                try:
-                    repo.git.am(abort=True)
-                except:
-                    pass
-                return
-        
-        print(f"Successfully applied all {len(patch_files)} patches.")
+                repo.git.am(abort=True)
+                recovery = "Failed patch aborted."
+            except GitError as abort_error:
+                recovery = f"Could not abort: {abort_error}. Inspect git status and run git am --abort."
+            raise click.ClickException(
+                f"Failed to apply {name}: {details}\n{recovery}\n"
+                f"{applied} earlier patch(es) remain committed; remaining patches were not applied."
+            ) from None
+        applied += 1
+        click.echo(f"Applied {name}.")
+    click.echo(f"Successfully applied all {applied} patches.")
 
 @cli.command()
 @click.argument("file", type=str)
 def delete_file(file: str) -> None:
-    response = send_request("api/delete", {"name": file})
-
-    if response.status_code == 200:
-        print(f"File {file} deleted successfully.")
-    else:
-        print(f"Failed to delete file: {response.status_code} - {response.text}")
+    send_request("api/delete", {"name": file})
+    click.echo(f"File {file} deleted successfully.")
 
 @cli.command()
 @click.option(
     "--browser",
-    default="chrome",
+    default=ConfigManager().api_helper_default_browser,
     show_default=True,
     help="Browser name (chrome, firefox, edge, etc.)",
 )
 @click.option(
     "--profile",
-    default="Profile 1",
+    default=ConfigManager().api_helper_default_browser_profile,
     show_default=True,
     help="Browser profile name",
 )
+@yes_option
 def sync_cookies(browser: str, profile: str | None) -> None:
     """
     Export YouTube cookies from the specified browser and upload to the server.
     """
-
-    YOUTUBE_DOMAINS = {
-        ".youtube.com",
-        "youtube.com",
-        ".google.com",
-        "google.com",
-        ".googlevideo.com",
-    }
 
     def cookie_to_netscape(cookie) -> str:
         secure = "TRUE" if cookie.secure else "FALSE"
@@ -483,69 +564,54 @@ def sync_cookies(browser: str, profile: str | None) -> None:
 
         for cookie in jar:
             domain = cookie.domain.lower()
-            if any(domain.endswith(yt) or domain == yt.lstrip(".") for yt in YOUTUBE_DOMAINS):
+            if any(domain == yt or domain.endswith("." + yt) for yt in ConfigManager().api_helper_cookie_domains):
                 lines.append(cookie_to_netscape(cookie))
                 filtered_count += 1
 
         return "\n".join(lines) + "\n", filtered_count
 
     
-    cookie_text, filtered_count = export_yt_cookies_from_browser(browser, profile)
+    try:
+        cookie_text, filtered_count = export_yt_cookies_from_browser(browser, profile)
+    except (CookieLoadError, DownloadError) as error:
+        raise click.ClickException(
+            f"Cannot read browser cookies ({type(error).__name__}); check --browser and --profile."
+        ) from None
 
     if filtered_count <= 0:
-        print("No YouTube cookies found to export.", file=sys.stderr)
-        return
+        raise click.ClickException("No YouTube cookies found to export.")
 
-    response = send_request("api/push_cookie", {"cookie": cookie_text})
-
-    if response.status_code == 200:
-        print(f"Exported {filtered_count} YouTube cookies and uploaded to server.")
-    else:
-        print(
-            f"Exported {filtered_count} YouTube cookies but upload failed: "
-            f"{response.status_code} - {response.text}"
-        )
+    send_request("api/push_cookie", {"cookie": cookie_text})
+    click.echo(f"Exported {filtered_count} YouTube cookies and uploaded to server.")
 
 @cli.command()
-@click.argument("post_folder", type=click.Path(exists=True))
+@click.argument("post_folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--project", required=True, help="Project name for the post")
 @click.option("--name", "post_name", default=None, help="Post name (defaults to folder name)")
-@click.option("--date", default=None, help="Override post date (ISO format, e.g. 2024-03-15T10:00:00)")
-def upload_post(post_folder: str, project: str, post_name: str | None, date: str | None) -> None:
-    post_path = Path(post_folder)
-    if not post_path.is_dir():
-        print(f"Error: {post_folder} is not a directory", file=sys.stderr)
-        sys.exit(1)
-
-    if post_name is None:
-        post_name = post_path.name
-
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for path in post_path.rglob('*'):
-            if path.is_file():
-                zf.write(path, arcname=path.relative_to(post_path))
-    zip_buffer.seek(0)
-    data = zip_buffer.read()
-
-    compressed_data = gzip.compress(data)
-    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
-
-    mb = len(data) / (1024 * 1024)
-    print(f"Uploading post '{post_name}' to project '{project}' ({mb:.2f} MB)")
-
-    payload = {"project": project, "post_name": post_name, "data": encoded_data}
+@click.option("--date", default=None, help="Override post date in ISO format")
+@upload_size_option
+@yes_option
+def upload_post(post_folder: Path, project: str, post_name: str | None, date: str | None, max_size: int) -> None:
+    if date:
+        try:
+            datetime.fromisoformat(date)
+        except ValueError:
+            raise click.BadParameter("Use an ISO date, e.g. 2026-11-04T10:00:00.", param_hint="--date") from None
+    data = _prepare_upload(post_folder, max_size)
+    post_name = post_name or post_folder.name
+    click.echo(f"Uploading post '{post_name}' to project '{project}'...", err=True)
+    payload = {"project": project, "post_name": post_name, "data": data}
     if date:
         payload["date"] = date
-    response = send_request("loft/api/upload_post", payload)
-    print(f"Response: {response.status_code} - {response.text}")
+    send_request("loft/api/upload_post", payload, confirm_payload=False)
+    click.echo(f"Uploaded post '{post_name}'.")
 
 @cli.command(name="sync-data-from-prod")
 @click.option("--dest", default=str(Path.home()), show_default=True,
               help="Local destination directory (receives .nabicat/)")
 @click.option("--dry-run", is_flag=True, default=False,
               help="Show what would be transferred without copying")
-@click.option("--exclude", multiple=True, default=("backups/", "data/logs/"),
+@click.option("--exclude", multiple=True, default=ConfigManager().api_helper_sync_excludes,
               show_default=True, help="Rsync exclusion pattern; repeat to supply multiple patterns.")
 def sync_data_from_prod(dest: str, dry_run: bool, exclude: tuple[str, ...]) -> None:
     """
@@ -558,7 +624,7 @@ def sync_data_from_prod(dest: str, dry_run: bool, exclude: tuple[str, ...]) -> N
     )
     if dry_run:
         cmd.append("--dry-run")
-    cmd += ["nabicat.site:~/.nabicat", dest]
+    cmd += [ConfigManager().api_helper_sync_source, dest]
     print("$", " ".join(cmd))
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
@@ -571,7 +637,7 @@ def show_config() -> None:
     click.echo(f"Base URL: {get_base_url()}")
     click.echo(f"Username: {saved.get('username') or '(not set)'}")
     expires_at = saved.get("expires_at")
-    if isinstance(expires_at, (int, float)):
+    if isinstance(expires_at, (int, float)) and math.isfinite(expires_at):
         expiry = datetime.fromtimestamp(expires_at).astimezone().isoformat()
         state = "expired" if time.time() >= expires_at else "valid"
         click.echo(f"Token: {state}; expires {expiry}")

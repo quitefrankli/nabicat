@@ -344,6 +344,7 @@ def api_list():
         entries = [
             {
                 'name': item['name'], 'path': item['path'], 'kind': item['kind'],
+                'size': item.get('size'),
                 'uploaded_at': datetime.fromtimestamp(item['_modified']).isoformat()
                 if item['_modified'] != float('-inf') else '',
             }

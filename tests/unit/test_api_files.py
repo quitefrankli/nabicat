@@ -66,6 +66,8 @@ def test_list_directory_shows_only_immediate_files_and_folders(storage):
     nested = request('list', path='docs').json['entries']
     assert {(item['name'], item['kind']) for item in nested} == {('notes.txt', 'file'), ('deep', 'folder')}
     assert all(item['uploaded_at'] for item in nested)
+    assert next(item for item in nested if item['name'] == 'notes.txt')['size'] == 14
+    assert next(item for item in nested if item['name'] == 'deep')['size'] is None
     assert request('list', path='../outside').status_code == 400
     assert request('list', path=42).status_code == 400
 

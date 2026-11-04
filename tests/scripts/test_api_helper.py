@@ -47,7 +47,7 @@ def test_update_selects_pull_or_patch_and_requires_confirmation(helper, monkeypa
     result = CliRunner().invoke(helper.cli, ["update"], input=answer + "\n")
     assert result.exit_code == 0, result.output
     if answer == "y":
-        send.assert_called_once_with("api/update", {"patch": "patch contents\n"} if ahead else {})
+        send.assert_called_once_with("api/update", {"patch": "patch contents\n"} if ahead else {}, confirm_payload=False)
         assert "Update requested" in result.output
     else:
         send.assert_not_called()
@@ -174,7 +174,9 @@ def test_network_failures_are_cli_errors(monkeypatch, helper, command, error):
 
 @pytest.mark.parametrize("timeout", [None, 42.0])
 def test_api_request_has_timeout_and_handles_network_failure(monkeypatch, helper, timeout):
-    post = MagicMock()
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"success": True}
+    post = MagicMock(return_value=response)
     monkeypatch.setattr(helper.requests, "post", post)
     kwargs = {} if timeout is None else {"timeout": timeout}
     helper.send_request("api/list", base_url="https://saved.invalid", **kwargs)
@@ -184,7 +186,7 @@ def test_api_request_has_timeout_and_handles_network_failure(monkeypatch, helper
         helper.send_request("api/list", base_url="https://saved.invalid", **kwargs)
 
 
-@pytest.mark.parametrize("failure", ["expired", "other-server", "http"])
+@pytest.mark.parametrize("failure", ["other-server", "http"])
 def test_token_is_not_sent_when_expired_or_server_does_not_match(helper, monkeypatch, failure):
     from web_app.config import ConfigManager
 
@@ -213,7 +215,7 @@ def test_server_rejection_prompts_for_login_and_does_not_retry(helper, monkeypat
     assert post.call_args.kwargs["allow_redirects"] is False
 
 
-def test_config_and_logout_do_not_expose_token(helper):
+def test_config_and_logout_do_not_expose_token(helper, monkeypatch):
     from web_app.config import ConfigManager
 
     runner = CliRunner()
@@ -224,6 +226,321 @@ def test_config_and_logout_do_not_expose_token(helper):
     result = runner.invoke(helper.cli, ["logout"])
     assert result.exit_code == 0, result.output
     assert not ConfigManager().api_helper_config_path.exists()
+    monkeypatch.setattr(helper.click, "prompt", MagicMock(side_effect=helper.click.Abort))
     result = runner.invoke(helper.cli, ["ls"])
     assert result.exit_code == 1
     assert "api-helper login" in result.output
+
+
+def api_response(body, status=200):
+    response = requests.Response()
+    response.status_code = status
+    response._content = json.dumps(body).encode()
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+
+@pytest.mark.parametrize('state', ['missing', 'expired'])
+def test_command_logs_in_and_continues_without_saving_password(helper, monkeypatch, state):
+    from web_app.config import ConfigManager
+
+    path = ConfigManager().api_helper_config_path
+    if state == 'missing':
+        path.unlink()
+    else:
+        saved = json.loads(path.read_text())
+        saved['expires_at'] = 0
+        path.write_text(json.dumps(saved))
+    post = MagicMock(side_effect=[
+        api_response({'access_token': 'fresh-token', 'expires_in': 86400}),
+        api_response({'success': True, 'entries': []}),
+    ])
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['ls', '--json'], input='alice\nsecret-password\n')
+    assert result.exit_code == 0, (result.stdout + result.stderr)
+    assert json.loads(result.stdout) == []
+    assert post.call_args_list[0].kwargs['json'] == {'username': 'alice', 'password': 'secret-password'}
+    assert post.call_args_list[1].kwargs['headers'] == {'Authorization': 'Bearer fresh-token'}
+    assert 'secret-password' not in path.read_text()
+    assert 'secret-password' not in (result.stdout + result.stderr)
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_login_options_and_rejected_credentials_stop_original_command(helper, monkeypatch):
+    post = MagicMock(return_value=api_response({'error': 'invalid credentials'}, 401))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['login', '--username', 'alice', '--base-url', 'https://other.invalid'], input='wrong-password\n')
+    assert result.exit_code == 1
+    assert 'Login failed (HTTP 401)' in (result.stdout + result.stderr)
+    assert post.call_args.args == ('https://other.invalid/api/token',)
+    assert 'wrong-password' not in (result.stdout + result.stderr)
+
+    from web_app.config import ConfigManager
+    ConfigManager().api_helper_config_path.unlink()
+    post.reset_mock()
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['ls'], input='alice\nwrong-password\n')
+    assert result.exit_code == 1
+    assert post.call_count == 1
+
+
+@pytest.mark.parametrize('command', [['backup'], ['delete-file', 'notes.txt'], ['upload', 'notes.txt']])
+@pytest.mark.parametrize('status', [403, 500])
+def test_server_failure_has_nonzero_exit(helper, monkeypatch, tmp_path, command, status):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'notes.txt').write_text('notes')
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response({'error': 'rejected'}, status)))
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, command)
+    assert result.exit_code == 1
+    assert f'HTTP {status}' in (result.stdout + result.stderr)
+    assert isinstance(result.exception, SystemExit)
+
+
+@pytest.mark.parametrize('arguments,body,message', [
+    (['ls'], [], 'expected an object'),
+    (['ls'], {'entries': [None]}, 'invalid directory listing'),
+    (['ls'], {'entries': [{'name': 'a', 'kind': 'file', 'uploaded_at': 'bad-date'}]}, 'invalid directory listing'),
+    (['download', 'notes'], {'data': 'not-base64'}, 'corrupt file data'),
+    (['download', 'notes'], {'data': base64.b64encode(b'not gzip').decode()}, 'corrupt file data'),
+    (['download', 'notes'], {'data': None}, 'invalid file response'),
+    (['backup'], {'success': False, 'error': 'operation rejected'}, 'operation rejected'),
+])
+def test_invalid_responses_are_readable_errors(helper, monkeypatch, tmp_path, arguments, body, message):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response(body)))
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, arguments)
+    assert result.exit_code == 1
+    assert message in (result.stdout + result.stderr)
+    assert isinstance(result.exception, SystemExit)
+    assert not (tmp_path / 'notes').exists()
+
+
+@pytest.mark.parametrize('yes_position', ['global', 'command'])
+def test_multiple_uploads_preserve_contents_and_directory_suffix(helper, monkeypatch, tmp_path, yes_position):
+    first = tmp_path / 'notes.txt'
+    first.write_bytes(b'notes')
+    folder = tmp_path / 'reports.v2'
+    folder.mkdir()
+    (folder / 'nested.txt').write_bytes(b'report')
+    post = MagicMock(return_value=api_response({'success': True}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    args = ['upload', str(first), str(folder), '--to', 'travel/']
+    args = ['--yes', *args] if yes_position == 'global' else [*args, '--yes']
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, args)
+    assert result.exit_code == 0, (result.stdout + result.stderr)
+    uploaded = {call.kwargs['json']['name']: gzip.decompress(base64.b64decode(call.kwargs['json']['data'])) for call in post.call_args_list}
+    assert uploaded['travel/notes.txt'] == b'notes'
+    with helper.zipfile.ZipFile(io.BytesIO(uploaded['travel/reports.v2.zip'])) as archive:
+        assert archive.namelist() == ['nested.txt']
+        assert archive.read('nested.txt') == b'report'
+    assert 'Compressing' in result.stderr
+    assert 'Uploading' in result.stderr
+
+
+def test_upload_destination_and_size_are_checked_before_sending(helper, monkeypatch, tmp_path):
+    first = tmp_path / 'a.txt'
+    second = tmp_path / 'b.txt'
+    first.write_bytes(b'12345')
+    second.write_bytes(b'other')
+    post = MagicMock(return_value=api_response({'success': True}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(helper.cli, ['upload', str(first), str(second), '--to', 'one.txt'])
+    assert result.exit_code == 2
+    result = runner.invoke(helper.cli, ['upload', str(first), '--max-size', '4'])
+    assert result.exit_code == 1
+    assert 'limit is 4' in (result.stdout + result.stderr)
+    post.assert_not_called()
+    result = runner.invoke(helper.cli, ['upload', str(first), '--to', 'renamed.txt', '--max-size', '5'])
+    assert result.exit_code == 0, (result.stdout + result.stderr)
+    assert post.call_args.kwargs['json']['name'] == 'renamed.txt'
+
+
+@pytest.mark.parametrize('options,answer,expected', [
+    ([], 'n\n', b'original'),
+    ([], 'y\n', b'new data'),
+    (['--force'], '', b'new data'),
+    (['--yes'], '', b'new data'),
+])
+def test_download_output_protects_existing_files(helper, monkeypatch, tmp_path, options, answer, expected):
+    target = tmp_path / 'local.txt'
+    target.write_bytes(b'original')
+    post = MagicMock(return_value=api_response({'data': base64.b64encode(gzip.compress(b'new data')).decode()}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['download', 'remote/file.txt', '-o', str(target), *options], input=answer)
+    assert result.exit_code == (1 if answer == 'n\n' else 0), (result.stdout + result.stderr)
+    assert target.read_bytes() == expected
+    if answer == 'n\n':
+        post.assert_not_called()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['api-helper.json', 'local.txt']
+
+
+def test_failed_atomic_download_preserves_original_and_cleans_up(helper, monkeypatch, tmp_path):
+    target = tmp_path / 'local.txt'
+    target.write_bytes(b'original')
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response({'data': base64.b64encode(gzip.compress(b'new')).decode()})))
+    monkeypatch.setattr(helper.os, 'replace', MagicMock(side_effect=OSError('disk failure')))
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['download', 'remote.txt', '-o', str(target), '--force'])
+    assert result.exit_code == 1
+    assert 'disk failure' in (result.stdout + result.stderr)
+    assert target.read_bytes() == b'original'
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['api-helper.json', 'local.txt']
+
+
+def test_raw_download_and_json_listing_keep_stdout_machine_readable(helper, monkeypatch):
+    entries = [{'name': 'a.txt', 'kind': 'file', 'uploaded_at': '', 'size': 1234}]
+    post = MagicMock(side_effect=[
+        api_response({'data': base64.b64encode(gzip.compress(b'\x00binary\xff')).decode()}),
+        api_response({'entries': entries}), api_response({'entries': entries}),
+    ])
+    monkeypatch.setattr(helper.requests, 'post', post)
+    runner = CliRunner(mix_stderr=False)
+    assert runner.invoke(helper.cli, ['download', 'a.txt', '--raw']).stdout_bytes == b'\x00binary\xff'
+    assert json.loads(runner.invoke(helper.cli, ['ls', '--json']).stdout) == entries
+    assert '1,234 bytes' in runner.invoke(helper.cli, ['ls']).stdout
+
+
+def test_stdin_llm_does_not_consume_prompt_as_login_credentials(helper, monkeypatch):
+    from web_app.config import ConfigManager
+    ConfigManager().api_helper_config_path.unlink()
+    post = MagicMock()
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['llm', '-'], input='private prompt text\n')
+    assert result.exit_code == 1
+    assert "api-helper login" in (result.stdout + result.stderr)
+    assert 'private prompt text' not in (result.stdout + result.stderr)
+    post.assert_not_called()
+
+
+def test_patch_failure_reports_committed_prefix_and_aborts_failed_patch(helper, monkeypatch, tmp_path):
+    from git import Repo
+
+    source = Repo.init(tmp_path / 'source')
+    with source.config_writer() as config:
+        config.set_value('user', 'name', 'Test User').set_value('user', 'email', 'test@example.invalid')
+    shared = Path(source.working_tree_dir) / 'shared.txt'
+    shared.write_text('base\n')
+    source.index.add(['shared.txt'])
+    source.index.commit('Base')
+    target = Repo.clone_from(source.working_tree_dir, tmp_path / 'target')
+    with target.config_writer() as config:
+        config.set_value('user', 'name', 'Test User').set_value('user', 'email', 'test@example.invalid')
+    (Path(target.working_tree_dir) / 'shared.txt').write_text('local change\n')
+    target.index.add(['shared.txt'])
+    target.index.commit('Local change')
+
+    (Path(source.working_tree_dir) / 'new.txt').write_text('first patch\n')
+    source.index.add(['new.txt'])
+    first = source.index.commit('First patch')
+    shared.write_text('conflicting change\n')
+    source.index.add(['shared.txt'])
+    second = source.index.commit('Conflicting patch')
+    with io.BytesIO() as buffer:
+        with helper.zipfile.ZipFile(buffer, 'w') as archive:
+            for index, commit in enumerate([first, second], start=1):
+                archive.writestr(f'{index:04d}.patch', source.git.format_patch('-1', commit.hexsha, stdout=True))
+        encoded = base64.b64encode(gzip.compress(buffer.getvalue())).decode()
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response({'data': encoded})))
+    monkeypatch.chdir(target.working_tree_dir)
+    result = CliRunner(mix_stderr=False).invoke(helper.cli, ['apply-remote-patches', '--yes'])
+    assert result.exit_code == 1, (result.stdout + result.stderr)
+    assert 'Failed to apply 0002.patch' in (result.stdout + result.stderr)
+    assert '1 earlier patch(es) remain committed' in (result.stdout + result.stderr)
+    assert 'Failed patch aborted' in (result.stdout + result.stderr)
+    assert target.head.commit.message.strip() == 'First patch'
+    assert (Path(target.working_tree_dir) / 'new.txt').read_text() == 'first patch\n'
+    assert (Path(target.working_tree_dir) / 'shared.txt').read_text() == 'local change\n'
+    assert not target.is_dirty(untracked_files=True)
+    assert not (Path(target.git_dir) / 'rebase-apply').exists()
+
+
+def test_invalid_json_response_is_a_cli_error(helper, monkeypatch):
+    response = api_response({})
+    response._content = b'<html>upstream error</html>'
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=response))
+    result = CliRunner().invoke(helper.cli, ['backup'])
+    assert result.exit_code == 1
+    assert 'Server returned invalid JSON' in result.output
+    assert isinstance(result.exception, SystemExit)
+
+
+def test_post_upload_uses_shared_archive_checks_and_preserves_metadata(helper, monkeypatch, tmp_path):
+    folder = tmp_path / 'post.v2'
+    folder.mkdir()
+    (folder / 'index.html').write_text('post content')
+    post = MagicMock(return_value=api_response({'success': True}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    runner = CliRunner()
+    args = ['upload-post', str(folder), '--project', 'travel', '--name', 'my-post', '--yes']
+    result = runner.invoke(helper.cli, [*args, '--date', 'invalid-date'])
+    assert result.exit_code == 2
+    post.assert_not_called()
+    result = runner.invoke(helper.cli, [*args, '--max-size', '1'])
+    assert result.exit_code == 1
+    post.assert_not_called()
+    result = runner.invoke(helper.cli, [*args, '--date', '2026-11-04'])
+    assert result.exit_code == 0, result.output
+    payload = post.call_args.kwargs['json']
+    assert (payload['project'], payload['post_name'], payload['date']) == ('travel', 'my-post', '2026-11-04')
+    with helper.zipfile.ZipFile(io.BytesIO(gzip.decompress(base64.b64decode(payload['data'])))) as archive:
+        assert archive.read('index.html') == b'post content'
+
+
+def test_large_payload_confirmation_can_be_accepted_or_skipped(helper, monkeypatch):
+    from web_app.config import ConfigManager
+    monkeypatch.setattr(ConfigManager(), 'api_helper_payload_confirm_bytes', 1)
+    post = MagicMock(return_value=api_response({'success': True, 'output': 'answer'}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    runner = CliRunner()
+    result = runner.invoke(helper.cli, ['llm', 'hello'], input='n\n')
+    assert result.exit_code == 1
+    post.assert_not_called()
+    for options, answer in [([], 'y\n'), (['--yes'], '')]:
+        result = runner.invoke(helper.cli, ['llm', 'hello', *options], input=answer)
+        assert result.exit_code == 0, result.output
+    assert post.call_count == 2
+
+
+def test_cookie_sync_only_sends_supported_domains_and_reports_browser_failure(helper, monkeypatch):
+    from types import SimpleNamespace
+
+    cookies = [SimpleNamespace(domain=domain, secure=True, path='/', expires=None, name='cookie', value=domain)
+               for domain in ['.youtube.com', 'accounts.google.com', 'evilyoutube.com']]
+    extract = MagicMock(return_value=cookies)
+    post = MagicMock(return_value=api_response({'success': True}))
+    monkeypatch.setattr(helper, 'extract_cookies_from_browser', extract)
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner().invoke(helper.cli, ['sync-cookies', '--yes'])
+    assert result.exit_code == 0, result.output
+    content = post.call_args.kwargs['json']['cookie']
+    assert '.youtube.com' in content
+    assert 'accounts.google.com' in content
+    assert 'evilyoutube.com' not in content
+    extract.side_effect = helper.CookieLoadError('unavailable')
+    result = CliRunner().invoke(helper.cli, ['sync-cookies', '--yes'])
+    assert result.exit_code == 1
+    assert 'Cannot read browser cookies' in result.output
+    assert post.call_count == 1
+
+
+def test_upload_current_directory_uses_its_actual_name(helper, monkeypatch, tmp_path):
+    folder = tmp_path / 'reports.v2'
+    folder.mkdir()
+    (folder / 'notes.txt').write_text('notes')
+    monkeypatch.chdir(folder)
+    post = MagicMock(return_value=api_response({'success': True}))
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner().invoke(helper.cli, ['upload', '.', '--yes'])
+    assert result.exit_code == 0, result.output
+    assert post.call_args.kwargs['json']['name'] == 'reports.v2.zip'
+
+
+@pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='Requires POSIX named pipes')
+def test_upload_rejects_special_files(helper, monkeypatch, tmp_path):
+    pipe = tmp_path / 'pipe'
+    os.mkfifo(pipe)
+    post = MagicMock()
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner().invoke(helper.cli, ['upload', str(pipe)])
+    assert result.exit_code == 1
+    assert 'Not a regular file or directory' in result.output
+    post.assert_not_called()

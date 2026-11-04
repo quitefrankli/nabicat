@@ -8,8 +8,6 @@
 
 * Don't add any documentation files unless explicitly asked to.
 
-* Do test driven development, when unit/integration tests are appropriate, first write the test that defines the expected behavior, then implement the code to pass the test.
-
 * DO NOT write superfluous tests (ie. constructors), prefer fewer but higher quality tests, the more end-2-end the better
 
 * Constants belong in `config.py`: any named constant (limits, counts, timeouts, feature flags, model names, etc.) must be defined as an attribute of `ConfigManager` in `web_app/config.py`, not hardcoded at call sites.

@@ -783,6 +783,16 @@ class ConfigManager:
         self.api_helper_default_base_url = "https://nabicat.site"
         self.api_helper_login_timeout_s = 10.0
         self.api_helper_payload_confirm_bytes = 1000
+        self.api_helper_upload_confirm_bytes = 10 * 1024 * 1024
+        self.api_helper_max_upload_bytes = 100 * 1024 * 1024
+        self.api_helper_default_model = "gpt-6-luna"
+        self.api_helper_default_effort = "low"
+        self.api_helper_default_browser = "chrome"
+        self.api_helper_default_browser_profile = "Profile 1"
+        self.api_helper_cookie_domains = ("youtube.com", "google.com", "googlevideo.com")
+        self.api_helper_patch_archive = "_commit_patches.zip"
+        self.api_helper_sync_source = "nabicat.site:~/.nabicat"
+        self.api_helper_sync_excludes = ("backups/", "data/logs/")
         self.api_llm_timeout_s = 120.0
         self.api_llm_client_timeout_s = 130.0
         self.api_llm_approval_policy = "never"
