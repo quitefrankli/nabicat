@@ -13,7 +13,7 @@ import time
 import binascii
 import math
 import zlib
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from urllib.parse import urlsplit
 from datetime import datetime
 
@@ -158,6 +158,37 @@ def get_base_url() -> str:
     return _validate_base_url(_load_config().get("base_url") or ConfigManager().api_helper_default_base_url)
 
 
+class UploadStream(io.BytesIO):
+    """Report bytes as Requests reads the encoded request body."""
+
+    def __init__(self, data, progress):
+        super().__init__(data)
+        self.progress = progress
+
+    def read(self, size=-1):
+        data = super().read(size)
+        self.progress.update(len(data))
+        return data
+
+
+def _receive_download(response):
+    # iter_content decodes HTTP compression, so Content-Length is only useful
+    # when it describes the same bytes that the progress bar counts.
+    length = response.headers.get("Content-Length", "")
+    total = int(length) if length.isdigit() and not response.headers.get("Content-Encoding") else None
+    chunks = response.iter_content(ConfigManager().api_helper_transfer_chunk_bytes)
+    with response, io.BytesIO() as body, click.progressbar(
+        iterable=chunks, length=total, label="Downloading", file=click.get_text_stream("stderr"),
+        show_pos=True,
+    ) as progress:
+        for chunk in chunks:
+            body.write(chunk)
+            progress.update(len(chunk))
+        # Preserve the normal Response interface for JSON validation and callers.
+        response._content = body.getvalue()
+        response._content_consumed = True
+
+
 def send_request(
     endpoint: str, payload: dict | None = None,
     *, base_url: str | None = None, timeout: float | None = None,
@@ -170,12 +201,26 @@ def send_request(
         if not _confirm(f"Send payload ({payload_size:,} bytes)?"):
             raise click.ClickException("Request cancelled.")
     try:
-        response = requests.post(
-            f"{target}/{endpoint}", json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=timeout if timeout is not None else ConfigManager().api_llm_client_timeout_s,
-            allow_redirects=False,
-        )
+        with ExitStack() as stack:
+            headers = {"Authorization": f"Bearer {token}"}
+            options = {"json": payload}
+            if endpoint in {"api/push", "loft/api/upload_post"}:
+                body = json.dumps(payload, allow_nan=False).encode("utf-8")
+                progress = stack.enter_context(click.progressbar(
+                    length=len(body), label="Uploading", file=click.get_text_stream("stderr"),
+                    show_pos=True,
+                ))
+                options = {"data": stack.enter_context(UploadStream(body, progress))}
+                headers["Content-Type"] = "application/json"
+            if endpoint == "api/pull":
+                options["stream"] = True
+            response = requests.post(
+                f"{target}/{endpoint}", **options, headers=headers,
+                timeout=timeout if timeout is not None else ConfigManager().api_llm_client_timeout_s,
+                allow_redirects=False,
+            )
+        if endpoint == "api/pull":
+            _receive_download(response)
     except requests.RequestException as error:
         raise click.ClickException(f"API request failed ({type(error).__name__}).") from None
     if response.status_code == 401:
@@ -273,15 +318,11 @@ def _encode_upload(data):
     return base64.b64encode(gzip.compress(data)).decode("ascii")
 
 
-def _prepare_upload(path: Path, max_size: int):
+def _prepare_upload(path: Path):
     if not path.is_file() and not path.is_dir():
         raise click.ClickException(f"Not a regular file or directory: {path}")
     paths = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
     size = sum(p.stat().st_size for p in paths)
-    if size > max_size:
-        raise click.ClickException(
-            f"Upload is {size:,} bytes; limit is {max_size:,}. Use --max-size to change the limit."
-        )
     if path.is_dir() or size > ConfigManager().api_helper_upload_confirm_bytes:
         if not _confirm(f"Upload {path} ({size:,} bytes before compression)?"):
             raise click.ClickException("Upload cancelled.")
@@ -294,24 +335,14 @@ def _prepare_upload(path: Path, max_size: int):
             data = buffer.getvalue()
     else:
         data = path.read_bytes()
-    # Check again in case a file changed while being read or archived.
-    if len(data) > max_size:
-        raise click.ClickException("Prepared upload exceeds --max-size.")
     return _encode_upload(data)
-
-
-def upload_size_option(function):
-    return click.option("--max-size", type=click.IntRange(min=1),
-                        default=ConfigManager().api_helper_max_upload_bytes, show_default=True,
-                        help="Maximum size in bytes before encoding; checked before reading files.")(function)
 
 
 @cli.command()
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
 @click.option("--to", "destination", help="Remote file path, or directory ending in / for multiple files.")
-@upload_size_option
 @yes_option
-def upload(files: tuple[Path, ...], destination: str | None, max_size: int) -> None:
+def upload(files: tuple[Path, ...], destination: str | None) -> None:
     """Upload FILES; directories are uploaded as ZIP archives."""
     if destination and len(files) > 1 and not destination.endswith("/"):
         raise click.UsageError("With multiple files, --to must be a directory ending in /.")
@@ -319,7 +350,7 @@ def upload(files: tuple[Path, ...], destination: str | None, max_size: int) -> N
     if len(set(names)) != len(names):
         raise click.ClickException("Uploads have duplicate remote names; upload them separately with --to.")
     for path, name in zip(files, names, strict=True):
-        data = _prepare_upload(path, max_size)
+        data = _prepare_upload(path)
         if destination:
             name = destination + name if destination.endswith("/") else destination
         click.echo(f"Uploading {name}...", err=True)
@@ -589,15 +620,14 @@ def sync_cookies(browser: str, profile: str | None) -> None:
 @click.option("--project", required=True, help="Project name for the post")
 @click.option("--name", "post_name", default=None, help="Post name (defaults to folder name)")
 @click.option("--date", default=None, help="Override post date in ISO format")
-@upload_size_option
 @yes_option
-def upload_post(post_folder: Path, project: str, post_name: str | None, date: str | None, max_size: int) -> None:
+def upload_post(post_folder: Path, project: str, post_name: str | None, date: str | None) -> None:
     if date:
         try:
             datetime.fromisoformat(date)
         except ValueError:
             raise click.BadParameter("Use an ISO date, e.g. 2026-11-04T10:00:00.", param_hint="--date") from None
-    data = _prepare_upload(post_folder, max_size)
+    data = _prepare_upload(post_folder)
     post_name = post_name or post_folder.name
     click.echo(f"Uploading post '{post_name}' to project '{project}'...", err=True)
     payload = {"project": project, "post_name": post_name, "data": data}

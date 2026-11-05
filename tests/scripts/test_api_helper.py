@@ -236,8 +236,91 @@ def api_response(body, status=200):
     response = requests.Response()
     response.status_code = status
     response._content = json.dumps(body).encode()
+    response._content_consumed = True
     response.headers['Content-Type'] = 'application/json'
     return response
+
+
+def upload_post_mock():
+    payloads = []
+
+    def send(url, *, data, headers, **kwargs):
+        assert headers['Content-Type'] == 'application/json'
+        payloads.append(json.loads(data.read()))
+        return api_response({'success': True})
+
+    post = MagicMock(side_effect=send)
+    post.payloads = payloads
+    return post
+
+
+@pytest.mark.parametrize('known_length', [True, False])
+def test_transfer_progress_round_trip(helper, monkeypatch, tmp_path, known_length):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+    from contextlib import contextmanager
+
+    stored = {}
+    transfers = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers['Content-Length']))
+            payload = json.loads(body)
+            if self.path == '/api/push':
+                stored.update(payload)
+                transfers.append(len(body))
+                result = {'success': True}
+            else:
+                result = {'data': stored['data']}
+            response = json.dumps(result).encode()
+            self.send_response(200)
+            if known_length:
+                self.send_header('Content-Length', str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            if self.path == '/api/pull':
+                transfers.append(len(response))
+
+    bars = []
+    original_bar = helper.click.progressbar
+
+    @contextmanager
+    def track_progress(**kwargs):
+        with original_bar(**kwargs) as bar:
+            update = bar.update
+            counts = []
+            bar.update = lambda count: (counts.append(count), update(count))[-1]
+            bars.append((kwargs, counts))
+            yield bar
+
+    monkeypatch.setattr(helper.click, 'progressbar', track_progress)
+    with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        monkeypatch.setattr(helper, '_authenticate', lambda **kwargs: (
+            f'http://127.0.0.1:{server.server_port}', 'test-token',
+        ))
+        source = tmp_path / 'binary.dat'
+        source.write_bytes(os.urandom(200_000))
+        runner = CliRunner(mix_stderr=False)
+        try:
+            upload = runner.invoke(helper.cli, ['upload', str(source)])
+            assert upload.exit_code == 0, upload.output
+            download = runner.invoke(helper.cli, ['download', source.name, '--raw'])
+            assert download.exit_code == 0, download.stderr
+            assert download.stdout_bytes == source.read_bytes()
+        finally:
+            server.shutdown()
+            thread.join()
+    assert [options['label'] for options, counts in bars] == ['Uploading', 'Downloading']
+    assert [sum(counts) for options, counts in bars] == transfers
+    assert all(len(counts) > 1 for options, counts in bars)
+    assert bars[0][0]['length'] == transfers[0]
+    assert bars[1][0]['length'] == (transfers[1] if known_length else None)
 
 
 @pytest.mark.parametrize('state', ['missing', 'expired'])
@@ -321,13 +404,13 @@ def test_multiple_uploads_preserve_contents_and_directory_suffix(helper, monkeyp
     folder = tmp_path / 'reports.v2'
     folder.mkdir()
     (folder / 'nested.txt').write_bytes(b'report')
-    post = MagicMock(return_value=api_response({'success': True}))
+    post = upload_post_mock()
     monkeypatch.setattr(helper.requests, 'post', post)
     args = ['upload', str(first), str(folder), '--to', 'travel/']
     args = ['--yes', *args] if yes_position == 'global' else [*args, '--yes']
     result = CliRunner(mix_stderr=False).invoke(helper.cli, args)
     assert result.exit_code == 0, (result.stdout + result.stderr)
-    uploaded = {call.kwargs['json']['name']: gzip.decompress(base64.b64decode(call.kwargs['json']['data'])) for call in post.call_args_list}
+    uploaded = {payload['name']: gzip.decompress(base64.b64decode(payload['data'])) for payload in post.payloads}
     assert uploaded['travel/notes.txt'] == b'notes'
     with helper.zipfile.ZipFile(io.BytesIO(uploaded['travel/reports.v2.zip'])) as archive:
         assert archive.namelist() == ['nested.txt']
@@ -337,22 +420,48 @@ def test_multiple_uploads_preserve_contents_and_directory_suffix(helper, monkeyp
 
 
 def test_upload_destination_and_size_are_checked_before_sending(helper, monkeypatch, tmp_path):
+    from web_app.config import ConfigManager
+
+    monkeypatch.setattr(ConfigManager(), 'api_helper_upload_confirm_bytes', 4)
     first = tmp_path / 'a.txt'
     second = tmp_path / 'b.txt'
     first.write_bytes(b'12345')
     second.write_bytes(b'other')
-    post = MagicMock(return_value=api_response({'success': True}))
+    post = upload_post_mock()
     monkeypatch.setattr(helper.requests, 'post', post)
     runner = CliRunner(mix_stderr=False)
     result = runner.invoke(helper.cli, ['upload', str(first), str(second), '--to', 'one.txt'])
     assert result.exit_code == 2
-    result = runner.invoke(helper.cli, ['upload', str(first), '--max-size', '4'])
+    result = runner.invoke(helper.cli, ['upload', str(first)], input='n\n')
     assert result.exit_code == 1
-    assert 'limit is 4' in (result.stdout + result.stderr)
+    assert '5 bytes before compression' in result.stderr
+    assert 'Upload cancelled' in result.stderr
+    assert 'Compressing' not in result.stderr
     post.assert_not_called()
-    result = runner.invoke(helper.cli, ['upload', str(first), '--to', 'renamed.txt', '--max-size', '5'])
+    result = runner.invoke(helper.cli, ['upload', str(first), '--to', 'renamed.txt'], input='y\n')
     assert result.exit_code == 0, (result.stdout + result.stderr)
-    assert post.call_args.kwargs['json']['name'] == 'renamed.txt'
+    assert post.payloads[-1]['name'] == 'renamed.txt'
+
+
+@pytest.mark.parametrize('size,options,prompted', [
+    (4, [], False),
+    (5, [], True),
+    (5, ['--yes'], False),
+])
+def test_upload_confirmation_threshold(helper, monkeypatch, tmp_path, size, options, prompted):
+    from web_app.config import ConfigManager
+
+    monkeypatch.setattr(ConfigManager(), 'api_helper_upload_confirm_bytes', 4)
+    source = tmp_path / 'file.txt'
+    source.write_bytes(b'x' * size)
+    post = upload_post_mock()
+    monkeypatch.setattr(helper.requests, 'post', post)
+    result = CliRunner(mix_stderr=False).invoke(
+        helper.cli, ['upload', str(source), *options], input='y\n',
+    )
+    assert result.exit_code == 0, result.stderr
+    assert ('before compression)?' in result.stderr) is prompted
+    assert gzip.decompress(base64.b64decode(post.payloads[-1]['data'])) == source.read_bytes()
 
 
 @pytest.mark.parametrize('options,answer,expected', [
@@ -467,7 +576,7 @@ def test_post_upload_uses_shared_archive_checks_and_preserves_metadata(helper, m
     folder = tmp_path / 'post.v2'
     folder.mkdir()
     (folder / 'index.html').write_text('post content')
-    post = MagicMock(return_value=api_response({'success': True}))
+    post = upload_post_mock()
     monkeypatch.setattr(helper.requests, 'post', post)
     runner = CliRunner()
     args = ['upload-post', str(folder), '--project', 'travel', '--name', 'my-post', '--yes']
@@ -475,11 +584,11 @@ def test_post_upload_uses_shared_archive_checks_and_preserves_metadata(helper, m
     assert result.exit_code == 2
     post.assert_not_called()
     result = runner.invoke(helper.cli, [*args, '--max-size', '1'])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     post.assert_not_called()
     result = runner.invoke(helper.cli, [*args, '--date', '2026-11-04'])
     assert result.exit_code == 0, result.output
-    payload = post.call_args.kwargs['json']
+    payload = post.payloads[-1]
     assert (payload['project'], payload['post_name'], payload['date']) == ('travel', 'my-post', '2026-11-04')
     with helper.zipfile.ZipFile(io.BytesIO(gzip.decompress(base64.b64decode(payload['data'])))) as archive:
         assert archive.read('index.html') == b'post content'
@@ -527,11 +636,11 @@ def test_upload_current_directory_uses_its_actual_name(helper, monkeypatch, tmp_
     folder.mkdir()
     (folder / 'notes.txt').write_text('notes')
     monkeypatch.chdir(folder)
-    post = MagicMock(return_value=api_response({'success': True}))
+    post = upload_post_mock()
     monkeypatch.setattr(helper.requests, 'post', post)
     result = CliRunner().invoke(helper.cli, ['upload', '.', '--yes'])
     assert result.exit_code == 0, result.output
-    assert post.call_args.kwargs['json']['name'] == 'reports.v2.zip'
+    assert post.payloads[-1]['name'] == 'reports.v2.zip'
 
 
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='Requires POSIX named pipes')

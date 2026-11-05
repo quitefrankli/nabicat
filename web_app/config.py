@@ -783,8 +783,8 @@ class ConfigManager:
         self.api_helper_default_base_url = "https://nabicat.site"
         self.api_helper_login_timeout_s = 10.0
         self.api_helper_payload_confirm_bytes = 1000
-        self.api_helper_upload_confirm_bytes = 10 * 1024 * 1024
-        self.api_helper_max_upload_bytes = 100 * 1024 * 1024
+        self.api_helper_upload_confirm_bytes = 100 * 1024 * 1024
+        self.api_helper_transfer_chunk_bytes = 64 * 1024
         self.api_helper_default_model = "gpt-6-luna"
         self.api_helper_default_effort = "low"
         self.api_helper_default_browser = "chrome"
