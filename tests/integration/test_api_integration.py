@@ -133,6 +133,7 @@ class TestAPIEncryptedProtocol:
         payload = {
             **get_auth_payload(),
             "name": "encrypted_test_file.json",
+            "compression": "gzip",
             "data": encode_data_for_upload("encrypted test data")
         }
         response = make_encrypted_request(server_url, "api/push", payload)
@@ -145,6 +146,7 @@ class TestAPIEncryptedProtocol:
         push_payload = {
             **get_auth_payload(),
             "name": "pull_test_file.txt",
+            "compression": "gzip",
             "data": encode_data_for_upload("test content for pull")
         }
         make_encrypted_request(server_url, "api/push", push_payload)
@@ -174,6 +176,7 @@ class TestAPIEncryptedProtocol:
         push_payload = {
             **get_auth_payload(),
             "name": "file_to_delete.txt",
+            "compression": "gzip",
             "data": encode_data_for_upload("temporary data")
         }
         make_encrypted_request(server_url, "api/push", push_payload)
@@ -221,6 +224,7 @@ class TestAPIEncryptedProtocol:
         payload = {
             **get_auth_payload(),
             "name": "large_file.txt",
+            "compression": "gzip",
             "data": encode_data_for_upload(large_data)
         }
         response = make_encrypted_request(server_url, "api/push", payload)
@@ -251,6 +255,7 @@ class TestAPIEncryptedProtocol:
         payload = {
             **get_auth_payload(),
             "name": "nested_data.json",
+            "compression": "gzip",
             "data": encode_data_for_upload(json.dumps(nested_data))
         }
         response = make_encrypted_request(server_url, "api/push", payload)
@@ -319,6 +324,7 @@ class TestAPIPlainRequests:
         push_payload = {
             **get_auth_payload(),
             "name": "unencrypted_test.txt",
+            "compression": "gzip",
             "data": encode_data_for_upload("test data")
         }
         response = requests.post(push_url, json=push_payload)
