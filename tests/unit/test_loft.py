@@ -945,21 +945,27 @@ class TestRestrictedPostRoute:
 
 
 class TestRawPostRoutes:
+    @pytest.mark.parametrize('compression', ['gzip', 'none'])
     def test_upload_persists_unlisted_visibility(
         self,
         client,
         projects_dir,
         monkeypatch,
+        compression,
     ):
         if "loft" not in client.application.blueprints:
             client.application.register_blueprint(loft_api)
+        data = _raw_post_archive()
+        if compression == 'none':
+            data = base64.b64encode(gzip.decompress(base64.b64decode(data))).decode()
         monkeypatch.setattr(
             loft_module,
             "parse_request",
             lambda **_kwargs: {
                 "project": "quitefrankli",
                 "post_name": "quitefrankli",
-                "data": _raw_post_archive(),
+                "data": data,
+                "compression": compression,
                 "visibility": "unlisted",
             },
         )

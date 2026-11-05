@@ -1,8 +1,6 @@
 import subprocess
 import requests
 import click
-import base64
-import gzip
 import io
 import sys
 import zipfile
@@ -22,6 +20,7 @@ from pathlib import Path
 from yt_dlp.cookies import CookieLoadError, extract_cookies_from_browser
 from yt_dlp.utils import DownloadError
 from web_app.config import ConfigManager
+from web_app.file_transfer import decode_file_payload, encode_file_payload
 
 
 class HelperCommand(click.Command):
@@ -74,11 +73,12 @@ def _response_json(response):
 
 
 def _download_data(response):
-    data = _response_json(response).get("data")
+    payload = _response_json(response)
+    data = payload.get("data")
     if not isinstance(data, str):
         raise click.ClickException("Server returned an invalid file response.")
     try:
-        return gzip.decompress(base64.b64decode(data, validate=True))
+        return decode_file_payload(payload)
     except (ValueError, OSError, EOFError, binascii.Error, zlib.error):
         raise click.ClickException("Server returned corrupt file data.") from None
 
@@ -314,10 +314,6 @@ def logout() -> None:
     click.echo("Saved API token removed.")
 
 
-def _encode_upload(data):
-    return base64.b64encode(gzip.compress(data)).decode("ascii")
-
-
 def _prepare_upload(path: Path):
     if not path.is_file() and not path.is_dir():
         raise click.ClickException(f"Not a regular file or directory: {path}")
@@ -326,16 +322,18 @@ def _prepare_upload(path: Path):
     if path.is_dir() or size > ConfigManager().api_helper_upload_confirm_bytes:
         if not _confirm(f"Upload {path} ({size:,} bytes before compression)?"):
             raise click.ClickException("Upload cancelled.")
-    click.echo(f"Compressing {path} ({size:,} bytes)...", err=True)
+    click.echo(f"Preparing {path} ({size:,} bytes)...", err=True)
     if path.is_dir():
         with io.BytesIO() as buffer:
             with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
                 for item in paths:
-                    archive.write(item, arcname=item.relative_to(path))
+                    compression = (zipfile.ZIP_STORED if item.suffix.lower() in
+                                   ConfigManager().api_transfer_compressed_extensions else zipfile.ZIP_DEFLATED)
+                    archive.write(item, arcname=item.relative_to(path), compress_type=compression)
             data = buffer.getvalue()
     else:
         data = path.read_bytes()
-    return _encode_upload(data)
+    return encode_file_payload(data, path.name + ".zip" if path.is_dir() else path.name)
 
 
 @cli.command()
@@ -350,11 +348,11 @@ def upload(files: tuple[Path, ...], destination: str | None) -> None:
     if len(set(names)) != len(names):
         raise click.ClickException("Uploads have duplicate remote names; upload them separately with --to.")
     for path, name in zip(files, names, strict=True):
-        data = _prepare_upload(path)
+        payload = _prepare_upload(path)
         if destination:
             name = destination + name if destination.endswith("/") else destination
         click.echo(f"Uploading {name}...", err=True)
-        send_request("api/push", {"name": name, "data": data}, confirm_payload=False)
+        send_request("api/push", {"name": name, **payload}, confirm_payload=False)
         click.echo(f"Uploaded {name}.")
 
 
@@ -512,7 +510,7 @@ def upload_commit_patches() -> None:
     
     send_request("api/push", {
         "name": ConfigManager().api_helper_patch_archive,
-        "data": _encode_upload(zip_data)
+        **encode_file_payload(zip_data, ConfigManager().api_helper_patch_archive),
     }, confirm_payload=False)
     
     click.echo("Patches uploaded successfully.")
@@ -627,10 +625,10 @@ def upload_post(post_folder: Path, project: str, post_name: str | None, date: st
             datetime.fromisoformat(date)
         except ValueError:
             raise click.BadParameter("Use an ISO date, e.g. 2026-11-04T10:00:00.", param_hint="--date") from None
-    data = _prepare_upload(post_folder)
+    transfer = _prepare_upload(post_folder)
     post_name = post_name or post_folder.name
     click.echo(f"Uploading post '{post_name}' to project '{project}'...", err=True)
-    payload = {"project": project, "post_name": post_name, "data": data}
+    payload = {"project": project, "post_name": post_name, **transfer}
     if date:
         payload["date"] = date
     send_request("loft/api/upload_post", payload, confirm_payload=False)

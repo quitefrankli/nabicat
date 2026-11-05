@@ -1,5 +1,4 @@
 import base64
-import gzip
 import io
 import mimetypes
 import subprocess
@@ -23,6 +22,7 @@ from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
 from web_app.api_auth import issue_api_token
 from web_app.logging_utils import log_event
+from web_app.file_transfer import decode_file_payload, encode_file_payload
 
 
 from web_app.app import csrf
@@ -227,19 +227,16 @@ def api_backup():
 def api_push():
     request_body = parse_request(require_login=True, require_admin=True)
     name = _get_file_name(request_body)
-    data = _get_required_field(request_body, "data")
 
-    # Decode base64 and decompress gzip to store plain data
     try:
-        decoded_data = base64.b64decode(data)
-        plain_data = gzip.decompress(decoded_data)
+        plain_data = decode_file_payload(request_body)
     except Exception as e:
         log_event(
-            "api", "api.push_decode_fallback",
-            level=logging.WARNING, user=request_body.get("username"),
-            name=name, error_type=type(e).__name__,
+            "api", "api.data_push_rejected", level=logging.WARNING,
+            user=request_body.get("username"), name=name, reason="invalid_encoding",
+            status=400, error_type=type(e).__name__, exc_info=True,
         )
-        plain_data = data.encode('utf-8')
+        return jsonify({"error": "Invalid file encoding or compression"}), 400
 
     username = request_body["username"]
     user = DataInterface().load_users()[username]
@@ -288,16 +285,9 @@ def api_pull():
         )
         return jsonify({"error": str(e)}), 404
 
-    # Compress and encode for client compatibility
-    compressed_data = gzip.compress(plain_data)
-    encoded_data = base64.b64encode(compressed_data).decode('utf-8')
-
-    if "raw" in request_body:
-        log_event("api", "api.data_pulled", user=user, name=name, bytes=len(plain_data), raw=True)
-        return plain_data.decode('utf-8'), 200, {'Content-Type': 'text/plain'}
-
-    log_event("api", "api.data_pulled", user=user, name=name, bytes=len(plain_data), raw=False)
-    return jsonify({"success": True, "data": encoded_data}), 200
+    log_event("api", "api.data_pulled", user=user, name=name, bytes=len(plain_data))
+    payload = encode_file_payload(plain_data, name)
+    return jsonify({"success": True, **payload}), 200
 
 @api_api.route("/delete", methods=["POST"])
 @_handle_api_error

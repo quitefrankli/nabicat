@@ -785,6 +785,15 @@ class ConfigManager:
         self.api_helper_payload_confirm_bytes = 1000
         self.api_helper_upload_confirm_bytes = 100 * 1024 * 1024
         self.api_helper_transfer_chunk_bytes = 64 * 1024
+        self.api_transfer_compressed_extensions = frozenset({
+            ".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif", ".jxl",
+            ".mp4", ".m4v", ".webm", ".mkv", ".mov", ".mpeg", ".mpg",
+            ".mp3", ".aac", ".m4a", ".ogg", ".opus", ".flac",
+            ".zip", ".7z", ".rar", ".gz", ".bz2", ".xz", ".zst", ".lz4", ".br",
+            ".tgz", ".tbz2", ".txz",
+            ".docx", ".xlsx", ".pptx", ".docm", ".xlsm", ".pptm",
+            ".odt", ".ods", ".odp", ".woff2",
+        })
         self.api_helper_default_model = "gpt-6-luna"
         self.api_helper_default_effort = "low"
         self.api_helper_default_browser = "chrome"

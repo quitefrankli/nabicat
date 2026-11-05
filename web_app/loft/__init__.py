@@ -1,5 +1,3 @@
-import base64
-import gzip
 import json
 import logging
 import zipfile
@@ -17,6 +15,7 @@ from flask_wtf.csrf import CSRFError
 from web_app.app import csrf
 from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
+from web_app.file_transfer import decode_file_payload
 from web_app.loft.data_interface import DataInterface, PostVisibility, slugify
 from web_app.helpers import cur_user, limiter, parse_request, register_app_name
 from web_app.logging_utils import log_event
@@ -494,8 +493,7 @@ def upload_post():
         return jsonify({"error": "Invalid visibility"}), 400
 
     try:
-        decoded_data = base64.b64decode(data)
-        plain_data = gzip.decompress(decoded_data)
+        plain_data = decode_file_payload(request_body)
     except Exception as e:
         _audit_failure("archive_decode_failed", error=e)
         return jsonify({"error": f"Failed to decode data: {e}"}), 400
