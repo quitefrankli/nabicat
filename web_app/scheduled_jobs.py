@@ -14,9 +14,7 @@ import click
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
-from web_app.helpers import (
-    get_all_data_interfaces,
-)
+from web_app.data_registry import get_all_data_interfaces
 from web_app.logging_utils import configure_logging, log_event
 from web_app.redis_client import ensure_local_redis
 from web_app.tubio.audio_downloader import AudioDownloader

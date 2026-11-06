@@ -31,6 +31,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes redis-server
 
+      - name: Run Ruff
+        run: uv run --locked ruff check
+
       - name: Run tests
         run: |
           SLOW_TEST_COUNT=$(uv run --locked python -c 'from web_app.config import ConfigManager; print(ConfigManager().ci_slow_test_count)')

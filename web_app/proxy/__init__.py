@@ -10,7 +10,7 @@ from flask import Blueprint, Response, render_template, request, url_for
 from requests.adapters import HTTPAdapter
 
 from web_app.config import ConfigManager
-from web_app.helpers import register_app_name, require_admin_blueprint
+from web_app.blueprint_registration import register_app_name, require_admin_blueprint
 from web_app.logging_utils import log_event
 from web_app.web_targets import (
     ResolvedWebTarget,

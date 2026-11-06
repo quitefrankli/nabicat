@@ -10,8 +10,9 @@ from werkzeug.datastructures import FileStorage
 from flask import Blueprint, Response, render_template, request, send_file, redirect, stream_with_context, url_for, flash
 import flask_login
 
-from web_app.helpers import cur_user, register_app_name, require_login_blueprint
-from web_app.helpers import limiter
+from web_app.auth import cur_user
+from web_app.blueprint_registration import register_app_name, require_login_blueprint
+from web_app.auth import limiter
 from web_app.config import ConfigManager
 from web_app.file_store.data_interface import DataInterface, format_file_size
 from web_app.logging_utils import log_event

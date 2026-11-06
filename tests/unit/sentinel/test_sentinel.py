@@ -175,7 +175,7 @@ def test_start_run_executes_inline_persists_owner_logs_actor_and_releases_lease(
 def test_blueprint_uses_debug_data_root_selected_after_import(sentinel_data_root):
     from flask import Flask
 
-    from web_app.helpers import login_manager
+    from web_app.auth import login_manager
     from web_app.sentinel import sentinel_api
 
     app = Flask(

@@ -15,100 +15,18 @@ from web_app.tubio.data_interface import (
 )
 from web_app.config import ConfigManager
 from web_app.users import User
-import web_app.helpers as helpers
-
-
-@pytest.fixture(scope='module', autouse=True)
-def setup_app():
-    """Register blueprints so the /tubio/* routes exist for the client fixture."""
-    from web_app.app import app
-    from web_app.helpers import limiter, register_all_blueprints
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.secret_key = 'test-secret-key'
-    limiter.enabled = False
-    if 'tubio' not in app.blueprints:
-        register_all_blueprints(app)
 
 
 @pytest.fixture
-def auth_mock():
+def auth_mock(auth_loader):
     user = User(username='tubio-user', password='testpass', folder='test_folder', is_admin=False)
-    original_user_loader = helpers.login_manager._user_callback
-    helpers.login_manager._user_callback = lambda username: user if username == user.id else None
-    yield user
-    helpers.login_manager._user_callback = original_user_loader
+    return auth_loader(user)
 
 
 @pytest.fixture
-def tubio_data(tmp_path):
-    data = DataInterface()
-    data.data_root = tmp_path
-    data.app_dir = tmp_path / "tubio"
-    data.app_audio_dir = data.app_dir / "audio"
-    data.app_thumbnails_dir = data.app_dir / "thumbnails"
-    data.app_metadata_file = data.app_dir / "metadata.json"
-    return data
-
-
-class TestExtractVideoId:
-    """Tests for YouTube URL detection and video ID extraction."""
-
-    def test_standard_watch_url(self):
-        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_watch_url_without_www(self):
-        url = "https://youtube.com/watch?v=dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_watch_url_http(self):
-        url = "http://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_watch_url_no_protocol(self):
-        url = "youtube.com/watch?v=dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_short_url(self):
-        url = "https://youtu.be/dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_short_url_no_protocol(self):
-        url = "youtu.be/dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_shorts_url(self):
-        url = "https://www.youtube.com/shorts/dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_embed_url(self):
-        url = "https://www.youtube.com/embed/dQw4w9WgXcQ"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_url_with_extra_params(self):
-        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s&list=PLtest"
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_url_with_whitespace(self):
-        url = "  https://www.youtube.com/watch?v=dQw4w9WgXcQ  "
-        assert AudioDownloader.extract_video_id(url) == "dQw4w9WgXcQ"
-
-    def test_not_a_url_returns_none(self):
-        query = "rick astley never gonna give you up"
-        assert AudioDownloader.extract_video_id(query) is None
-
-    def test_empty_string_returns_none(self):
-        assert AudioDownloader.extract_video_id("") is None
-
-    def test_invalid_video_id_length(self):
-        # Video IDs must be exactly 11 characters
-        url = "https://www.youtube.com/watch?v=short"
-        assert AudioDownloader.extract_video_id(url) is None
-
-    def test_other_website_returns_none(self):
-        url = "https://vimeo.com/123456789"
-        assert AudioDownloader.extract_video_id(url) is None
+def tubio_data(tmp_path, monkeypatch):
+    monkeypatch.setattr(ConfigManager(), "production_data_root", tmp_path / "data")
+    return DataInterface()
 
 
 class TestGetVideoInfo:

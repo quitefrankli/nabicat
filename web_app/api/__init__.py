@@ -16,8 +16,9 @@ from flask import request, jsonify, Blueprint, current_app
 from werkzeug.datastructures import FileStorage
 
 from web_app.data_interface import DataInterface
-from web_app.helpers import parse_request, authenticate_user, \
-    generate_ephemeral_keypair, get_all_data_interfaces, codex_cli_text, CodexCLIError, limiter
+from web_app.auth import parse_request, authenticate_user, generate_ephemeral_keypair, limiter
+from web_app.data_registry import get_all_data_interfaces
+from web_app.llm_providers import codex_cli_text, CodexCLIError
 from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
 from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
@@ -26,7 +27,7 @@ from web_app.logging_utils import log_event
 from web_app.file_transfer import file_download_response, parse_upload_request
 
 
-from web_app.app import csrf
+from web_app.extensions import csrf
 
 GITHUB_EVENT_HEADER = "X-GitHub-Event"
 api_api = Blueprint("api_api", __name__, url_prefix="/api")
@@ -353,7 +354,7 @@ def api_upload_cookie():
         return jsonify({"error": "Missing cookie data"}), 400
 
     DataInterface().atomic_write(
-        ConfigManager().tubio.cookie_path, data=cookie.encode('utf-8'), mode="wb",
+        ConfigManager().tubio.cookie_path, data=cookie.encode('utf-8'),
     )
 
     log_event(

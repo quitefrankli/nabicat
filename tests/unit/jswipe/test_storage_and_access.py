@@ -1,16 +1,15 @@
 import stat
 
-from flask import Blueprint, Flask
+from flask import Flask
 import pytest
 
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface as HostDataInterface
-from web_app.helpers import login_manager
+from web_app.auth import login_manager
 from web_app.users import User
 from web_app.jswipe import jswipe_api
 from web_app.jswipe.app import create_blueprint
 from web_app.jswipe.models import (
-    AppState,
     Decision,
     Job,
     ScanSummary,

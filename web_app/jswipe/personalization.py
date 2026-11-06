@@ -11,12 +11,12 @@ from pathlib import Path, PurePath
 import uuid
 from typing import IO, Any
 
-from web_app.config import ConfigManager
+from web_app.config import ConfigManager, JswipeConfig
 from web_app.data_interface import DataInterface
 from web_app.redis_client import _delete_if_token_owned, get_redis
 from web_app.users import User
 from flask_login import current_user
-from web_app.helpers import bedrock_text, codex_cli_text, meridian_text
+from web_app.llm_providers import bedrock_text, codex_cli_text, meridian_text
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 

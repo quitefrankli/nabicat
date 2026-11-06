@@ -3,7 +3,6 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import List, Optional
 

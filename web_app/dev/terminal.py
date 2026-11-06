@@ -13,9 +13,9 @@ import uuid
 
 from flask import jsonify, request
 
-from web_app.app import csrf
+from web_app.extensions import csrf
 from web_app.config import ConfigManager
-from web_app.helpers import limiter
+from web_app.auth import limiter
 from web_app.logging_utils import log_event
 
 

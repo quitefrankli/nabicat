@@ -4,7 +4,7 @@ from web_app.config import ConfigManager
 from web_app.dev.logs import register_logs_routes
 from web_app.dev.map import register_map_routes
 from web_app.dev.terminal import register_terminal_routes
-from web_app.helpers import register_app_name, require_admin_blueprint
+from web_app.blueprint_registration import register_app_name, require_admin_blueprint
 
 
 dev_api = Blueprint(

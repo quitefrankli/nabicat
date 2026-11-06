@@ -2,12 +2,7 @@ import json
 import logging
 from unittest.mock import Mock, patch
 
-import web_app.__main__ as main_module
-import web_app.helpers as helpers
 from web_app.users import User, UsersFile
-
-
-app = main_module.app
 
 
 class TestDeleteAccountRoute:
@@ -113,13 +108,10 @@ class TestDeleteAccountRoute:
         mock_data_interface,
         admin_user,
         wire_edit_users,
+        app,
+        auth_loader,
     ):
-        original_user_loader = helpers.login_manager._user_callback
-        helpers.login_manager._user_callback = (
-            lambda username: admin_user
-            if username == admin_user.id
-            else None
-        )
+        auth_loader(admin_user)
 
         with app.test_client() as client:
             with client.session_transaction() as session:
@@ -140,8 +132,6 @@ class TestDeleteAccountRoute:
 
             with client.session_transaction() as session:
                 assert session.get('_user_id') == admin_user.id
-
-        helpers.login_manager._user_callback = original_user_loader
 
     @patch('web_app.account_api.get_all_data_interfaces')
     @patch('web_app.account_api.DataInterface')

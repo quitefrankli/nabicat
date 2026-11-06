@@ -52,7 +52,11 @@ dev = [
     "tomlkit>=0.13.3",
     "fakeredis>=2.37.0",
     "pytest-playwright>=0.7.0",
+    "ruff>=0.14.0",
 ]
+
+[tool.ruff.lint]
+select = ["F401", "F821"]
 
 [tool.uv]
 python-preference = "only-managed"

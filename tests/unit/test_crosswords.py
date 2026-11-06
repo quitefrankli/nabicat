@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import pytest
 
-from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.crosswords.generator import build_crossword
 from web_app.crosswords.theme_check import require_real_word
@@ -18,36 +17,20 @@ from web_app.crosswords.word_source import (
     ChainedSource,
     CodexSource,
     DebugSource,
-    FallbackSource,
     MeridianSource,
     WordSource,
     default_source,
 )
 
 
-@pytest.fixture(scope='module', autouse=True)
-def setup_app():
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.secret_key = 'test-secret-key'
-    from web_app.helpers import limiter, register_all_blueprints
-    limiter.enabled = False
-    if 'crosswords' not in app.blueprints:
-        register_all_blueprints(app)
-
-
 @pytest.fixture
-def client():
-    with app.test_client() as c:
-        yield c
-
-
-@pytest.fixture
-def debug_mode():
-    prev = ConfigManager().debug_mode
-    ConfigManager().debug_mode = True
+def debug_mode(tmp_path, monkeypatch):
+    config = ConfigManager()
+    prev = config.debug_mode
+    monkeypatch.setattr(config, "debug_data_root", tmp_path / "data")
+    config.debug_mode = True
     yield
-    ConfigManager().debug_mode = prev
+    config.debug_mode = prev
 
 
 def test_build_crossword_places_words_consistently():

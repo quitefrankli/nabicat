@@ -7,11 +7,8 @@ from typing import * # type: ignore
 from flask import request, Blueprint, render_template
 
 from web_app.data_interface import DataInterface
-from web_app.helpers import (
-    from_req,
-    get_all_data_interfaces,
-    limiter,
-)
+from web_app.auth import from_req, limiter
+from web_app.data_registry import get_all_data_interfaces
 from web_app.logging_utils import log_event
 
 

@@ -5,8 +5,9 @@ from flask import render_template, Blueprint
 from typing import * # type: ignore
 from datetime import datetime
 
-from web_app.helpers import limiter, cur_user, from_req, register_app_name, require_login_blueprint
-from web_app.users import User
+from web_app.auth import limiter, cur_user, from_req
+from web_app.blueprint_registration import register_app_name, require_login_blueprint
+from web_app.users import User as User
 from web_app.metrics.app_data import Metric, DataPoint
 from web_app.metrics.data_interface import DataInterface
 from web_app.metrics.visualiser import plot_metric

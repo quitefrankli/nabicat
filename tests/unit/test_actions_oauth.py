@@ -6,10 +6,8 @@ import logging
 from urllib.parse import quote_plus
 from unittest.mock import patch
 
-import flask_login
 import pytest
 
-import web_app.__main__
 from web_app.config import ConfigManager
 from web_app.redis_client import get_redis
 from web_app.todoist.data_interface import Goal, Goals, GoalState
@@ -24,7 +22,7 @@ def oauth_config(monkeypatch, oauth_user):
     monkeypatch.setenv("OAUTH_REDIRECT_URIS", "https://chat.openai.com/aip/callback")
     users = UsersFile(root=[oauth_user])
     monkeypatch.setattr(
-        "web_app.helpers.login_manager._user_callback",
+        "web_app.auth.login_manager._user_callback",
         lambda username: users.get(username),
     )
     monkeypatch.setattr(
@@ -432,7 +430,7 @@ def test_account_revocation_removes_all_user_tokens(client, oauth_config, oauth_
     access_token = _exchange(client, code).get_json()["access_token"]
     _login(client, oauth_user)
 
-    with patch("web_app.helpers.DataInterface.load_users",
+    with patch("web_app.auth.DataInterface.load_users",
                return_value=UsersFile(root=[oauth_user])):
         response = client.post("/account/oauth/revoke")
     assert response.status_code == 302

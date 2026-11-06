@@ -4,31 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
-from web_app.app import app
-from web_app.config import ConfigManager
 from web_app.users import User, UsersFile
 
 
 @pytest.fixture
-def client():
-    import web_app.__main__  # noqa: F401
-
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.secret_key = 'test-secret'
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def csrf_client():
-    import web_app.__main__  # noqa: F401
-
-    app.config['TESTING'] = True
+def csrf_client(app):
     app.config['WTF_CSRF_ENABLED'] = True
-    app.secret_key = 'test-secret'
-    with app.test_client() as client:
-        yield client
+    return app.test_client()
 
 
 class TestCSRFProtection:
@@ -56,7 +38,7 @@ class TestAPIAdminOnly:
         from web_app.api_auth import issue_api_token
 
         mock_di.return_value.load_users.return_value = UsersFile(root=[non_admin])
-        with app.app_context():
+        with client.application.app_context():
             token = issue_api_token('user')
         response = client.post('/api/push', data=b'test', query_string={'name': 'test.txt'}, headers={
             'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream',

@@ -67,34 +67,8 @@ class TestCacheFiles:
 class TestCacheHeaders:
     """Test HTTP cache headers on download endpoints"""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client"""
-        from web_app.__main__ import app
-        from web_app.helpers import limiter
-        app.config['TESTING'] = True
-        limiter.enabled = False
-        with app.test_client() as client:
-            yield client
 
-    @pytest.fixture
-    def test_user(self):
-        """Create a test user"""
-        from web_app.users import User
-        return User(username='testuser', password='testpass', folder='test_folder', is_admin=False)
 
-    @pytest.fixture
-    def auth_mock(self, test_user):
-        """Setup authentication mocking for tests"""
-        import web_app.helpers as helpers
-        # Mock the user_loader to return our test user
-        original_user_loader = helpers.login_manager._user_callback
-        helpers.login_manager._user_callback = lambda username: test_user if username == test_user.id else None
-
-        yield test_user
-
-        # Restore original user_loader
-        helpers.login_manager._user_callback = original_user_loader
 
     def test_service_worker_is_always_revalidated(self, client):
         response = client.get('/service-worker.js')
@@ -111,7 +85,7 @@ class TestCacheHeaders:
 
     def test_download_is_not_cached(self, client, auth_mock, tmp_path, monkeypatch):
         """Private file downloads must not enter shared browser caches."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         # Create a test file
         test_file = tmp_path / "12345"
@@ -199,29 +173,8 @@ def test_set_cookie_middleware_overrides_public_cache_headers():
 class TestTubioCacheHeaders:
     """Test HTTP cache headers on tubio endpoints"""
 
-    @pytest.fixture
-    def client(self):
-        from web_app.__main__ import app
-        from web_app.helpers import limiter
-        app.config['TESTING'] = True
-        limiter.enabled = False
-        with app.test_client() as client:
-            yield client
 
-    @pytest.fixture
-    def test_user(self):
-        from web_app.users import User
-        return User(username='testuser', password='testpass', folder='test_folder', is_admin=False)
 
-    @pytest.fixture
-    def auth_mock(self, test_user):
-        import web_app.helpers as helpers
-        original_user_loader = helpers.login_manager._user_callback
-        helpers.login_manager._user_callback = lambda username: test_user if username == test_user.id else None
-
-        yield test_user
-
-        helpers.login_manager._user_callback = original_user_loader
 
     def test_tubio_thumbnail_has_cache_headers(self, client, auth_mock, tmp_path):
         from unittest.mock import patch
@@ -250,3 +203,15 @@ class TestTubioCacheHeaders:
             else:
                 assert 'max-age=606461' in cache_control
                 assert 'public' in cache_control
+
+
+@pytest.fixture
+def test_user():
+    from web_app.users import User
+
+    return User(username="testuser", password="testpass", folder="test_folder", is_admin=False)
+
+
+@pytest.fixture
+def auth_mock(test_user, auth_loader):
+    return auth_loader(test_user)

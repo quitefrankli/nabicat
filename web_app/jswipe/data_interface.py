@@ -18,8 +18,8 @@ class DataInterface(HostDataInterface):
     def backup_data(self, backup_dir: Path) -> None:
         self._backup_subtree(self.root, backup_dir, "jswipe")
 
-    def atomic_write(self, path: Path, data=None, *, stream=None, encoding="utf-8", mode=None):
-        super().atomic_write(path, data=data, stream=stream, encoding=encoding, mode=mode)
+    def atomic_write(self, path: Path, data=None, *, stream=None, encoding="utf-8"):
+        super().atomic_write(path, data=data, stream=stream, encoding=encoding)
         if path.resolve(strict=False).is_relative_to(self.root.resolve()):
             path.chmod(ConfigManager().app_data_file_mode)
 

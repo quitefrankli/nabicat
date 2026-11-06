@@ -6,7 +6,7 @@ from typing import * # type: ignore
 from flask import request, Blueprint
 from datetime import datetime
 
-from web_app.helpers import limiter, from_req, cur_user
+from web_app.auth import limiter, from_req, cur_user
 from web_app.todoist.data_interface import DataInterface, GoalState, Goal, Goals
 from web_app.logging_utils import log_event
 

@@ -7,37 +7,28 @@ import flask_login
 from unittest.mock import Mock, patch
 
 
-from web_app.app import app, _add_static_version
+from web_app.app import _add_static_version
 from web_app.config import ConfigManager
 from web_app.users import User
-from web_app.errors import APIError, AuthenticationError
-from web_app.helpers import (
+from web_app.errors import APIError
+from web_app.auth import (
     parse_request,
     get_ip,
-    cur_user,
     from_req,
 )
 
 
 @pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def app_context():
+def app_context(app):
     with app.app_context():
         yield app
 
 
 class TestHelpers:
-    def test_jswipe_multipart_requests_use_the_host_cap(self, monkeypatch):
+    def test_jswipe_multipart_requests_use_the_host_cap(self, app_context, monkeypatch):
         config = ConfigManager()
         monkeypatch.setattr(config, "jswipe_multipart_request_max_bytes", 1234)
-        with app.test_request_context(
+        with app_context.test_request_context(
             "/jswipe/api/import",
             method="POST",
             content_type="multipart/form-data",
@@ -48,8 +39,8 @@ class TestHelpers:
 
             assert request.max_content_length == 1234
 
-    def test_jswipe_post_without_content_type_uses_the_default_cap(self):
-        with app.test_request_context(
+    def test_jswipe_post_without_content_type_uses_the_default_cap(self, app_context):
+        with app_context.test_request_context(
             "/jswipe/api/resume",
             method="POST",
         ):
@@ -58,8 +49,8 @@ class TestHelpers:
             assert request.max_content_length is None
 
     @patch('web_app.app.STATIC_VERSION', 'fresh-build')
-    def test_static_version_uses_value_loaded_at_server_start(self):
-        with app.test_request_context():
+    def test_static_version_uses_value_loaded_at_server_start(self, app_context):
+        with app_context.test_request_context():
             first_values = {}
             second_values = {}
 
@@ -71,38 +62,38 @@ class TestHelpers:
 
     def test_get_ip_from_x_forwarded_for(self, app_context):
         """Test get_ip with X-Forwarded-For header"""
-        with app.test_request_context(headers={'X-Forwarded-For': '192.168.1.1'}):
+        with app_context.test_request_context(headers={'X-Forwarded-For': '192.168.1.1'}):
             ip = get_ip()
             assert ip == '192.168.1.1'
 
     def test_get_ip_from_remote_addr(self, app_context):
         """Test get_ip with remote_addr"""
-        with app.test_request_context(environ_base={'REMOTE_ADDR': '127.0.0.1'}):
+        with app_context.test_request_context(environ_base={'REMOTE_ADDR': '127.0.0.1'}):
             ip = get_ip()
             assert ip == '127.0.0.1'
 
     def test_get_ip_multiple_forwarded_addresses(self, app_context):
         """Test get_ip with multiple X-Forwarded-For addresses"""
-        with app.test_request_context(headers={'X-Forwarded-For': '192.168.1.1, 192.168.1.2'}):
+        with app_context.test_request_context(headers={'X-Forwarded-For': '192.168.1.1, 192.168.1.2'}):
             ip = get_ip()
             # When multiple IPs are provided, the first is returned with full string
             assert '192.168.1.1' in ip
 
     def test_from_req_from_form(self, app_context):
         """Test from_req with form data"""
-        with app.test_request_context(method='POST', data={'test_key': 'test_value'}):
+        with app_context.test_request_context(method='POST', data={'test_key': 'test_value'}):
             result = from_req('test_key')
             assert result == 'test_value'
 
     def test_from_req_from_args(self, app_context):
         """Test from_req with query args"""
-        with app.test_request_context(query_string='test_key=test_value'):
+        with app_context.test_request_context(query_string='test_key=test_value'):
             result = from_req('test_key')
             assert result == 'test_value'
 
     def test_from_req_removes_non_ascii(self, app_context):
         """Test from_req removes non-ASCII characters"""
-        with app.test_request_context(method='POST', data={'test_key': 'value_with_émoji_🎉'}):
+        with app_context.test_request_context(method='POST', data={'test_key': 'value_with_émoji_🎉'}):
             result = from_req('test_key')
             # Non-ASCII characters should be removed
             assert 'é' not in result
@@ -159,7 +150,7 @@ class TestHome:
             folder="plain",
             is_admin=False,
         )
-        with patch("web_app.helpers.DataInterface") as data_interface:
+        with patch("web_app.auth.DataInterface") as data_interface:
             data_interface.return_value.load_users.return_value = {"plain": user}
             with client.session_transaction() as session:
                 session["_user_id"] = "plain"
@@ -194,7 +185,7 @@ class TestUserModel:
 class TestParseRequest:
     def test_parse_request_json(self, app_context):
         """Test parse_request with JSON content"""
-        with app.test_request_context(
+        with app_context.test_request_context(
             method='POST',
             data=json.dumps({'key': 'value'}),
             content_type='application/json'
@@ -204,7 +195,7 @@ class TestParseRequest:
 
     def test_parse_request_invalid_json(self, app_context):
         """Test parse_request with invalid JSON"""
-        with app.test_request_context(
+        with app_context.test_request_context(
             method='POST',
             data='invalid json',
             content_type='application/json'
@@ -214,7 +205,7 @@ class TestParseRequest:
 
     def test_parse_request_form_data(self, app_context):
         """Test parse_request with form data"""
-        with app.test_request_context(
+        with app_context.test_request_context(
             method='POST',
             data={'key': 'value'},
             content_type='application/x-www-form-urlencoded'
@@ -224,7 +215,7 @@ class TestParseRequest:
 
     def test_parse_request_multipart_form_data(self, app_context):
         """Test parse_request with multipart form data"""
-        with app.test_request_context(
+        with app_context.test_request_context(
             method='POST',
             data={'key': 'value'},
             content_type='multipart/form-data'
@@ -234,7 +225,7 @@ class TestParseRequest:
 
     def test_parse_request_unsupported_content_type(self, app_context):
         """Test parse_request with unsupported content type"""
-        with app.test_request_context(
+        with app_context.test_request_context(
             method='POST',
             data='some data',
             content_type='text/plain'
@@ -244,14 +235,14 @@ class TestParseRequest:
 
     def test_parse_request_default_content_type(self, app_context):
         """Test parse_request with no content type"""
-        with app.test_request_context(method='POST'):
+        with app_context.test_request_context(method='POST'):
             with pytest.raises(APIError):
                 parse_request(require_login=False, require_admin=False)
 
 
 class TestRequestLogging:
     def test_before_request_logs_anonymous_request_without_username(self, app_context, caplog):
-        from web_app import __main__ as main_module
+        from web_app import web_routes as main_module
 
         config = Mock(
             scanner_methods=frozenset(),
@@ -260,8 +251,8 @@ class TestRequestLogging:
             debug_mode=False,
             request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
         )
-        with app.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
-             patch("web_app.__main__.ConfigManager", return_value=config), \
+        with app_context.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.web_routes.ConfigManager", return_value=config), \
              caplog.at_level(logging.INFO):
             main_module.before_request()
 
@@ -275,7 +266,7 @@ class TestRequestLogging:
         assert payload["request_id"]
 
     def test_before_request_logs_authenticated_username(self, app_context, caplog):
-        from web_app import __main__ as main_module
+        from web_app import web_routes as main_module
 
         config = Mock(
             scanner_methods=frozenset(),
@@ -285,8 +276,8 @@ class TestRequestLogging:
             request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
         )
         user = User(username="alice", password="password", folder="alice", is_admin=False)
-        with app.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
-             patch("web_app.__main__.ConfigManager", return_value=config), \
+        with app_context.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.web_routes.ConfigManager", return_value=config), \
              caplog.at_level(logging.INFO):
             flask_login.login_user(user)
             main_module.before_request()
@@ -298,7 +289,7 @@ class TestRequestLogging:
         assert payload["user"] == "alice"
 
     def test_before_request_skips_dev_terminal_input_logs(self, app_context, caplog):
-        from web_app import __main__ as main_module
+        from web_app import web_routes as main_module
 
         config = Mock(
             scanner_methods=frozenset(),
@@ -307,8 +298,8 @@ class TestRequestLogging:
             debug_mode=False,
             request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
         )
-        with app.test_request_context("/dev/terminal/input", method="POST", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
-             patch("web_app.__main__.ConfigManager", return_value=config), \
+        with app_context.test_request_context("/dev/terminal/input", method="POST", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
+             patch("web_app.web_routes.ConfigManager", return_value=config), \
              caplog.at_level(logging.INFO):
             main_module.before_request()
 
@@ -317,3 +308,28 @@ class TestRequestLogging:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+def test_factory_keeps_config_and_sessions_independent():
+    from web_app.app import create_app
+
+    first = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "first-test-key",
+        "RATELIMIT_ENABLED": False,
+    })
+    second = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "second-test-key",
+        "RATELIMIT_ENABLED": False,
+    })
+    first.config["DEPLOY_COMMIT"] = "first-commit"
+    first_client = first.test_client()
+    second_client = second.test_client()
+    with first_client.session_transaction() as session:
+        session["factory_marker"] = "first"
+    with second_client.session_transaction() as session:
+        assert "factory_marker" not in session
+    assert first_client.get("/api/health").json["commit"] == "first-commit"
+    assert second_client.get("/api/health").json["commit"] == "unknown"
+    assert second_client.get("/privacy").status_code == 200

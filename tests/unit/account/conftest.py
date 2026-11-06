@@ -2,23 +2,7 @@ from contextlib import contextmanager
 
 import pytest
 
-import web_app.__main__ as main_module
-import web_app.helpers as helpers
-from web_app.helpers import limiter
 from web_app.users import User, UsersFile
-
-
-app = main_module.app
-
-
-@pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    limiter.enabled = False
-    with app.test_client() as client:
-        yield client
-
 
 @pytest.fixture
 def regular_user() -> User:
@@ -41,22 +25,13 @@ def admin_user() -> User:
 
 
 @pytest.fixture
-def logged_in_user(regular_user):
-    original_user_loader = helpers.login_manager._user_callback
-    helpers.login_manager._user_callback = (
-        lambda username: regular_user
-        if username == regular_user.id
-        else None
-    )
-
-    try:
-        with app.test_client() as client:
-            with client.session_transaction() as session:
-                session['_user_id'] = regular_user.id
-                session['_fresh'] = True
-            yield client
-    finally:
-        helpers.login_manager._user_callback = original_user_loader
+def logged_in_user(app, regular_user, auth_loader):
+    auth_loader(regular_user)
+    with app.test_client() as client:
+        with client.session_transaction() as session:
+            session['_user_id'] = regular_user.id
+            session['_fresh'] = True
+        yield client
 
 
 @pytest.fixture

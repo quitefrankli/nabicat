@@ -13,7 +13,7 @@ import flask_login
 from flask import Blueprint, request
 from werkzeug.security import check_password_hash
 
-from web_app.app import csrf
+from web_app.extensions import csrf
 from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.redis_client import get_redis

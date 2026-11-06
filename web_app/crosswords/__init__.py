@@ -12,7 +12,7 @@ from web_app.crosswords.word_bank import (
     validate_theme,
 )
 from web_app.crosswords.word_source import default_source
-from web_app.helpers import register_app_name
+from web_app.blueprint_registration import register_app_name
 from web_app.logging_utils import log_event
 
 crosswords_api = Blueprint(

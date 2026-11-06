@@ -15,12 +15,13 @@ from flask import (
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from flask_wtf.csrf import CSRFError
 
-from web_app.app import csrf
+from web_app.extensions import csrf
 from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
 from web_app.file_transfer import parse_upload_request
-from web_app.loft.data_interface import DataInterface, PostVisibility, slugify
-from web_app.helpers import cur_user, limiter, parse_request, register_app_name
+from web_app.loft.data_interface import DataInterface, PostVisibility
+from web_app.auth import cur_user, limiter
+from web_app.blueprint_registration import register_app_name
 from web_app.logging_utils import log_event
 
 loft_api = Blueprint(

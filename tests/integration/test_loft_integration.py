@@ -8,12 +8,8 @@ import pytest
 import requests
 
 
-DEBUG_SAVE_DATA_PATH = Path.home() / ".nabicat_debug" / "data"
-LOFT_PROJECTS_DIR = DEBUG_SAVE_DATA_PATH / "loft" / "projects"
-
-
-def _write_post(project: str, post_slug: str, content: str) -> str:
-    post_dir = LOFT_PROJECTS_DIR / project / post_slug
+def _write_post(data_root: Path, project: str, post_slug: str, content: str) -> str:
+    post_dir = data_root / "loft" / "projects" / project / post_slug
     post_dir.mkdir(parents=True, exist_ok=True)
     (post_dir / "index.html").write_text(content, encoding="utf-8")
     return f"{project}/{post_slug}"
@@ -21,13 +17,13 @@ def _write_post(project: str, post_slug: str, content: str) -> str:
 
 @pytest.mark.integration
 class TestLoftIntegration:
-    def test_loft_index_lists_projects(self, server_url):
+    def test_loft_index_lists_projects(self, server_url, server_data_root):
         project = f"loft_proj_{uuid.uuid4().hex[:8]}"
         post_slug = f"loft_post_{uuid.uuid4().hex[:8]}"
-        project_dir = LOFT_PROJECTS_DIR / project
+        project_dir = server_data_root / "loft" / "projects" / project
 
         try:
-            _write_post(project, post_slug, "<h1>Test</h1>")
+            _write_post(server_data_root, project, post_slug, "<h1>Test</h1>")
 
             response = requests.get(f"{server_url}/loft/")
             assert response.status_code == 200
@@ -35,14 +31,14 @@ class TestLoftIntegration:
         finally:
             shutil.rmtree(project_dir, ignore_errors=True)
 
-    def test_loft_post_route_renders_content(self, server_url):
+    def test_loft_post_route_renders_content(self, server_url, server_data_root):
         project = f"loft_proj_{uuid.uuid4().hex[:8]}"
         post_slug = f"loft_post_{uuid.uuid4().hex[:8]}"
         content = "<h1>Test Post</h1><p>Body content</p>"
-        project_dir = LOFT_PROJECTS_DIR / project
+        project_dir = server_data_root / "loft" / "projects" / project
 
         try:
-            _write_post(project, post_slug, content)
+            _write_post(server_data_root, project, post_slug, content)
 
             response = requests.get(f"{server_url}/loft/{project}/{post_slug}/")
             assert response.status_code == 200
@@ -51,11 +47,11 @@ class TestLoftIntegration:
         finally:
             shutil.rmtree(project_dir, ignore_errors=True)
 
-    def test_loft_asset_served_from_post_directory(self, server_url):
+    def test_loft_asset_served_from_post_directory(self, server_url, server_data_root):
         project = f"loft_proj_{uuid.uuid4().hex[:8]}"
         post_slug = f"loft_post_{uuid.uuid4().hex[:8]}"
         asset_name = "photo.jpg"
-        project_dir = LOFT_PROJECTS_DIR / project
+        project_dir = server_data_root / "loft" / "projects" / project
         post_dir = project_dir / post_slug
 
         try:

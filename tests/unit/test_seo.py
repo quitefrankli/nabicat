@@ -1,20 +1,9 @@
 import json
-from pathlib import Path
 
 import pytest
 from web_app.data_interface import DataInterface as BaseDataInterface
 
-import web_app.__main__  # noqa: F401 - registers app routes
-from web_app.app import app
 from web_app.loft.data_interface import DataInterface
-
-
-@pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    app.config["WTF_CSRF_ENABLED"] = False
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture

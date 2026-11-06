@@ -1,7 +1,7 @@
 from flask import Blueprint as _Blueprint
 
 from web_app.config import ConfigManager as _ConfigManager
-from web_app.helpers import require_login_blueprint as _require_login_blueprint
+from web_app.blueprint_registration import require_login_blueprint as _require_login_blueprint
 
 
 tubio_api = _Blueprint(

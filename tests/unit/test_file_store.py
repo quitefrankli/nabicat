@@ -9,8 +9,6 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 from werkzeug.datastructures import FileStorage
 
-# Import app from __main__ where blueprints are registered
-import web_app.__main__ as main_module
 from web_app.users import User
 from web_app.config import ConfigManager
 from web_app.file_store.data_interface import (
@@ -20,20 +18,6 @@ from web_app.file_store.data_interface import (
     FileMetadata,
     UserFileEntry
 )
-from web_app.helpers import limiter
-import web_app.helpers as helpers
-
-app = main_module.app
-
-
-@pytest.fixture
-def client():
-    """Create a test client for the Flask app"""
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    limiter.enabled = False
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture
@@ -55,28 +39,15 @@ def admin_user():
 
 
 @pytest.fixture
-def auth_mock(test_user):
-    """Setup authentication mocking for tests"""
-    # Mock the user_loader to return our test user
-    original_user_loader = helpers.login_manager._user_callback
-    helpers.login_manager._user_callback = lambda username: test_user if username == test_user.id else None
-
-    yield test_user
-
-    # Restore original user_loader
-    helpers.login_manager._user_callback = original_user_loader
+def auth_mock(test_user, auth_loader):
+    return auth_loader(test_user)
 
 
 @pytest.fixture
-def data_interface(tmp_path):
+def data_interface(tmp_path, monkeypatch):
     """Create a DataInterface with temporary directory"""
-    di = DataInterface()
-    di.data_root = tmp_path
-    di.file_store_dir = tmp_path / "file_store"
-    di.files_dir = di.file_store_dir / "files"
-    di.thumbnails_dir = di.file_store_dir / "thumbnails"
-    di.metadata_file = di.file_store_dir / "metadata.json"
-    return di
+    monkeypatch.setattr(ConfigManager(), "production_data_root", tmp_path / "data")
+    return DataInterface()
 
 
 @pytest.mark.parametrize('name,expected', [('renamed.csv', 'success'), ('../escape.csv', 'rejected'), ('taken.csv', 'rejected')])
@@ -628,6 +599,13 @@ class TestFileStoreRoutes:
     @patch('web_app.file_store.DataInterface')
     def test_bulk_routes_submit_all_selected_paths(self, mock_di_class, client, auth_mock):
         mock_di = mock_di_class.return_value
+        moved = []
+        deleted = []
+        # Flask's current_user is a request proxy; record identity during the call.
+        mock_di.move_paths.side_effect = lambda paths, destination, user: moved.append(
+            (paths, destination, user.id)
+        )
+        mock_di.delete_paths.side_effect = lambda paths, user: deleted.append((paths, user.id))
         with client.session_transaction() as sess:
             sess['_user_id'] = auth_mock.id
 
@@ -640,8 +618,8 @@ class TestFileStoreRoutes:
 
         assert move_response.status_code == 302
         assert delete_response.status_code == 302
-        mock_di.move_paths.assert_called_once_with(['reports', 'notes.txt'], 'archive', auth_mock)
-        mock_di.delete_paths.assert_called_once_with(['reports', 'notes.txt'], auth_mock)
+        assert moved == [(['reports', 'notes.txt'], 'archive', auth_mock.id)]
+        assert deleted == [(['reports', 'notes.txt'], auth_mock.id)]
 
     @patch('web_app.file_store.DataInterface')
     def test_download_folder_returns_nested_zip(self, mock_di_class, client, auth_mock, tmp_path, caplog):

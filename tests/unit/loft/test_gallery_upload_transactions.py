@@ -224,7 +224,7 @@ def test_quota_allows_large_source_when_finalized_video_fits(
     _mock_video_validation(monkeypatch)
 
     def write_normalized_video(self, src, dst, display_name, info):
-        self.atomic_write(dst, data=finalized_bytes, mode="wb")
+        self.atomic_write(dst, data=finalized_bytes)
 
     monkeypatch.setattr(
         DataInterface,
@@ -259,7 +259,7 @@ def test_quota_rejects_oversized_finalized_video_without_orphan(
     _mock_video_validation(monkeypatch)
 
     def write_normalized_video(self, src, dst, display_name, info):
-        self.atomic_write(dst, data=finalized_bytes, mode="wb")
+        self.atomic_write(dst, data=finalized_bytes)
 
     monkeypatch.setattr(
         DataInterface,
@@ -325,7 +325,7 @@ def test_batch_rejects_second_video_before_second_transcode(
     def write_normalized_video(self, src, dst, display_name, info):
         nonlocal transcodes
         transcodes += 1
-        self.atomic_write(dst, data=b"normalized mp4", mode="wb")
+        self.atomic_write(dst, data=b"normalized mp4")
 
     monkeypatch.setattr(
         DataInterface,

@@ -1,11 +1,11 @@
 from unittest.mock import patch
 
-from web_app.helpers import authenticate_user
+from web_app.auth import authenticate_user
 from web_app.users import User, UsersFile
 
 
 class TestAPIAuthentication:
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.auth.DataInterface')
     def test_accepts_hashed_admin_password(self, mock_data_interface):
         user = User.create(
             username='admin',
@@ -19,7 +19,7 @@ class TestAPIAuthentication:
 
         assert authenticate_user('admin', 'admin', require_admin=True)
 
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.auth.DataInterface')
     def test_rejects_wrong_password_without_changing_hash(
         self,
         mock_data_interface,
@@ -42,7 +42,7 @@ class TestAPIAuthentication:
         )
         assert user.password == original_hash
 
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.auth.DataInterface')
     def test_rejects_nonexistent_user(self, mock_data_interface):
         mock_data_interface.return_value.edit_users.return_value.__enter__.return_value = (
             UsersFile()
@@ -54,7 +54,7 @@ class TestAPIAuthentication:
             require_admin=True,
         )
 
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.auth.DataInterface')
     def test_enforces_admin_requirement(self, mock_data_interface):
         user = User.create(
             username='user',
@@ -68,7 +68,7 @@ class TestAPIAuthentication:
 
         assert not authenticate_user('user', 'pass', require_admin=True)
 
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.auth.DataInterface')
     def test_allows_non_admin_when_admin_not_required(
         self,
         mock_data_interface,

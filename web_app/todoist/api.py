@@ -5,7 +5,7 @@ import json
 import flask
 from flask import Blueprint, request
 
-from web_app.app import csrf
+from web_app.extensions import csrf
 from web_app.config import ConfigManager
 from web_app.oauth import bearer_user
 from web_app.redis_client import get_redis

@@ -1,14 +1,12 @@
 import subprocess
 import time
-from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask, Request
-from flask_bootstrap import Bootstrap5
-from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from web_app.config import ConfigManager
+from web_app.extensions import bootstrap, csrf
 
 
 class SetCookieNoStoreMiddleware:
@@ -64,13 +62,6 @@ class NabicatRequest(Request):
         self._max_content_length = value
 
 
-app = Flask(__name__)
-app.request_class = NabicatRequest
-app.wsgi_app = SetCookieNoStoreMiddleware(
-    ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-)
-
-
 def _load_static_version() -> str:
     """Use the deployed commit as the asset cache key, even between tags."""
     repo_root = Path(__file__).resolve().parent.parent
@@ -107,19 +98,42 @@ BUILD_VERSION, BUILD_VERSION_IS_TAG = _load_build_version()
 STATIC_VERSION = _load_static_version()
 
 
-@app.url_defaults
 def _add_static_version(endpoint, values):
     if endpoint and endpoint.endswith('static') and 'v' not in values:
         values['v'] = STATIC_VERSION
 
-# Session configuration for longer-lasting sessions
-# 30 days session lifetime - especially helpful for mobile/iOS users
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
 
-# Cookie settings for better mobile browser compatibility
-app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent XSS access to session cookie
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection while allowing normal navigation
+def create_app(config=None) -> Flask:
+    """Build an application with independent Flask configuration and routes."""
+    from web_app.auth import init_auth
+    from web_app.blueprint_registration import register_all_blueprints
+    from web_app.web_routes import register_web_routes
 
-bootstrap = Bootstrap5(app)
-csrf = CSRFProtect(app)
+    application = Flask(__name__)
+    application.request_class = NabicatRequest
+    application.wsgi_app = SetCookieNoStoreMiddleware(
+        ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    )
+    cfg = ConfigManager()
+    application.config.update(
+        BUILD_VERSION=BUILD_VERSION,
+        BUILD_VERSION_IS_TAG=BUILD_VERSION_IS_TAG,
+        PERMANENT_SESSION_LIFETIME=cfg.session_lifetime,
+        SESSION_COOKIE_NAME=cfg.flask_session_cookie_name,
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+    if config is not None:
+        application.config.from_mapping(config)
+    application.url_defaults(_add_static_version)
+    bootstrap.init_app(application)
+    csrf.init_app(application)
+    init_auth(application)
+    register_all_blueprints(application)
+    register_web_routes(application)
+    return application
+
+
+# Retain the WSGI application used by existing entry points and scripts.
+app = create_app()

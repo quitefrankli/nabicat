@@ -20,7 +20,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from web_app.config import ConfigManager
-from web_app.helpers import bedrock_text, codex_cli_text, meridian_text
+from web_app.llm_providers import bedrock_text, codex_cli_text, meridian_text
 
 from .runtime import capped_timeout_seconds
 

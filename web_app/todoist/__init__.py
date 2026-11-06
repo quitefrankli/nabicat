@@ -7,7 +7,8 @@ from typing import * # type: ignore
 from datetime import datetime, date
 
 from web_app.config import ConfigManager
-from web_app.helpers import limiter, cur_user, require_login_blueprint
+from web_app.auth import limiter, cur_user
+from web_app.blueprint_registration import require_login_blueprint
 from web_app.users import User
 from web_app.todoist.data_interface import DataInterface, GoalState, Goal
 from web_app.todoist.visualiser import plot_velocity

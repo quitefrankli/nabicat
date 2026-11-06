@@ -2,9 +2,8 @@
 
 import pytest
 from contextlib import contextmanager
-from unittest.mock import Mock, patch
-from datetime import datetime, timedelta
-from flask import Flask
+from unittest.mock import patch
+from datetime import datetime
 
 
 def _mock_edit_data(metrics):
@@ -16,25 +15,8 @@ def _mock_edit_data(metrics):
         yield metrics
     return _cm
 
-# Import app from __main__ where blueprints are registered
-import web_app.__main__ as main_module
 from web_app.users import User
-from web_app.metrics import metrics_api
 from web_app.metrics.app_data import Metric, DataPoint, Metrics
-from web_app.helpers import limiter
-import web_app.helpers as helpers
-
-app = main_module.app
-
-
-@pytest.fixture
-def client():
-    """Create a test client for the Flask app"""
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    limiter.enabled = False
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture
@@ -95,16 +77,8 @@ def test_metrics():
 
 
 @pytest.fixture
-def auth_mock(test_user):
-    """Setup authentication mocking for tests"""
-    # Mock the user_loader to return our test user
-    original_user_loader = helpers.login_manager._user_callback
-    helpers.login_manager._user_callback = lambda username: test_user if username == test_user.id else None
-    
-    yield test_user
-    
-    # Restore original user_loader
-    helpers.login_manager._user_callback = original_user_loader
+def auth_mock(test_user, auth_loader):
+    return auth_loader(test_user)
 
 
 class TestMetricsLastModified:

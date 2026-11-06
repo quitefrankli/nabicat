@@ -141,7 +141,6 @@ class DataInterface:
         *,
         stream: BinaryIO | TextIO | None = None,
         encoding: str = "utf-8",
-        mode: str | None = None,
     ) -> None:
         if data is None and stream is None:
             raise ValueError("either data or stream must be provided")
@@ -149,7 +148,6 @@ class DataInterface:
             raise ValueError("data and stream are mutually exclusive")
         self._assert_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        del mode
         temporary_path: Path | None = None
         try:
             config = ConfigManager()
@@ -221,9 +219,6 @@ class DataInterface:
         users_file = self.load_model(self.users_file, UsersFile, sync=False) or UsersFile()
         return users_file.as_dict()
 
-    def _save_users(self, users: list[User]) -> None:
-        self._save_model(self.users_file, UsersFile(root=list(users)))
-
     def edit_users(self):
         """Transactional edit of users.json.
 
@@ -257,9 +252,8 @@ class DataInterface:
         data = {
             "commit_hash": commit_hash,
         }
-        self.atomic_write(backup_dir / self.metadata_filename, 
-                          data=json.dumps(data, indent=4), 
-                          mode='w', 
+        self.atomic_write(backup_dir / self.metadata_filename,
+                          data=json.dumps(data, indent=4),
                           encoding='utf-8')
 
     def generate_backup_dir(self) -> Path:
@@ -284,25 +278,3 @@ class DataInterface:
             if not temp_file.exists():
                 return temp_file
         raise RuntimeError("Could not find available temporary file path")
-    
-    def create_temp_file(self, ext: str = "") -> Path:
-        temp_file = self.find_avail_temp_file_path(ext)
-        temp_file.parent.mkdir(parents=True, exist_ok=True)
-        temp_file.touch(exist_ok=True)
-
-        return temp_file
-    
-    @contextmanager
-    def temp_file_ctx(self, ext: str = ""):
-        """
-        Context manager for creating and cleaning up a temp file.
-        Usage:
-            with self.temp_file_ctx('.txt') as temp_path:
-                # use temp_path
-        """
-        temp_path = self.create_temp_file(ext)
-        try:
-            yield temp_path
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()

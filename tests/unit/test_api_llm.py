@@ -19,7 +19,7 @@ def llm_request(client, monkeypatch):
     ])
     data = MagicMock()
     data.edit_users.return_value.__enter__.return_value = users
-    monkeypatch.setattr("web_app.helpers.DataInterface", lambda: data)
+    monkeypatch.setattr("web_app.auth.DataInterface", lambda: data)
     payload = dict(username="admin", password="pass", model="test-model",
                    effort="medium", input="  answer this\n")
     return lambda **changes: client.post("/api/llm", json=payload | changes)
@@ -45,7 +45,7 @@ def test_llm_success(llm_request, monkeypatch):
         Path(command[command.index("--output-last-message") + 1]).write_text("answer")
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr("web_app.helpers.subprocess.run", run)
+    monkeypatch.setattr("web_app.llm_providers.subprocess.run", run)
     response = llm_request()
     assert response.status_code == 200
     assert response.json == {"success": True, "output": "answer"}
@@ -59,7 +59,7 @@ def test_llm_success(llm_request, monkeypatch):
 ])
 def test_llm_rejections_do_not_launch(llm_request, monkeypatch, changes):
     run = Mock()
-    monkeypatch.setattr("web_app.helpers.subprocess.run", run)
+    monkeypatch.setattr("web_app.llm_providers.subprocess.run", run)
     assert llm_request(**changes).status_code == 400
     run.assert_not_called()
 
@@ -81,7 +81,7 @@ def test_llm_failures_are_sanitized(llm_request, monkeypatch, caplog, failure, s
             raise failure
         return failure
 
-    monkeypatch.setattr("web_app.helpers.subprocess.run", run)
+    monkeypatch.setattr("web_app.llm_providers.subprocess.run", run)
     response = llm_request()
     assert response.status_code == status
     assert "secret" not in response.get_data(as_text=True) + caplog.text
@@ -97,8 +97,8 @@ def test_llm_encrypted_request(client, monkeypatch):
                                     model="model", effort="high", input="prompt"))
     authenticate = Mock(return_value=True)
     generate = Mock(return_value="answer")
-    monkeypatch.setattr("web_app.helpers.decode_decrypt_decompress", decode)
-    monkeypatch.setattr("web_app.helpers.authenticate_user", authenticate)
+    monkeypatch.setattr("web_app.auth.decode_decrypt_decompress", decode)
+    monkeypatch.setattr("web_app.auth.authenticate_user", authenticate)
     monkeypatch.setattr("web_app.api.codex_cli_text", generate)
     response = client.post("/api/llm", json={"req": {"session_id": "test"}})
     assert response.json == {"success": True, "output": "answer"}
@@ -109,7 +109,7 @@ def test_llm_encrypted_request(client, monkeypatch):
 @pytest.mark.parametrize("payload", [[], {"username": "admin", "password": "pass"}])
 def test_llm_malformed_or_missing_fields(client, monkeypatch, payload):
     import web_app.__main__  # noqa: F401
-    monkeypatch.setattr("web_app.helpers.authenticate_user", Mock(return_value=True))
+    monkeypatch.setattr("web_app.auth.authenticate_user", Mock(return_value=True))
     generate = Mock()
     monkeypatch.setattr("web_app.api.codex_cli_text", generate)
     assert client.post("/api/llm", json=payload).status_code == 400

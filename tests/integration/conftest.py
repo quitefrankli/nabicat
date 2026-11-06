@@ -1,22 +1,12 @@
-"""Pytest configuration for integration tests - handles server startup/shutdown"""
+"""Pytest configuration for integration tests."""
+
+from pathlib import Path
 
 import pytest
-import subprocess
-import sys
-import time
-import socket
-import os
-import tempfile
-from pathlib import Path
 import requests
 
-# Import and disable rate limiter
-import web_app.__main__ as main_module
-from web_app.helpers import limiter
+from tests.server_fixture import test_server as run_test_server
 from web_app.config import ConfigManager
-
-# Disable rate limiting for integration tests
-limiter.enabled = False
 
 
 @pytest.fixture(autouse=True)
@@ -25,86 +15,25 @@ def bounded_http_requests(monkeypatch):
     original_request = requests.Session.request
 
     def request(session, *args, **kwargs):
-        kwargs.setdefault('timeout', ConfigManager().integration_request_timeout_s)
+        kwargs.setdefault("timeout", ConfigManager().integration_request_timeout_s)
         return original_request(session, *args, **kwargs)
 
-    monkeypatch.setattr(requests.Session, 'request', request)
-
-# Port for the test server
-TEST_PORT = 54321
-TEST_BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
-
-
-def wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
-    """Wait for server to become available"""
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            with socket.create_connection((host, port), timeout=1):
-                return True
-        except (socket.timeout, ConnectionRefusedError, OSError):
-            time.sleep(0.1)
-    return False
-
-
-def find_free_port() -> int:
-    """Find a free port on localhost"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
-        s.listen(1)
-        port = s.getsockname()[1]
-    return port
+    monkeypatch.setattr(requests.Session, "request", request)
 
 
 @pytest.fixture(scope="session")
-def server_url():
-    """Start the Flask server for integration tests and return the base URL"""
-    # Use a dynamic port to avoid conflicts
-    port = find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
-    
-    # Get the project root directory
+def test_server_instance():
+    """Start an isolated Flask and Redis pair for integration tests."""
     project_root = Path(__file__).parent.parent.parent
-    
-    # Start the server as a subprocess with a script that disables rate limiting
-    env = os.environ.copy()
+    with run_test_server(project_root) as server:
+        yield server
 
-    # Create a startup script that disables rate limiting
-    startup_script = f'''
-import sys
-sys.path.insert(0, "{project_root}")
 
-# Import and disable rate limiter before importing other modules
-import web_app.helpers
-web_app.helpers.limiter.enabled = False
+@pytest.fixture(scope="session")
+def server_url(test_server_instance):
+    return test_server_instance.base_url
 
-# Now run the app
-from web_app.app import app
-app.config["SESSION_COOKIE_SECURE"] = False
 
-from web_app.__main__ import cli_start
-cli_start(["--port", "{port}", "--debug"])
-'''
-    
-    # A file cannot fill up like an undrained PIPE and block the server mid-request.
-    with tempfile.TemporaryFile() as server_log:
-        process = subprocess.Popen(
-            [sys.executable, "-u", "-c", startup_script],
-            cwd=str(project_root),
-            stdout=server_log,
-            stderr=subprocess.STDOUT,
-            env=env,
-        )
-        try:
-            if not wait_for_server("127.0.0.1", port, timeout=30.0):
-                server_log.seek(0)
-                output = server_log.read().decode('utf-8', errors='replace')
-                raise RuntimeError(f"Server failed to start on port {port}\n{output}")
-            yield base_url
-        finally:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+@pytest.fixture(scope="session")
+def server_data_root(test_server_instance):
+    return test_server_instance.data_root

@@ -29,7 +29,7 @@ from web_app.crosswords.word_bank import (
     FALLBACK_POOL,
     WordClue,
 )
-from web_app.helpers import MeridianError, CodexCLIError, meridian_text, codex_cli_text
+from web_app.llm_providers import MeridianError, CodexCLIError, meridian_text, codex_cli_text
 from web_app.logging_utils import log_event
 
 

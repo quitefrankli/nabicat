@@ -12,7 +12,7 @@ import uuid
 
 from flask_login import current_user
 from web_app.config import ConfigManager
-from web_app.helpers import limiter
+from web_app.auth import limiter
 from web_app.logging_utils import log_event
 from web_app.redis_client import _delete_if_token_owned, get_redis
 

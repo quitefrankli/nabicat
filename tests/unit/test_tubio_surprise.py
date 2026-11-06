@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import web_app.helpers as helpers
 from web_app.redis_client import get_redis
 from web_app.tubio.audio_downloader import AudioDownloader
 from web_app.tubio.data_interface import (
@@ -18,32 +17,15 @@ from web_app.tubio.routes.surprise import reserve_audio_metadata
 from web_app.users import User
 
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_app():
-    from web_app.app import app
-    from web_app.helpers import limiter, register_all_blueprints
-
-    app.config["TESTING"] = True
-    app.config["WTF_CSRF_ENABLED"] = False
-    limiter.enabled = False
-    if "tubio" not in app.blueprints:
-        register_all_blueprints(app)
-
-
 @pytest.fixture
-def auth_mock():
+def auth_mock(auth_loader):
     user = User(
         username="surprise-user",
         password="testpass",
         folder="test_folder",
         is_admin=False,
     )
-    original = helpers.login_manager._user_callback
-    helpers.login_manager._user_callback = (
-        lambda username: user if username == user.id else None
-    )
-    yield user
-    helpers.login_manager._user_callback = original
+    return auth_loader(user)
 
 
 def _surprise(*crcs: int, last_active: datetime | None = None) -> Playlist:

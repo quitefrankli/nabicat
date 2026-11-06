@@ -1,29 +1,17 @@
 """Unit tests for todoist module"""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timedelta, date
+from unittest.mock import Mock, patch
+from datetime import datetime, timedelta
 
-from web_app.app import app
 from web_app.users import User
 from web_app.todoist import (
-    todoist_api,
     _get_filtered_summary_goals,
     _goals_to_blocks,
     _get_completed_goals,
-    _completed_goals_to_blocks,
-    PAGE_SIZE
+    _completed_goals_to_blocks
 )
 from web_app.todoist.data_interface import Goal, GoalState, Goals
-
-
-@pytest.fixture
-def client():
-    """Create a test client for the Flask app"""
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture

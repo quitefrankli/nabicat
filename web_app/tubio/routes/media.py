@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Response, flash, redirect, render_template, request, send_file, url_for
 
 from web_app.config import ConfigManager
-from web_app.helpers import cur_user, limiter
+from web_app.auth import cur_user, limiter
 from web_app.logging_utils import log_event
 from web_app.redis_client import get_redis
 from web_app.tubio import tubio_api

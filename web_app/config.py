@@ -763,12 +763,17 @@ class ConfigManager:
         self.debug_data_root = Path.home() / ".nabicat_debug" / "data"
         self.server_host = "0.0.0.0"
         self.server_default_port = 80
+        self.session_lifetime = timedelta(days=14)
         self.session_cookie_name = "session"
         self.debug_session_cookie_name = "session_debug"
         self.site_url = getenv("SITE_URL") or "https://nabicat.site"
         self.redis_url = getenv("REDIS_URL") or "redis://127.0.0.1:6379/0"
         self.redis_readiness_timeout_s = 5.0
         self.redis_readiness_poll_s = 0.1
+        self.test_server_startup_timeout_s = 30.0
+        self.test_server_poll_interval_s = 0.1
+        self.test_server_stop_timeout_s = 5.0
+        self.test_server_request_timeout_s = 1.0
         self.password_hash_method = "scrypt"
         self.password_hash_prefix = "nabicat$"
         self.api_jwt_lifetime_s = 24 * 60 * 60

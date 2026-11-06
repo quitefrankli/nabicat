@@ -5,7 +5,7 @@ import time
 from flask import Response, flash, redirect, render_template, request, url_for
 
 from web_app.config import ConfigManager
-from web_app.helpers import cur_user, parse_request
+from web_app.auth import cur_user, parse_request
 from web_app.logging_utils import log_event
 from web_app.tubio import tubio_api
 from web_app.tubio.audio_downloader import (

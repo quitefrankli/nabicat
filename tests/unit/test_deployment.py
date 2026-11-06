@@ -200,10 +200,8 @@ def test_build_version_uses_nearest_ancestor_tag(monkeypatch, tmp_path):
 
 
 def test_home_uses_build_version_loaded_at_server_start(client, monkeypatch):
-    import web_app.__main__ as web_main
-
-    monkeypatch.setattr(web_main, "BUILD_VERSION", "release-2026.07.29")
-    monkeypatch.setattr(web_main, "BUILD_VERSION_IS_TAG", True)
+    monkeypatch.setitem(client.application.config, "BUILD_VERSION", "release-2026.07.29")
+    monkeypatch.setitem(client.application.config, "BUILD_VERSION_IS_TAG", True)
     with patch("web_app.app._load_build_version") as load_build_version:
         response = client.get("/")
 
@@ -214,10 +212,8 @@ def test_home_uses_build_version_loaded_at_server_start(client, monkeypatch):
 
 
 def test_home_build_version_falls_back_to_abbreviated_commit(client, monkeypatch):
-    import web_app.__main__ as web_main
-
-    monkeypatch.setattr(web_main, "BUILD_VERSION", "abc123def456789")
-    monkeypatch.setattr(web_main, "BUILD_VERSION_IS_TAG", False)
+    monkeypatch.setitem(client.application.config, "BUILD_VERSION", "abc123def456789")
+    monkeypatch.setitem(client.application.config, "BUILD_VERSION_IS_TAG", False)
 
     response = client.get("/")
 

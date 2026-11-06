@@ -3,7 +3,7 @@ import logging
 from flask import flash, redirect, request, url_for
 
 from web_app.config import ConfigManager
-from web_app.helpers import cur_user, limiter
+from web_app.auth import cur_user, limiter
 from web_app.logging_utils import log_event
 from web_app.tubio import tubio_api
 from web_app.tubio.data_interface import AudioMetadata, DataInterface, UserMetadata

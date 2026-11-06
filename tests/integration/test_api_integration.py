@@ -13,7 +13,6 @@ import json
 import base64
 import gzip
 import os
-from io import BytesIO
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM

@@ -12,7 +12,7 @@ import requests
 from flask import jsonify, request
 
 from web_app.config import ConfigManager
-from web_app.helpers import limiter
+from web_app.auth import limiter
 
 _CLIENT_RE = re.compile(r"\bclient=([^,\s]+)")
 _PATH_RE = re.compile(r"\bpath=([^,\s]+)")

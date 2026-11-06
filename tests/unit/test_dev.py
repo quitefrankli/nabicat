@@ -1,7 +1,6 @@
 from collections import Counter
 from unittest.mock import PropertyMock, patch
 
-from web_app.app import app
 from web_app.config import ConfigManager
 from web_app.dev.logs import _read_log_lines, get_logs
 from web_app.dev.map import (
@@ -126,7 +125,7 @@ def test_read_log_lines_hides_structured_lifecycle_logs_for_suppressed_paths(tmp
     assert _read_log_lines(tmp_path) == [audit_event, regular_request]
 
 
-def test_get_logs_returns_all_selected_files_without_default_line_limit(tmp_path):
+def test_get_logs_returns_all_selected_files_without_default_line_limit(tmp_path, app):
     (tmp_path / "web_app.log").write_text("".join(f"line {idx}\n" for idx in range(2100)))
 
     with (
@@ -173,7 +172,7 @@ def test_matching_log_events_can_filter_by_range_and_ip_glob(tmp_path):
     assert events == [(_extract_timestamp("2026-05-12 10:00:00,000 INFO x"), "8.8.8.8")]
 
 
-def test_map_data_returns_located_public_ips_and_summary(tmp_path):
+def test_map_data_returns_located_public_ips_and_summary(tmp_path, app):
     (tmp_path / "web_app.log").write_text(
         "2026-05-12 10:00:00,000 INFO Processing request: client=8.8.8.8, path=/\n"
         "2026-05-12 10:30:00,000 INFO Processing request: client=8.8.8.8, path=/dev\n"
@@ -214,7 +213,7 @@ def test_map_data_returns_located_public_ips_and_summary(tmp_path):
     assert payload["points"][0]["count"] == 2
 
 
-def test_map_data_applies_path_filter(tmp_path):
+def test_map_data_applies_path_filter(tmp_path, app):
     (tmp_path / "web_app.log").write_text(
         "INFO Processing request: client=8.8.8.8, path=/loft/cats, method=GET\n"
         "INFO Processing request: client=1.1.1.1, path=/metrics/, method=GET\n"

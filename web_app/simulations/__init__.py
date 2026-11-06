@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template
 
-from web_app.helpers import register_app_name
+from web_app.blueprint_registration import register_app_name
 
 
 simulations_api = Blueprint(
