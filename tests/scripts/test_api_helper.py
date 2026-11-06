@@ -698,3 +698,45 @@ def test_upload_rejects_special_files(helper, monkeypatch, tmp_path):
     assert result.exit_code == 1
     assert 'Not a regular file or directory' in result.output
     post.assert_not_called()
+
+
+@pytest.mark.parametrize('as_json', [False, True])
+def test_logs_paginate_filters_and_write_output(helper, monkeypatch, tmp_path, as_json):
+    def event(name):
+        return {'timestamp': '2026-11-07T04:00:00+00:00', 'level': 'ERROR',
+                'fields': {'app': 'api', 'event': name, 'request_id': 'trace'},
+                'message': name, 'traceback': 'ValueError: broken'}
+
+    pages = [
+        {'events': [event('first')], 'next_cursor': 'page2'},
+        {'events': [event('second')], 'next_cursor': None},
+    ]
+    calls = []
+
+    def send(endpoint, payload, **kwargs):
+        calls.append((endpoint, dict(payload)))
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.json.return_value = pages.pop(0)
+        return response
+
+    monkeypatch.setattr(helper, 'send_request', send)
+    output = tmp_path / 'logs.txt'
+    args = ['logs', '-n', '2', '--since', '1h', '--level', 'error', '--app', 'api',
+            '--event', 'request.exception', '--request-id', 'trace', '-o', str(output)]
+    result = CliRunner().invoke(helper.cli, args + (['--json'] if as_json else []))
+    assert result.exit_code == 0, result.output
+    assert result.output == ''
+    assert calls[0][0] == 'api/logs'
+    assert calls[0][1]['limit'] == 2
+    assert calls[0][1]['app'] == 'api'
+    assert calls[0][1]['event'] == 'request.exception'
+    assert calls[0][1]['request_id'] == 'trace'
+    assert 'T' in calls[0][1]['since']
+    assert calls[1][1] == {'cursor': 'page2', 'limit': 1}
+    text = output.read_text()
+    if as_json:
+        assert [json.loads(line)['fields']['event'] for line in text.splitlines()] == ['first', 'second']
+    else:
+        assert 'request_id=trace' in text
+        assert text.count('ValueError: broken') == 2

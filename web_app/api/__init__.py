@@ -22,7 +22,8 @@ from web_app.llm_providers import codex_cli_text, CodexCLIError
 from web_app.file_store.data_interface import DataInterface as FileStoreDataInterface
 from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
-from web_app.api_auth import issue_api_token
+from web_app.api_auth import issue_api_token, authenticate_api_token
+from web_app.api.logs import read_logs
 from web_app.logging_utils import log_event
 from web_app.file_transfer import file_download_response, parse_upload_request
 
@@ -68,6 +69,16 @@ def _get_file_name(request_body: dict) -> str:
     if not isinstance(name, str) or not name:
         raise APIError("File name must be a non-empty string")
     return name
+
+
+@api_api.route('/logs', methods=['POST'])
+@_handle_api_error
+def api_logs():
+    authenticate_api_token(request.headers.get('Authorization', ''), require_admin=True)
+    options = request.get_json(silent=True)
+    if not isinstance(options, dict):
+        raise APIError('Expected a JSON object')
+    return jsonify(read_logs(options))
 
 
 def update_server(patch: str | None = None):

@@ -788,6 +788,11 @@ class ConfigManager:
         self.api_helper_default_base_url = "https://nabicat.site"
         self.api_helper_login_timeout_s = 10.0
         self.api_helper_payload_confirm_bytes = 1000
+        self.api_logs_default_tail = 100
+        self.api_logs_page_size = 100
+        self.api_logs_read_chunk_bytes = 64 * 1024
+        self.api_logs_cursor_max_age_s = 3600
+        self.api_logs_cursor_salt = "api.logs.cursor"
         self.api_helper_upload_confirm_bytes = 100 * 1024 * 1024
         self.api_transfer_chunk_bytes = 64 * 1024
         self.api_transfer_gzip_window_bits = 31

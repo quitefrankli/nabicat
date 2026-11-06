@@ -244,6 +244,64 @@ def send_request(
 def cli():
     pass
 
+
+@cli.command()
+@click.option('-n', '--tail', type=click.IntRange(min=1), default=ConfigManager().api_logs_default_tail,
+              show_default=True, help='Maximum number of matching events, newest first.')
+@click.option('--since', help='Lower time bound: ISO timestamp or duration such as 30m or 2h.')
+@click.option('--until', help='Upper time bound: ISO timestamp or relative duration.')
+@click.option('--level', type=click.Choice(['debug', 'info', 'warning', 'error', 'critical'], case_sensitive=False),
+              help='Minimum severity.')
+@click.option('--app', help='Owning subapp (exact match).')
+@click.option('--event', help='Stable event name (exact match).')
+@click.option('--request-id', help='Request correlation ID (exact match).')
+@click.option('--json', 'as_json', is_flag=True, help='Emit JSON Lines.')
+@click.option('-o', '--output', type=click.Path(path_type=Path), help='Write results to this file.')
+def logs(tail, since, until, level, app, event, request_id, as_json, output):
+    """Fetch retained application log events and tracebacks, newest first (admin only)."""
+    from web_app.api.logs import parse_log_time
+
+    options = {key: value for key, value in {
+        'since': since, 'until': until, 'level': level, 'app': app,
+        'event': event, 'request_id': request_id,
+    }.items() if value is not None}
+    for key in ('since', 'until'):
+        if key in options:
+            try:
+                options[key] = datetime.fromtimestamp(parse_log_time(options[key])).astimezone().isoformat()
+            except (ValueError, OverflowError):
+                raise click.BadParameter('Use an ISO timestamp or duration such as 30m or 2h', param_hint=f'--{key}') from None
+    with ExitStack() as stack:
+        destination = stack.enter_context(click.open_file(str(output), 'w', atomic=True)) if output else click.get_text_stream('stdout')
+        remaining = tail
+        while remaining:
+            options['limit'] = min(remaining, ConfigManager().api_logs_page_size)
+            with send_request('api/logs', options, confirm_payload=False) as response:
+                page = _response_json(response)
+            events = page.get('events')
+            if not isinstance(events, list):
+                raise click.ClickException('Server returned invalid log events.')
+            for item in events:
+                if as_json:
+                    line = json.dumps(item, ensure_ascii=False)
+                else:
+                    fields = item['fields']
+                    line = f"{item['timestamp']} {item['level']} {fields.get('app', '')} {fields.get('event', '')}"
+                    if fields.get('request_id'):
+                        line += f" request_id={fields['request_id']}"
+                    line += f"\n{item['message']}"
+                    if item.get('traceback'):
+                        line += f"\n{item['traceback']}"
+                click.echo(line, file=destination)
+            remaining -= len(events)
+            cursor = page.get('next_cursor')
+            if not cursor:
+                break
+            if not events or not isinstance(cursor, str) or cursor == options.get('cursor'):
+                raise click.ClickException('Server returned an invalid log cursor.')
+            options = {'cursor': cursor}
+
+
 @cli.command()
 @click.option("--model", default=ConfigManager().api_helper_default_model, show_default=True,
               help="Codex model to request; defaults to Luna 6.0.")
