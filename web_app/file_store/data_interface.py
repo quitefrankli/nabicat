@@ -240,8 +240,8 @@ class DataInterface(BaseDataInterface):
         uploads: list[tuple[FileStorage, str]],
         folders: list[str],
         user: User,
-    ) -> None:
-        """Atomically save a validated file/folder batch."""
+    ) -> int:
+        """Atomically save a validated batch and return its total uploaded bytes."""
         if len(uploads) > ConfigManager().file_store.folder_upload_max_entries:
             raise ValueError('Too many files in folder upload')
         paths = [self._normalise_path(path) for _, path in uploads]
@@ -294,6 +294,7 @@ class DataInterface(BaseDataInterface):
             # cleaned by _save_file_metadata; sweep leftovers on error paths.
             for temp_path, *_ in streamed:
                 Path(temp_path).unlink(missing_ok=True)
+        return sum(size for _, _, size, _, _ in streamed)
 
     def get_folder_files(self, path: str, user: User) -> list[tuple[str, Path]]:
         folder_path = self._normalise_path(path)

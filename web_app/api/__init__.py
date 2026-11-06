@@ -235,7 +235,7 @@ def api_push():
             stream=upload_stream, filename=name,
             content_type=mimetypes.guess_type(name)[0] or 'application/octet-stream',
         )
-        FileStoreDataInterface().save_files([(upload, name)], [], user)
+        uploaded_bytes = FileStoreDataInterface().save_files([(upload, name)], [], user)
     except (gzip.BadGzipFile, EOFError, zlib.error) as error:
         log_event(
             "api", "api.data_push_rejected", level=logging.WARNING,
@@ -250,7 +250,7 @@ def api_push():
             exc_info=True,
         )
         return jsonify({"error": str(error)}), 400
-    log_event("api", "api.data_pushed", user=user, name=name, bytes=upload_stream.tell())
+    log_event("api", "api.data_pushed", user=user, name=name, bytes=uploaded_bytes)
     return jsonify({"success": True, "message": "Data pushed successfully"}), 200
 
 @api_api.route("/pull", methods=["POST"])

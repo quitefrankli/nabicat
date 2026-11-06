@@ -50,6 +50,34 @@ def encoded(data):
     return {"data": gzip.compress(data), "encoding": "gzip"}
 
 
+@pytest.mark.parametrize('encoding', ['identity', 'gzip'])
+def test_upload_stream_without_tell(storage, client, monkeypatch, encoding):
+    import web_app.api as api
+
+    store, (alice, _), request = storage
+    original = b'video content'
+    body = io.BytesIO(gzip.compress(original) if encoding == 'gzip' else original)
+
+    class Body:
+        def read(self, size=-1):
+            return body.read(size)
+
+    events = []
+    monkeypatch.setattr(api, 'log_event', lambda *args, **kwargs: events.append((args, kwargs)))
+    with client.application.app_context():
+        token = issue_api_token(alice.id)
+    response = client.post('/api/push?name=video.mp4', environ_overrides={
+        'wsgi.input': Body(), 'wsgi.input_terminated': True,
+    }, headers={
+        'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream',
+        'Content-Encoding': encoding,
+    })
+    assert response.status_code == 200
+    assert store.get_file_path('video.mp4', alice).read_bytes() == original
+    assert events[-1][0] == ('api', 'api.data_pushed')
+    assert events[-1][1]['bytes'] == len(original)
+
+
 @pytest.mark.parametrize('name,compression', [
     ('video.MP4', 'identity'), ('photo.jpeg', 'identity'), ('image.png', 'identity'),
     ('audio.flac', 'identity'), ('backup.tar.gz', 'identity'), ('document.docx', 'identity'),
