@@ -45,7 +45,7 @@ class TestCSRFProtection:
 class TestAPIAdminOnly:
     """API endpoints (push/pull/delete/list) should require admin"""
 
-    @patch('web_app.helpers.DataInterface')
+    @patch('web_app.api_auth.DataInterface')
     def test_api_push_rejects_non_admin(self, mock_di, client):
         non_admin = User.create(
             username='user',
@@ -53,12 +53,13 @@ class TestAPIAdminOnly:
             folder='uf',
             is_admin=False,
         )
-        mock_di.return_value.edit_users.return_value.__enter__.return_value = (
-            UsersFile(root=[non_admin])
-        )
-        response = client.post('/api/push', json={
-            'username': 'user', 'password': 'pass',
-            'name': 'test.txt', 'data': 'dGVzdA=='
+        from web_app.api_auth import issue_api_token
+
+        mock_di.return_value.load_users.return_value = UsersFile(root=[non_admin])
+        with app.app_context():
+            token = issue_api_token('user')
+        response = client.post('/api/push', data=b'test', query_string={'name': 'test.txt'}, headers={
+            'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream',
         })
-        assert response.status_code == 400
-        assert 'Invalid credentials' in response.get_json().get('error', '')
+        assert response.status_code == 403
+        assert 'Admin access required' in response.get_json().get('error', '')

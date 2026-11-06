@@ -1,5 +1,4 @@
 """File API and File Store share the same user-visible files."""
-import base64
 import gzip
 import io
 from datetime import datetime, timedelta
@@ -11,7 +10,7 @@ from web_app.config import ConfigManager
 from web_app.data_interface import DataInterface
 from web_app.file_store.data_interface import DataInterface as FileStore
 from web_app.users import User
-from web_app.file_transfer import decode_file_payload, encode_file_payload
+from web_app.api_auth import issue_api_token
 
 
 @pytest.fixture
@@ -31,6 +30,15 @@ def storage(client, monkeypatch, tmp_path):
         model.root = users
 
     def request(operation, username="alice", **payload):
+        if operation == 'push':
+            with client.application.app_context():
+                token = issue_api_token(username)
+            data = payload.pop('data', b'')
+            encoding = payload.pop('encoding', 'identity')
+            return client.post('/api/push', data=data, query_string=payload, headers={
+                'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream',
+                'Content-Encoding': encoding,
+            })
         return client.post(f"/api/{operation}", json={
             "username": username, "password": "pass", **payload,
         })
@@ -39,33 +47,44 @@ def storage(client, monkeypatch, tmp_path):
 
 
 def encoded(data):
-    return encode_file_payload(data, "notes.txt")
+    return {"data": gzip.compress(data), "encoding": "gzip"}
 
 
 @pytest.mark.parametrize('name,compression', [
-    ('video.MP4', 'none'), ('photo.jpeg', 'none'), ('image.png', 'none'),
-    ('audio.flac', 'none'), ('backup.tar.gz', 'none'), ('document.docx', 'none'),
-    ('font.woff2', 'none'), ('notes.txt', 'gzip'), ('drawing.svg', 'gzip'),
+    ('video.MP4', 'identity'), ('photo.jpeg', 'identity'), ('image.png', 'identity'),
+    ('audio.flac', 'identity'), ('backup.tar.gz', 'identity'), ('document.docx', 'identity'),
+    ('font.woff2', 'identity'), ('notes.txt', 'gzip'), ('drawing.svg', 'gzip'),
     ('archive.tar', 'gzip'), ('document.pdf', 'gzip'),
 ])
 def test_file_transfer_compression(storage, name, compression):
     store, (alice, _), request = storage
     original = b'\x00binary\xff content' * 20
-    payload = encode_file_payload(original, name)
-    assert payload['compression'] == compression
+    payload = {"data": gzip.compress(original) if compression == "gzip" else original, "encoding": compression}
     assert request('push', name=name, **payload).status_code == 200
     assert store.get_file_path(name, alice).read_bytes() == original
     response = request('pull', name=name)
     assert response.status_code == 200
-    assert response.json['compression'] == compression
-    assert decode_file_payload(response.json) == original
+    assert response.headers.get('Content-Encoding', 'identity') == compression
+    assert (gzip.decompress(response.data) if compression == "gzip" else response.data) == original
+    if compression == 'identity':
+        assert response.content_length == len(original)
+
+
+def test_binary_upload_rejects_json_and_allows_empty_files(storage, client):
+    store, (alice, _), request = storage
+    assert request('push', name='empty.mp4', data=b'').status_code == 200
+    assert store.get_file_path('empty.mp4', alice).read_bytes() == b''
+    with client.application.app_context():
+        token = issue_api_token(alice.id)
+    response = client.post('/api/push', json={'name': 'empty.mp4', 'data': 'old payload'},
+                           headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 400
+    assert store.get_file_path('empty.mp4', alice).read_bytes() == b''
 
 
 @pytest.mark.parametrize('payload', [
-    {'data': 'dGVzdA=='},
-    {'data': '%%%invalid', 'compression': 'none'},
-    {'data': 'dGVzdA==', 'compression': 'gzip'},
-    {'data': 'dGVzdA==', 'compression': 'unknown'},
+    {'data': b'not gzip', 'encoding': 'gzip'},
+    {'data': b'test', 'encoding': 'unknown'},
 ])
 def test_invalid_explicit_encoding_preserves_existing_file(storage, payload):
     store, (alice, _), request = storage
@@ -79,7 +98,7 @@ def test_api_and_file_store_share_files_and_preserve_user_isolation(storage):
     store.save_files([(FileStorage(io.BytesIO(b"from UI"), "notes.txt"), "docs/notes.txt")], [], alice)
     assert request("list").json["files"] == ["docs/notes.txt"]
     response = request("pull", name="docs/notes.txt")
-    assert gzip.decompress(base64.b64decode(response.json["data"])) == b"from UI"
+    assert gzip.decompress(response.data) == b"from UI"
 
     assert request("push", name="docs/notes.txt", **encoded(b"from API")).status_code == 200
     assert store.get_file_path("docs/notes.txt", alice).read_bytes() == b"from API"
@@ -141,8 +160,9 @@ def test_list_includes_latest_upload_dates_in_newest_first_order(storage):
 
 
 @pytest.mark.parametrize("operation", ["push", "pull", "delete"])
-@pytest.mark.parametrize("name", ["../outside.txt", "/outside.txt", None, 42])
+@pytest.mark.parametrize("name", ["../outside.txt", "/outside.txt", None])
 def test_file_api_rejects_invalid_paths(storage, operation, name):
     store, (alice, _), request = storage
-    assert request(operation, name=name, **encoded(b"content")).status_code == 400
+    payload = encoded(b"content") if operation == "push" else {}
+    assert request(operation, name=name, **payload).status_code == 400
     assert store.list_files(alice) == []

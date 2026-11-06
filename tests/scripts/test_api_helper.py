@@ -2,7 +2,6 @@ import os
 import subprocess
 import sys
 import importlib.util
-import base64
 import gzip
 import io
 import json
@@ -13,7 +12,6 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from click.testing import CliRunner
-from web_app.file_transfer import decode_file_payload
 
 
 @pytest.fixture
@@ -56,8 +54,7 @@ def test_update_selects_pull_or_patch_and_requires_confirmation(helper, monkeypa
 
 
 def test_download_creates_parent_directories(helper, monkeypatch, tmp_path):
-    response = MagicMock(status_code=200)
-    response.json.return_value = {"compression": "gzip", "data": base64.b64encode(gzip.compress(b"notes")).decode()}
+    response = binary_response(b"notes")
     monkeypatch.setattr(helper, "send_request", lambda *args: response)
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(helper.cli, ["download", "docs/notes.txt"])
@@ -139,7 +136,7 @@ def test_commit_patch_upload_round_trips_binary_zip(monkeypatch, helper):
     endpoint, payload = send.call_args.args
     assert endpoint == "api/push"
     assert payload["name"] == "_commit_patches.zip"
-    archive = decode_file_payload(payload)
+    archive = send.call_args.kwargs["upload"].getvalue()
     with helper.zipfile.ZipFile(io.BytesIO(archive)) as patches:
         assert patches.namelist() == ["0001-abcdef1.patch"]
         assert patches.read("0001-abcdef1.patch") == b"patch contents\n"
@@ -242,12 +239,24 @@ def api_response(body, status=200):
     return response
 
 
+def binary_response(data):
+    response = requests.Response()
+    response.status_code = 200
+    response._content = data
+    response._content_consumed = True
+    response.headers['Content-Type'] = 'application/octet-stream'
+    return response
+
+
 def upload_post_mock():
     payloads = []
 
-    def send(url, *, data, headers, **kwargs):
-        assert headers['Content-Type'] == 'application/json'
-        payloads.append(json.loads(data.read()))
+    def send(url, *, data, headers, params, **kwargs):
+        assert headers['Content-Type'] == 'application/octet-stream'
+        body = data.read()
+        encoding = headers['Content-Encoding']
+        payloads.append({**params, 'data': gzip.decompress(body) if encoding == 'gzip' else body,
+                         'encoding': encoding})
         return api_response({'success': True})
 
     post = MagicMock(side_effect=send)
@@ -270,22 +279,29 @@ def test_transfer_progress_round_trip(helper, monkeypatch, tmp_path, known_lengt
             pass
 
         def do_POST(self):
+            from urllib.parse import urlsplit, parse_qs
+
+            url = urlsplit(self.path)
             body = self.rfile.read(int(self.headers['Content-Length']))
-            payload = json.loads(body)
-            if self.path == '/api/push':
-                stored.update(payload)
+            if url.path == '/api/push':
+                stored['name'] = parse_qs(url.query)['name'][0]
+                stored['encoding'] = self.headers['Content-Encoding']
+                stored['data'] = gzip.decompress(body) if stored['encoding'] == 'gzip' else body
+                stored['wire_size'] = len(body)
                 transfers.append(len(body))
-                result = {'success': True}
+                response = json.dumps({'success': True}).encode()
+                content_type = 'application/json'
             else:
-                result = {key: stored[key] for key in ('data', 'compression')}
-            response = json.dumps(result).encode()
+                assert json.loads(body)['name'] == stored['name']
+                response = stored['data']
+                content_type = 'application/octet-stream'
+                transfers.append(len(response))
             self.send_response(200)
+            self.send_header('Content-Type', content_type)
             if known_length:
                 self.send_header('Content-Length', str(len(response)))
             self.end_headers()
             self.wfile.write(response)
-            if self.path == '/api/pull':
-                transfers.append(len(response))
 
     bars = []
     original_bar = helper.click.progressbar
@@ -323,7 +339,9 @@ def test_transfer_progress_round_trip(helper, monkeypatch, tmp_path, known_lengt
     assert all(len(counts) > 1 for options, counts in bars)
     assert bars[0][0]['length'] == transfers[0]
     assert bars[1][0]['length'] == (transfers[1] if known_length else None)
-    assert stored['compression'] == ('none' if filename.endswith('MP4') else 'gzip')
+    assert stored['encoding'] == ('identity' if filename.endswith('MP4') else 'gzip')
+    if filename.endswith('MP4'):
+        assert stored['wire_size'] == source.stat().st_size
 
 
 @pytest.mark.parametrize('state', ['missing', 'expired'])
@@ -385,10 +403,7 @@ def test_server_failure_has_nonzero_exit(helper, monkeypatch, tmp_path, command,
     (['ls'], [], 'expected an object'),
     (['ls'], {'entries': [None]}, 'invalid directory listing'),
     (['ls'], {'entries': [{'name': 'a', 'kind': 'file', 'uploaded_at': 'bad-date'}]}, 'invalid directory listing'),
-    (['download', 'notes'], {'compression': 'gzip', 'data': 'not-base64'}, 'corrupt file data'),
-    (['download', 'notes'], {'compression': 'gzip', 'data': base64.b64encode(b'not gzip').decode()}, 'corrupt file data'),
-    (['download', 'notes'], {'compression': 'gzip', 'data': None}, 'invalid file response'),
-    (['download', 'notes'], {'data': base64.b64encode(gzip.compress(b'legacy')).decode()}, 'corrupt file data'),
+    (['download', 'notes'], {'data': 'legacy JSON'}, 'invalid file response'),
     (['backup'], {'success': False, 'error': 'operation rejected'}, 'operation rejected'),
 ])
 def test_invalid_responses_are_readable_errors(helper, monkeypatch, tmp_path, arguments, body, message):
@@ -415,7 +430,7 @@ def test_multiple_uploads_preserve_contents_and_directory_suffix(helper, monkeyp
     args = ['--yes', *args] if yes_position == 'global' else [*args, '--yes']
     result = CliRunner(mix_stderr=False).invoke(helper.cli, args)
     assert result.exit_code == 0, (result.stdout + result.stderr)
-    uploaded = {payload['name']: decode_file_payload(payload) for payload in post.payloads}
+    uploaded = {payload['name']: payload['data'] for payload in post.payloads}
     assert uploaded['travel/notes.txt'] == b'notes'
     with helper.zipfile.ZipFile(io.BytesIO(uploaded['travel/reports.v2.zip'])) as archive:
         assert archive.namelist() == ['nested.txt', 'photo.JPG']
@@ -423,7 +438,7 @@ def test_multiple_uploads_preserve_contents_and_directory_suffix(helper, monkeyp
         assert archive.read('photo.JPG') == b'compressed image'
         assert archive.getinfo('nested.txt').compress_type == helper.zipfile.ZIP_DEFLATED
         assert archive.getinfo('photo.JPG').compress_type == helper.zipfile.ZIP_STORED
-    assert post.payloads[-1]['compression'] == 'none'
+    assert post.payloads[-1]['encoding'] == 'identity'
     assert 'Preparing' in result.stderr
     assert 'Uploading' in result.stderr
 
@@ -470,7 +485,7 @@ def test_upload_confirmation_threshold(helper, monkeypatch, tmp_path, size, opti
     )
     assert result.exit_code == 0, result.stderr
     assert ('before compression)?' in result.stderr) is prompted
-    assert decode_file_payload(post.payloads[-1]) == source.read_bytes()
+    assert post.payloads[-1]['data'] == source.read_bytes()
 
 
 @pytest.mark.parametrize('options,answer,expected', [
@@ -482,7 +497,7 @@ def test_upload_confirmation_threshold(helper, monkeypatch, tmp_path, size, opti
 def test_download_output_protects_existing_files(helper, monkeypatch, tmp_path, options, answer, expected):
     target = tmp_path / 'local.txt'
     target.write_bytes(b'original')
-    post = MagicMock(return_value=api_response({'compression': 'gzip', 'data': base64.b64encode(gzip.compress(b'new data')).decode()}))
+    post = MagicMock(return_value=binary_response(b'new data'))
     monkeypatch.setattr(helper.requests, 'post', post)
     result = CliRunner(mix_stderr=False).invoke(helper.cli, ['download', 'remote/file.txt', '-o', str(target), *options], input=answer)
     assert result.exit_code == (1 if answer == 'n\n' else 0), (result.stdout + result.stderr)
@@ -495,7 +510,7 @@ def test_download_output_protects_existing_files(helper, monkeypatch, tmp_path, 
 def test_failed_atomic_download_preserves_original_and_cleans_up(helper, monkeypatch, tmp_path):
     target = tmp_path / 'local.txt'
     target.write_bytes(b'original')
-    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response({'compression': 'gzip', 'data': base64.b64encode(gzip.compress(b'new')).decode()})))
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=binary_response(b'new')))
     monkeypatch.setattr(helper.os, 'replace', MagicMock(side_effect=OSError('disk failure')))
     result = CliRunner(mix_stderr=False).invoke(helper.cli, ['download', 'remote.txt', '-o', str(target), '--force'])
     assert result.exit_code == 1
@@ -504,10 +519,30 @@ def test_failed_atomic_download_preserves_original_and_cleans_up(helper, monkeyp
     assert sorted(p.name for p in tmp_path.iterdir()) == ['api-helper.json', 'local.txt']
 
 
+def test_interrupted_download_preserves_original_and_cleans_up(helper, monkeypatch, tmp_path):
+    target = tmp_path / 'video.mp4'
+    target.write_bytes(b'original')
+    response = binary_response(b'')
+
+    def interrupted_chunks(*args):
+        yield b'partial transfer'
+        raise requests.ConnectionError('connection lost')
+
+    response.iter_content = interrupted_chunks
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=response))
+    result = CliRunner(mix_stderr=False).invoke(
+        helper.cli, ['download', 'remote.mp4', '-o', str(target), '--force'],
+    )
+    assert result.exit_code == 1
+    assert 'Download failed (ConnectionError)' in result.stderr
+    assert target.read_bytes() == b'original'
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['api-helper.json', 'video.mp4']
+
+
 def test_raw_download_and_json_listing_keep_stdout_machine_readable(helper, monkeypatch):
     entries = [{'name': 'a.txt', 'kind': 'file', 'uploaded_at': '', 'size': 1234}]
     post = MagicMock(side_effect=[
-        api_response({'compression': 'gzip', 'data': base64.b64encode(gzip.compress(b'\x00binary\xff')).decode()}),
+        binary_response(b'\x00binary\xff'),
         api_response({'entries': entries}), api_response({'entries': entries}),
     ])
     monkeypatch.setattr(helper.requests, 'post', post)
@@ -556,8 +591,8 @@ def test_patch_failure_reports_committed_prefix_and_aborts_failed_patch(helper, 
         with helper.zipfile.ZipFile(buffer, 'w') as archive:
             for index, commit in enumerate([first, second], start=1):
                 archive.writestr(f'{index:04d}.patch', source.git.format_patch('-1', commit.hexsha, stdout=True))
-        encoded = base64.b64encode(gzip.compress(buffer.getvalue())).decode()
-    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=api_response({'compression': 'gzip', 'data': encoded})))
+        archive_data = buffer.getvalue()
+    monkeypatch.setattr(helper.requests, 'post', MagicMock(return_value=binary_response(archive_data)))
     monkeypatch.chdir(target.working_tree_dir)
     result = CliRunner(mix_stderr=False).invoke(helper.cli, ['apply-remote-patches', '--yes'])
     assert result.exit_code == 1, (result.stdout + result.stderr)
@@ -599,8 +634,8 @@ def test_post_upload_uses_shared_archive_checks_and_preserves_metadata(helper, m
     assert result.exit_code == 0, result.output
     payload = post.payloads[-1]
     assert (payload['project'], payload['post_name'], payload['date']) == ('travel', 'my-post', '2026-11-04')
-    assert payload['compression'] == 'none'
-    with helper.zipfile.ZipFile(io.BytesIO(decode_file_payload(payload))) as archive:
+    assert payload['encoding'] == 'identity'
+    with helper.zipfile.ZipFile(io.BytesIO(payload['data'])) as archive:
         assert archive.read('index.html') == b'post content'
 
 

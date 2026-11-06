@@ -112,31 +112,35 @@ def get_auth_payload():
     }
 
 
-def encode_data_for_upload(data: str) -> str:
-    """Encode data as gzip+base64 for upload (client-side encoding)"""
-    compressed = gzip.compress(data.encode('utf-8'))
-    return base64.b64encode(compressed).decode('utf-8')
+def encode_data_for_upload(data: str) -> bytes:
+    return gzip.compress(data.encode('utf-8'))
 
 
-def decode_data_from_download(encoded_data: str) -> str:
-    """Decode data from gzip+base64 (client-side decoding)"""
-    decoded = base64.b64decode(encoded_data)
-    return gzip.decompress(decoded).decode('utf-8')
+def make_upload_request(server_url: str, payload: dict) -> requests.Response:
+    metadata = payload.copy()
+    credentials = {key: metadata.pop(key) for key in ('username', 'password')}
+    login = requests.post(f"{server_url}/api/token", json=credentials)
+    assert login.status_code == 200
+    data = metadata.pop('data', b'')
+    encoding = metadata.pop('encoding', 'gzip')
+    return requests.post(f"{server_url}/api/push", params=metadata, data=data, headers={
+        'Authorization': f"Bearer {login.json()['access_token']}",
+        'Content-Type': 'application/octet-stream', 'Content-Encoding': encoding,
+    })
 
 
 @pytest.mark.integration
-class TestAPIEncryptedProtocol:
-    """Integration tests for the new encrypted API protocol"""
+class TestAPIProtocol:
+    """Binary file transfers and encrypted JSON operations."""
 
-    def test_push_data_encrypted(self, server_url):
-        """Test pushing data via encrypted API request"""
+    def test_push_binary_data(self, server_url):
+        """Upload binary bytes authenticated by a bearer token."""
         payload = {
             **get_auth_payload(),
             "name": "encrypted_test_file.json",
-            "compression": "gzip",
             "data": encode_data_for_upload("encrypted test data")
         }
-        response = make_encrypted_request(server_url, "api/push", payload)
+        response = make_upload_request(server_url, payload)
         assert response.status_code == 200
         assert response.json().get("success") is True
 
@@ -146,10 +150,9 @@ class TestAPIEncryptedProtocol:
         push_payload = {
             **get_auth_payload(),
             "name": "pull_test_file.txt",
-            "compression": "gzip",
             "data": encode_data_for_upload("test content for pull")
         }
-        make_encrypted_request(server_url, "api/push", push_payload)
+        make_upload_request(server_url, push_payload)
 
         # Now pull it back
         pull_payload = {
@@ -158,8 +161,8 @@ class TestAPIEncryptedProtocol:
         }
         response = make_encrypted_request(server_url, "api/pull", pull_payload)
         assert response.status_code == 200
-        assert response.json().get("success") is True
-        assert decode_data_from_download(response.json().get("data")) == "test content for pull"
+        assert response.headers["Content-Type"] == "application/octet-stream"
+        assert response.content.decode("utf-8") == "test content for pull"
 
     def test_list_files_encrypted(self, server_url):
         """Test listing files via encrypted API request"""
@@ -176,10 +179,9 @@ class TestAPIEncryptedProtocol:
         push_payload = {
             **get_auth_payload(),
             "name": "file_to_delete.txt",
-            "compression": "gzip",
             "data": encode_data_for_upload("temporary data")
         }
-        make_encrypted_request(server_url, "api/push", push_payload)
+        make_upload_request(server_url, push_payload)
 
         # Delete the file
         delete_payload = {
@@ -209,25 +211,24 @@ class TestAPIEncryptedProtocol:
         assert response.status_code == 400
         assert "Invalid credentials" in response.json().get("error", "")
 
-    def test_missing_required_fields_encrypted(self, server_url):
-        """Test encrypted request with missing required fields"""
+    def test_binary_upload_missing_required_fields(self, server_url):
+        """Reject a binary upload without its destination name."""
         payload = {
             **get_auth_payload()
             # Missing "name" and "data"
         }
-        response = make_encrypted_request(server_url, "api/push", payload)
+        response = make_upload_request(server_url, payload)
         assert response.status_code == 400
 
-    def test_large_payload_encrypted(self, server_url):
-        """Test encrypted request with large payload"""
+    def test_large_binary_payload(self, server_url):
+        """Test a compressed binary request with a large payload."""
         large_data = "x" * 100000  # 100KB of data
         payload = {
             **get_auth_payload(),
             "name": "large_file.txt",
-            "compression": "gzip",
             "data": encode_data_for_upload(large_data)
         }
-        response = make_encrypted_request(server_url, "api/push", payload)
+        response = make_upload_request(server_url, payload)
         assert response.status_code == 200
         assert response.json().get("success") is True
 
@@ -238,10 +239,10 @@ class TestAPIEncryptedProtocol:
         }
         response = make_encrypted_request(server_url, "api/pull", pull_payload)
         assert response.status_code == 200
-        assert decode_data_from_download(response.json().get("data")) == large_data
+        assert response.content.decode("utf-8") == large_data
 
-    def test_nested_json_data_encrypted(self, server_url):
-        """Test encrypted request with nested JSON data"""
+    def test_nested_json_file(self, server_url):
+        """Test a JSON file transferred as a binary body."""
         nested_data = {
             "users": [
                 {"name": "Alice", "age": 30},
@@ -255,10 +256,9 @@ class TestAPIEncryptedProtocol:
         payload = {
             **get_auth_payload(),
             "name": "nested_data.json",
-            "compression": "gzip",
             "data": encode_data_for_upload(json.dumps(nested_data))
         }
-        response = make_encrypted_request(server_url, "api/push", payload)
+        response = make_upload_request(server_url, payload)
         assert response.status_code == 200
 
         # Pull it back and verify
@@ -268,7 +268,7 @@ class TestAPIEncryptedProtocol:
         }
         response = make_encrypted_request(server_url, "api/pull", pull_payload)
         assert response.status_code == 200
-        retrieved_data = json.loads(decode_data_from_download(response.json().get("data")))
+        retrieved_data = json.loads(response.content.decode("utf-8"))
         assert retrieved_data == nested_data
 
     def test_pull_nonexistent_file_encrypted(self, server_url):
@@ -317,28 +317,32 @@ class TestAPIPlainRequests:
         # Should work with or without encryption
         assert response.status_code == 200
 
-    def test_unencrypted_push_and_pull(self, server_url):
-        """Test unencrypted push and pull"""
+    @pytest.mark.parametrize('name,encoding', [('plain.txt', 'gzip'), ('video ü & ?.MP4', 'identity')])
+    def test_binary_push_and_pull(self, server_url, name, encoding):
+        """Transfer binary bytes with no JSON or Base64 wrapping."""
+        original = os.urandom(100_000)
         # Push
-        push_url = f"{server_url}/api/push"
         push_payload = {
             **get_auth_payload(),
-            "name": "unencrypted_test.txt",
-            "compression": "gzip",
-            "data": encode_data_for_upload("test data")
+            "name": name,
+            "data": gzip.compress(original) if encoding == 'gzip' else original,
+            "encoding": encoding,
         }
-        response = requests.post(push_url, json=push_payload)
+        response = make_upload_request(server_url, push_payload)
         assert response.status_code == 200
 
         # Pull
         pull_url = f"{server_url}/api/pull"
         pull_payload = {
             **get_auth_payload(),
-            "name": "unencrypted_test.txt"
+            "name": name,
         }
         response = requests.post(pull_url, json=pull_payload)
         assert response.status_code == 200
-        assert decode_data_from_download(response.json().get("data")) == "test data"
+        assert response.content == original
+        assert response.headers.get('Content-Encoding', 'identity') == encoding
+        if encoding == 'identity':
+            assert int(response.headers['Content-Length']) == len(original)
 
 
 @pytest.mark.integration

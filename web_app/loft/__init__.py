@@ -1,9 +1,12 @@
+import gzip
 import json
 import logging
+import shutil
+import tempfile
 import zipfile
+import zlib
 from datetime import datetime, timezone
 from functools import wraps
-from io import BytesIO
 
 import flask_login
 from flask import (
@@ -15,7 +18,7 @@ from flask_wtf.csrf import CSRFError
 from web_app.app import csrf
 from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
-from web_app.file_transfer import decode_file_payload
+from web_app.file_transfer import parse_upload_request
 from web_app.loft.data_interface import DataInterface, PostVisibility, slugify
 from web_app.helpers import cur_user, limiter, parse_request, register_app_name
 from web_app.logging_utils import log_event
@@ -468,7 +471,7 @@ def delete_post(project: str, post: str):
 @audit_operation
 def upload_post():
     try:
-        request_body = parse_request(require_login=True, require_admin=True)
+        request_body, upload_stream = parse_upload_request()
     except APIError as e:
         reason = "authentication_failed" if isinstance(e, AuthenticationError) else "invalid_api_request"
         status = e.status if isinstance(e, AuthenticationError) else 400
@@ -477,12 +480,11 @@ def upload_post():
 
     project = request_body.get("project")
     post_name = request_body.get("post_name")
-    data = request_body.get("data")
     actor = request_body.get("username") or "<api>"
 
-    if not project or not post_name or not data:
+    if not project or not post_name:
         _audit_failure("missing_required_fields")
-        return jsonify({"error": "Missing required fields: project, post_name, data"}), 400
+        return jsonify({"error": "Missing required fields: project, post_name"}), 400
 
     try:
         visibility = PostVisibility(
@@ -491,12 +493,6 @@ def upload_post():
     except (TypeError, ValueError) as error:
         _audit_failure("invalid_visibility", error=error)
         return jsonify({"error": "Invalid visibility"}), 400
-
-    try:
-        plain_data = decode_file_payload(request_body)
-    except Exception as e:
-        _audit_failure("archive_decode_failed", error=e)
-        return jsonify({"error": f"Failed to decode data: {e}"}), 400
 
     data_interface = DataInterface()
     try:
@@ -507,14 +503,17 @@ def upload_post():
     post_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        with zipfile.ZipFile(BytesIO(plain_data), 'r') as zf:
-            for member in zf.namelist():
-                target = (post_dir / member).resolve()
-                if not target.is_relative_to(post_dir.resolve()):
-                    _audit_failure("archive_path_traversal")
-                    return jsonify({"error": "Zip contains path traversal"}), 400
-            zf.extractall(post_dir)
-    except zipfile.BadZipFile as error:
+        with tempfile.TemporaryFile() as archive_data:
+            shutil.copyfileobj(upload_stream, archive_data, ConfigManager().api_transfer_chunk_bytes)
+            archive_data.seek(0)
+            with zipfile.ZipFile(archive_data, 'r') as zf:
+                for member in zf.namelist():
+                    target = (post_dir / member).resolve()
+                    if not target.is_relative_to(post_dir.resolve()):
+                        _audit_failure("archive_path_traversal")
+                        return jsonify({"error": "Zip contains path traversal"}), 400
+                zf.extractall(post_dir)
+    except (zipfile.BadZipFile, gzip.BadGzipFile, EOFError, zlib.error) as error:
         _audit_failure("invalid_zip", error=error)
         return jsonify({"error": "Invalid zip data"}), 400
 

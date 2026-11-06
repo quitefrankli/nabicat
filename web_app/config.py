@@ -784,7 +784,8 @@ class ConfigManager:
         self.api_helper_login_timeout_s = 10.0
         self.api_helper_payload_confirm_bytes = 1000
         self.api_helper_upload_confirm_bytes = 100 * 1024 * 1024
-        self.api_helper_transfer_chunk_bytes = 64 * 1024
+        self.api_transfer_chunk_bytes = 64 * 1024
+        self.api_transfer_gzip_window_bits = 31
         self.api_transfer_compressed_extensions = frozenset({
             ".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif", ".jxl",
             ".mp4", ".m4v", ".webm", ".mkv", ".mov", ".mpeg", ".mpg",

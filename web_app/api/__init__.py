@@ -1,5 +1,6 @@
 import base64
-import io
+import gzip
+import zlib
 import mimetypes
 import subprocess
 import logging
@@ -22,7 +23,7 @@ from web_app.config import ConfigManager
 from web_app.errors import APIError, AuthenticationError
 from web_app.api_auth import issue_api_token
 from web_app.logging_utils import log_event
-from web_app.file_transfer import decode_file_payload, encode_file_payload
+from web_app.file_transfer import file_download_response, parse_upload_request
 
 
 from web_app.app import csrf
@@ -225,27 +226,22 @@ def api_backup():
 @api_api.route("/push", methods=["POST"])
 @_handle_api_error
 def api_push():
-    request_body = parse_request(require_login=True, require_admin=True)
+    request_body, upload_stream = parse_upload_request()
     name = _get_file_name(request_body)
-
-    try:
-        plain_data = decode_file_payload(request_body)
-    except Exception as e:
-        log_event(
-            "api", "api.data_push_rejected", level=logging.WARNING,
-            user=request_body.get("username"), name=name, reason="invalid_encoding",
-            status=400, error_type=type(e).__name__, exc_info=True,
-        )
-        return jsonify({"error": "Invalid file encoding or compression"}), 400
-
-    username = request_body["username"]
-    user = DataInterface().load_users()[username]
+    user = DataInterface().load_users()[request_body["username"]]
     try:
         upload = FileStorage(
-            stream=io.BytesIO(plain_data), filename=name,
+            stream=upload_stream, filename=name,
             content_type=mimetypes.guess_type(name)[0] or 'application/octet-stream',
         )
         FileStoreDataInterface().save_files([(upload, name)], [], user)
+    except (gzip.BadGzipFile, EOFError, zlib.error) as error:
+        log_event(
+            "api", "api.data_push_rejected", level=logging.WARNING,
+            user=user, name=name, reason="invalid_encoding", status=400,
+            error_type=type(error).__name__, exc_info=True,
+        )
+        return jsonify({"error": "Invalid compressed file data"}), 400
     except ValueError as error:
         log_event(
             "api", "api.data_push_rejected", level=logging.WARNING,
@@ -253,11 +249,7 @@ def api_push():
             exc_info=True,
         )
         return jsonify({"error": str(error)}), 400
-    log_event(
-        "api", "api.data_pushed",
-        user=user, name=name, bytes=len(plain_data),
-    )
-
+    log_event("api", "api.data_pushed", user=user, name=name, bytes=upload_stream.tell())
     return jsonify({"success": True, "message": "Data pushed successfully"}), 200
 
 @api_api.route("/pull", methods=["POST"])
@@ -270,7 +262,8 @@ def api_pull():
     user = DataInterface().load_users()[username]
 
     try:
-        plain_data = FileStoreDataInterface().get_file_path(name, user).read_bytes()
+        path = FileStoreDataInterface().get_file_path(name, user)
+        size = path.stat().st_size
     except ValueError as error:
         log_event(
             "api", "api.data_pull_rejected", level=logging.WARNING,
@@ -285,9 +278,8 @@ def api_pull():
         )
         return jsonify({"error": str(e)}), 404
 
-    log_event("api", "api.data_pulled", user=user, name=name, bytes=len(plain_data))
-    payload = encode_file_payload(plain_data, name)
-    return jsonify({"success": True, **payload}), 200
+    log_event("api", "api.data_pulled", user=user, name=name, bytes=size)
+    return file_download_response(path, name)
 
 @api_api.route("/delete", methods=["POST"])
 @_handle_api_error

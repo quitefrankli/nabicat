@@ -2,16 +2,16 @@ import subprocess
 import requests
 import click
 import io
+import gzip
+import shutil
 import sys
 import zipfile
 import json
 import os
 import tempfile
 import time
-import binascii
 import math
-import zlib
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stdout
 from urllib.parse import urlsplit
 from datetime import datetime
 
@@ -20,7 +20,7 @@ from pathlib import Path
 from yt_dlp.cookies import CookieLoadError, extract_cookies_from_browser
 from yt_dlp.utils import DownloadError
 from web_app.config import ConfigManager
-from web_app.file_transfer import decode_file_payload, encode_file_payload
+from web_app.file_transfer import compression_for_name
 
 
 class HelperCommand(click.Command):
@@ -70,17 +70,6 @@ def _response_json(response):
     if not isinstance(result, dict):
         raise click.ClickException("Server returned an invalid response; expected an object.")
     return result
-
-
-def _download_data(response):
-    payload = _response_json(response)
-    data = payload.get("data")
-    if not isinstance(data, str):
-        raise click.ClickException("Server returned an invalid file response.")
-    try:
-        return decode_file_payload(payload)
-    except (ValueError, OSError, EOFError, binascii.Error, zlib.error):
-        raise click.ClickException("Server returned corrupt file data.") from None
 
 
 def _token_valid(saved):
@@ -158,41 +147,49 @@ def get_base_url() -> str:
     return _validate_base_url(_load_config().get("base_url") or ConfigManager().api_helper_default_base_url)
 
 
-class UploadStream(io.BytesIO):
-    """Report bytes as Requests reads the encoded request body."""
+class UploadStream:
+    """Report bytes as Requests reads a seekable binary request body."""
 
-    def __init__(self, data, progress):
-        super().__init__(data)
+    def __init__(self, source, progress, length):
+        self.source = source
         self.progress = progress
+        self.length = length
+
+    def __len__(self):
+        return self.length
+
+    def tell(self):
+        return self.source.tell()
+
+    def seek(self, *args):
+        return self.source.seek(*args)
 
     def read(self, size=-1):
-        data = super().read(size)
+        data = self.source.read(size)
         self.progress.update(len(data))
         return data
 
 
-def _receive_download(response):
-    # iter_content decodes HTTP compression, so Content-Length is only useful
-    # when it describes the same bytes that the progress bar counts.
+def _receive_download(response, destination):
     length = response.headers.get("Content-Length", "")
     total = int(length) if length.isdigit() and not response.headers.get("Content-Encoding") else None
-    chunks = response.iter_content(ConfigManager().api_helper_transfer_chunk_bytes)
-    with response, io.BytesIO() as body, click.progressbar(
-        iterable=chunks, length=total, label="Downloading", file=click.get_text_stream("stderr"),
-        show_pos=True,
-    ) as progress:
-        for chunk in chunks:
-            body.write(chunk)
-            progress.update(len(chunk))
-        # Preserve the normal Response interface for JSON validation and callers.
-        response._content = body.getvalue()
-        response._content_consumed = True
+    chunks = response.iter_content(ConfigManager().api_transfer_chunk_bytes)
+    try:
+        with response, click.progressbar(
+            iterable=chunks, length=total, label="Downloading", file=click.get_text_stream("stderr"),
+            show_pos=True,
+        ) as progress:
+            for chunk in chunks:
+                destination.write(chunk)
+                progress.update(len(chunk))
+    except requests.RequestException as error:
+        raise click.ClickException(f"Download failed ({type(error).__name__}).") from None
 
 
 def send_request(
     endpoint: str, payload: dict | None = None,
     *, base_url: str | None = None, timeout: float | None = None,
-    confirm_payload: bool = True,
+    confirm_payload: bool = True, upload=None, content_encoding: str = "identity",
 ) -> requests.Response:
     target, token = _authenticate(base_url=base_url)
     payload = payload if payload is not None else {}
@@ -204,14 +201,17 @@ def send_request(
         with ExitStack() as stack:
             headers = {"Authorization": f"Bearer {token}"}
             options = {"json": payload}
-            if endpoint in {"api/push", "loft/api/upload_post"}:
-                body = json.dumps(payload, allow_nan=False).encode("utf-8")
+            if upload is not None:
+                position = upload.tell()
+                upload.seek(0, os.SEEK_END)
+                length = upload.tell()
+                upload.seek(position)
                 progress = stack.enter_context(click.progressbar(
-                    length=len(body), label="Uploading", file=click.get_text_stream("stderr"),
-                    show_pos=True,
+                    length=length - position, label="Uploading", file=click.get_text_stream("stderr"), show_pos=True,
                 ))
-                options = {"data": stack.enter_context(UploadStream(body, progress))}
-                headers["Content-Type"] = "application/json"
+                options = {"data": UploadStream(upload, progress, length), "params": payload}
+                headers["Content-Type"] = "application/octet-stream"
+                headers["Content-Encoding"] = content_encoding
             if endpoint == "api/pull":
                 options["stream"] = True
             response = requests.post(
@@ -219,14 +219,20 @@ def send_request(
                 timeout=timeout if timeout is not None else ConfigManager().api_llm_client_timeout_s,
                 allow_redirects=False,
             )
-        if endpoint == "api/pull":
-            _receive_download(response)
     except requests.RequestException as error:
         raise click.ClickException(f"API request failed ({type(error).__name__}).") from None
     if response.status_code == 401:
+        response.close()
         raise click.ClickException("API token was rejected or expired. Run 'api-helper login' again.")
     if response.status_code != 200:
-        raise click.ClickException(f"API request failed (HTTP {response.status_code}): {response.text}")
+        message = response.text
+        response.close()
+        raise click.ClickException(f"API request failed (HTTP {response.status_code}): {message}")
+    if endpoint == "api/pull":
+        if response.headers.get("Content-Type", "").split(";", 1)[0] != "application/octet-stream":
+            response.close()
+            raise click.ClickException("Server returned an invalid file response.")
+        return response
     result = _response_json(response)
     if result.get("success") is False or result.get("error"):
         raise click.ClickException(f"API request rejected: {result.get('error') or result.get('message') or 'unknown reason'}")
@@ -314,6 +320,7 @@ def logout() -> None:
     click.echo("Saved API token removed.")
 
 
+@contextmanager
 def _prepare_upload(path: Path):
     if not path.is_file() and not path.is_dir():
         raise click.ClickException(f"Not a regular file or directory: {path}")
@@ -323,17 +330,25 @@ def _prepare_upload(path: Path):
         if not _confirm(f"Upload {path} ({size:,} bytes before compression)?"):
             raise click.ClickException("Upload cancelled.")
     click.echo(f"Preparing {path} ({size:,} bytes)...", err=True)
-    if path.is_dir():
-        with io.BytesIO() as buffer:
-            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+    with ExitStack() as stack:
+        if path.is_dir():
+            source = stack.enter_context(tempfile.TemporaryFile())
+            with zipfile.ZipFile(source, "w") as archive:
                 for item in paths:
-                    compression = (zipfile.ZIP_STORED if item.suffix.lower() in
-                                   ConfigManager().api_transfer_compressed_extensions else zipfile.ZIP_DEFLATED)
-                    archive.write(item, arcname=item.relative_to(path), compress_type=compression)
-            data = buffer.getvalue()
-    else:
-        data = path.read_bytes()
-    return encode_file_payload(data, path.name + ".zip" if path.is_dir() else path.name)
+                    method = zipfile.ZIP_STORED if compression_for_name(item.name) == "identity" else zipfile.ZIP_DEFLATED
+                    archive.write(item, arcname=item.relative_to(path), compress_type=method)
+            source.seek(0)
+            encoding = "identity"
+        else:
+            source = stack.enter_context(path.open("rb"))
+            encoding = compression_for_name(path.name)
+            if encoding == "gzip":
+                compressed = stack.enter_context(tempfile.TemporaryFile())
+                with gzip.GzipFile(fileobj=compressed, mode="wb") as output:
+                    shutil.copyfileobj(source, output, ConfigManager().api_transfer_chunk_bytes)
+                compressed.seek(0)
+                source = compressed
+        yield source, encoding
 
 
 @cli.command()
@@ -348,11 +363,12 @@ def upload(files: tuple[Path, ...], destination: str | None) -> None:
     if len(set(names)) != len(names):
         raise click.ClickException("Uploads have duplicate remote names; upload them separately with --to.")
     for path, name in zip(files, names, strict=True):
-        payload = _prepare_upload(path)
         if destination:
             name = destination + name if destination.endswith("/") else destination
         click.echo(f"Uploading {name}...", err=True)
-        send_request("api/push", {"name": name, **payload}, confirm_payload=False)
+        with _prepare_upload(path) as (source, encoding):
+            send_request("api/push", {"name": name}, upload=source,
+                         content_encoding=encoding, confirm_payload=False)
         click.echo(f"Uploaded {name}.")
 
 
@@ -373,16 +389,15 @@ def download(file: str, raw: bool, output: Path | None, force: bool) -> None:
         if destination.exists() and not force and not _confirm(f"Replace {destination}?"):
             raise click.ClickException("Download cancelled.")
         click.echo(f"Downloading {file}...", err=True)
-    data = _download_data(send_request("api/pull", {"name": file}))
     if raw:
-        click.get_binary_stream("stdout").write(data)
+        _receive_download(send_request("api/pull", {"name": file}), click.get_binary_stream("stdout"))
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
             temporary = Path(stream.name)
-            stream.write(data)
+            _receive_download(send_request("api/pull", {"name": file}), stream)
         os.replace(temporary, destination)
     finally:
         if temporary is not None:
@@ -508,10 +523,8 @@ def upload_commit_patches() -> None:
         print("Upload cancelled.")
         return
     
-    send_request("api/push", {
-        "name": ConfigManager().api_helper_patch_archive,
-        **encode_file_payload(zip_data, ConfigManager().api_helper_patch_archive),
-    }, confirm_payload=False)
+    send_request("api/push", {"name": ConfigManager().api_helper_patch_archive},
+                 upload=io.BytesIO(zip_data), confirm_payload=False)
     
     click.echo("Patches uploaded successfully.")
 
@@ -523,11 +536,14 @@ def apply_remote_patches() -> None:
     if repo.is_dirty(untracked_files=True):
         raise click.ClickException("Repository has uncommitted changes. Commit or stash them before applying patches.")
     response = send_request("api/pull", {"name": ConfigManager().api_helper_patch_archive})
-    with zipfile.ZipFile(io.BytesIO(_download_data(response))) as archive:
-        names = sorted(archive.namelist())
-        if not names or any(not name.endswith(".patch") for name in names):
-            raise click.ClickException("Archive must contain patch files only and must not be empty.")
-        patches = [(name, archive.read(name).decode("utf-8")) for name in names]
+    with tempfile.TemporaryFile() as source:
+        _receive_download(response, source)
+        source.seek(0)
+        with zipfile.ZipFile(source) as archive:
+            names = sorted(archive.namelist())
+            if not names or any(not name.endswith(".patch") for name in names):
+                raise click.ClickException("Archive must contain patch files only and must not be empty.")
+            patches = [(name, archive.read(name).decode("utf-8")) for name in names]
     if not _confirm(f"Apply {len(patches)} patches?"):
         click.echo("Apply cancelled.")
         return
@@ -625,13 +641,14 @@ def upload_post(post_folder: Path, project: str, post_name: str | None, date: st
             datetime.fromisoformat(date)
         except ValueError:
             raise click.BadParameter("Use an ISO date, e.g. 2026-11-04T10:00:00.", param_hint="--date") from None
-    transfer = _prepare_upload(post_folder)
     post_name = post_name or post_folder.name
     click.echo(f"Uploading post '{post_name}' to project '{project}'...", err=True)
-    payload = {"project": project, "post_name": post_name, **transfer}
+    payload = {"project": project, "post_name": post_name}
     if date:
         payload["date"] = date
-    send_request("loft/api/upload_post", payload, confirm_payload=False)
+    with _prepare_upload(post_folder) as (source, encoding):
+        send_request("loft/api/upload_post", payload, upload=source,
+                     content_encoding=encoding, confirm_payload=False)
     click.echo(f"Uploaded post '{post_name}'.")
 
 @cli.command(name="sync-data-from-prod")
