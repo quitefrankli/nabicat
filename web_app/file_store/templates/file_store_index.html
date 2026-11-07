@@ -33,7 +33,14 @@
      data-preview-gesture-commit-ratio="{{ thumbnail_config.preview_gesture_commit_ratio }}"
      data-preview-gesture-animation-ms="{{ thumbnail_config.preview_gesture_animation_ms }}"
      data-preview-gesture-edge-resistance="{{ thumbnail_config.preview_gesture_edge_resistance }}"
-     data-preview-gesture-shrink-ratio="{{ thumbnail_config.preview_gesture_shrink_ratio }}">
+     data-preview-gesture-shrink-ratio="{{ thumbnail_config.preview_gesture_shrink_ratio }}"
+     data-preview-double-tap-ms="{{ thumbnail_config.preview_double_tap_ms }}"
+     data-preview-double-tap-distance-px="{{ thumbnail_config.preview_double_tap_distance_px }}"
+     data-preview-double-tap-zoom="{{ thumbnail_config.preview_double_tap_zoom }}"
+     data-image-cache-name="{{ image_cache_name }}"
+     data-image-cache-scope="{{ image_cache_scope }}"
+     data-image-cache-max-entry-bytes="{{ thumbnail_config.image_cache_max_entry_bytes }}"
+     data-image-cache-max-entries="{{ thumbnail_config.image_cache_max_entries }}">
   <section class="file-store-toolbar">
     <h5 class="visually-hidden">Your Files</h5>
     <nav aria-label="Folder path" class="file-breadcrumb">
@@ -89,8 +96,8 @@
       {% for file in directory.files %}
       {% if file.mime_type.startswith('image/') %}
       <article class="file-grid-item" data-thumbnail-state="loading">
-        <button type="button" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-url="{{ url_for('.download_file', filename=file.path) }}" data-image-name="{{ file.name }}" aria-label="Preview {{ file.name }}">
-          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" data-thumbnail-src="{{ url_for('.thumbnail', filename=file.path) }}" alt="{{ file.name }}" loading="lazy">
+        <button type="button" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-url="{{ url_for('.download_file', filename=file.path, v=file.crc|string + '.' + thumbnail_config.image_cache_version|string, cache_user=image_cache_scope) }}" data-image-name="{{ file.name }}" aria-label="Preview {{ file.name }}">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" data-thumbnail-src="{{ url_for('.thumbnail', filename=file.path, v=file.crc|string + '.' + thumbnail_config.image_cache_version|string, cache_user=image_cache_scope) }}" alt="{{ file.name }}" loading="lazy">
         </button>
         <div class="thumbnail-status" role="status">
           <i class="bi bi-image" aria-hidden="true"></i>
@@ -140,7 +147,6 @@
         </div>
       </div>
     </div>
-    <p class="image-preview-hint">Swipe left or right to browse · Swipe up or down to close</p>
   </div></div>
 </div>
 
@@ -192,5 +198,6 @@
 {% block scripts %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
+  <script src="{{ url_for('.static', filename='image-cache.js') }}"></script>
   <script src="{{ url_for('.static', filename='script.js') }}"></script>
 {% endblock %}

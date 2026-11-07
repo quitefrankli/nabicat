@@ -475,12 +475,13 @@ input[type="file"].form-control:hover {
 #imageModal #modalImage { max-width: 100%; max-height: 80vh; object-fit: contain; cursor: pointer; }
 .image-preview-stage, .image-preview-track { width: 100%; min-width: 0; }
 .image-preview-slide { display: flex; align-items: center; justify-content: center; }
-.image-preview-neighbour, .image-preview-hint { display: none; }
+.image-preview-neighbour { display: none; }
 
 @media (max-width: 768px) {
   #imageModal .modal-body { flex: 1; min-height: 0; overflow: hidden; }
   .image-preview-stage {
     height: 100%;
+    touch-action: manipulation;
     transform: translate3d(0, var(--preview-y, 0px), 0) scale(var(--preview-scale, 1));
   }
   .image-preview-track {
@@ -491,19 +492,15 @@ input[type="file"].form-control:hover {
   .image-preview-slide { flex: 0 0 100%; min-width: 0; height: 100%; }
   .image-preview-neighbour { display: flex; }
   #imageModal .image-preview-slide img { width: 100%; height: 100%; max-height: 100%; object-fit: contain; cursor: default; user-select: none; }
+  #imageModal #modalImage {
+    transform: translate3d(var(--preview-pan-x, 0px), var(--preview-pan-y, 0px), 0) scale(var(--preview-zoom, 1));
+  }
+  #imageModal #modalImage.is-zooming { transition: transform var(--preview-duration) cubic-bezier(.2, .7, .3, 1); }
+  #imageModal .image-preview-close { display: none; }
   .image-preview-neighbour img:not([src]) { visibility: hidden; }
   .image-preview-stage.is-settling,
   .image-preview-stage.is-settling .image-preview-track {
     transition: transform var(--preview-duration) cubic-bezier(.2, .7, .3, 1);
-  }
-  .image-preview-hint {
-    display: block;
-    flex-shrink: 0;
-    margin: 0;
-    padding: .75rem .5rem calc(.75rem + env(safe-area-inset-bottom));
-    color: var(--hw-bg-secondary);
-    text-align: center;
-    font-size: .75rem;
   }
 }
 

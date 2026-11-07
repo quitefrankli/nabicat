@@ -93,7 +93,7 @@ class CacheManager {
      * Clear entire cache
      */
     async clearCache() {
-        if (!this.isSupported) return;
+        if (!('caches' in window)) return;
 
         const cacheNames = await caches.keys();
         await Promise.all(

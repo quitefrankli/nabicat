@@ -136,7 +136,7 @@ function setupBulkActions() {
     update();
 }
 
-function setupImageModal() {
+function setupImageModal(imageCache) {
     const modal = document.getElementById('imageModal');
     const shell = document.querySelector('.file-store-shell');
     if (!modal || !shell) return;
@@ -148,18 +148,22 @@ function setupImageModal() {
         if (index < 0 || index >= previews.length) return;
         activeIndex = index;
         const preview = previews[activeIndex];
-        image.src = preview.dataset.imageUrl;
         image.alt = preview.dataset.imageName;
-        gestures.updateNeighbours();
+        imageCache.show(image, preview.dataset.imageUrl).then(() => {
+            if (activeIndex === index) gestures.updateNeighbours();
+        });
     };
-    const gestures = setupMobileImageGestures(modal, shell, previews, () => activeIndex, showImage);
+    const gestures = setupMobileImageGestures(modal, shell, previews, () => activeIndex, showImage, imageCache);
     const moveImage = (offset) => {
         gestures.reset();
         showImage(activeIndex + offset);
     };
 
     previews.forEach((preview, index) => {
-        preview.addEventListener('click', () => showImage(index));
+        preview.addEventListener('click', () => {
+            imageCache.setPreviewActive(true);
+            showImage(index);
+        });
     });
     image.addEventListener('click', (event) => {
         if (gestures.isMobile()) return;
@@ -177,13 +181,15 @@ function setupImageModal() {
     });
     modal.addEventListener('hidden.bs.modal', () => {
         activeIndex = -1;
-        image.removeAttribute('src');
+        imageCache.clear(image);
         gestures.updateNeighbours();
     });
+    modal.addEventListener('hide.bs.modal', () => imageCache.setPreviewActive(false));
 }
 
-function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
+function setupMobileImageGestures(modal, shell, previews, getIndex, showImage, imageCache) {
     const stage = modal.querySelector('.image-preview-stage');
+    const image = modal.querySelector('#modalImage');
     const neighbours = modal.querySelectorAll('.image-preview-neighbour img');
     const mobile = window.matchMedia(`(max-width: ${shell.dataset.previewMobileMaxWidthPx}px)`);
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -192,20 +198,51 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
     const animationMs = Number(shell.dataset.previewGestureAnimationMs);
     const edgeResistance = Number(shell.dataset.previewGestureEdgeResistance);
     const shrinkRatio = Number(shell.dataset.previewGestureShrinkRatio);
+    const doubleTapMs = Number(shell.dataset.previewDoubleTapMs);
+    const doubleTapDistance = Number(shell.dataset.previewDoubleTapDistancePx);
+    const zoomScale = Number(shell.dataset.previewDoubleTapZoom);
     let gesture = null;
     let timer = null;
+    let lastTap = null;
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+
+    const applyPan = (x, y) => {
+        const fit = Math.min(stage.clientWidth / image.naturalWidth, stage.clientHeight / image.naturalHeight);
+        const limitX = Math.max(0, (image.naturalWidth * fit * zoom - stage.clientWidth) / 2);
+        const limitY = Math.max(0, (image.naturalHeight * fit * zoom - stage.clientHeight) / 2);
+        panX = Math.max(-limitX, Math.min(limitX, x));
+        panY = Math.max(-limitY, Math.min(limitY, y));
+        image.style.setProperty('--preview-pan-x', `${panX}px`);
+        image.style.setProperty('--preview-pan-y', `${panY}px`);
+        image.style.setProperty('--preview-zoom', zoom);
+    };
+    const resetZoom = () => {
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+        lastTap = null;
+        image.classList.remove('is-zooming');
+        image.style.removeProperty('--preview-pan-x');
+        image.style.removeProperty('--preview-pan-y');
+        image.style.removeProperty('--preview-zoom');
+    };
 
     const updateNeighbours = () => {
         [getIndex() - 1, getIndex() + 1].forEach((index, slot) => {
             const preview = mobile.matches && getIndex() >= 0 ? previews[index] : null;
-            if (preview) neighbours[slot].src = preview.dataset.imageUrl;
-            else neighbours[slot].removeAttribute('src');
+            const source = preview?.dataset.imageUrl;
+            if (neighbours[slot].dataset.previewSource === source) return;
+            neighbours[slot].dataset.previewSource = source || '';
+            imageCache.show(neighbours[slot], source);
         });
     };
     const reset = () => {
         clearTimeout(timer);
         timer = null;
         gesture = null;
+        resetZoom();
         stage.classList.remove('is-settling');
         stage.style.removeProperty('--preview-x');
         stage.style.removeProperty('--preview-y');
@@ -230,8 +267,9 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
             return;
         }
         if (timer !== null) return;
+        image.classList.remove('is-zooming');
         const touch = event.touches[0];
-        gesture = { startX: touch.clientX, startY: touch.clientY, x: 0, y: 0, axis: null };
+        gesture = { startX: touch.clientX, startY: touch.clientY, x: 0, y: 0, axis: null, panX, panY };
     }, { passive: true });
     stage.addEventListener('touchmove', (event) => {
         if (!gesture) return;
@@ -248,7 +286,10 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
         }
         // Leave two-finger gestures to the browser for native pinch zoom.
         if (event.cancelable) event.preventDefault();
-        if (gesture.axis === 'x') {
+        lastTap = null;
+        if (zoom > 1) {
+            applyPan(gesture.panX + gesture.x, gesture.panY + gesture.y);
+        } else if (gesture.axis === 'x') {
             const target = getIndex() + (gesture.x < 0 ? 1 : -1);
             const x = previews[target] ? gesture.x : gesture.x * edgeResistance;
             stage.style.setProperty('--preview-x', `${x}px`);
@@ -263,8 +304,27 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
             reset();
             return;
         }
-        const { axis, x, y } = gesture;
+        const { axis, x, y, startX, startY } = gesture;
         gesture = null;
+        if (!axis) {
+            const now = performance.now();
+            if (lastTap && now - lastTap.time <= doubleTapMs &&
+                Math.hypot(startX - lastTap.x, startY - lastTap.y) <= doubleTapDistance &&
+                image.naturalWidth > 0) {
+                if (event.cancelable) event.preventDefault();
+                const bounds = stage.getBoundingClientRect();
+                zoom = zoom > 1 ? 1 : zoomScale;
+                stage.style.setProperty('--preview-duration', `${reducedMotion.matches ? 0 : animationMs}ms`);
+                image.classList.add('is-zooming');
+                applyPan(-(startX - bounds.left - bounds.width / 2) * (zoom - 1),
+                    -(startY - bounds.top - bounds.height / 2) * (zoom - 1));
+                lastTap = null;
+            } else {
+                lastTap = { time: now, x: startX, y: startY };
+            }
+            return;
+        }
+        if (zoom > 1) return;
         if (axis === 'x') {
             const target = getIndex() + (x < 0 ? 1 : -1);
             if (previews[target] && Math.abs(x) >= stage.clientWidth * commitRatio) {
@@ -281,7 +341,7 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
             return;
         }
         settle(0, 0, 1);
-    }, { passive: true });
+    }, { passive: false });
     stage.addEventListener('touchcancel', () => {
         if (gesture) {
             gesture = null;
@@ -301,7 +361,7 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
     return { reset, updateNeighbours, isMobile: () => mobile.matches };
 }
 
-function setupStaggeredThumbnails() {
+function setupStaggeredThumbnails(imageCache) {
     const shell = document.querySelector('.file-store-shell');
     const images = Array.from(document.querySelectorAll('img[data-thumbnail-src]'));
     if (!shell || !images.length) return;
@@ -310,11 +370,6 @@ function setupStaggeredThumbnails() {
     const maxRetries = Number(shell.dataset.thumbnailMaxRetries);
     const retryDelayMs = Number(shell.dataset.thumbnailRetryDelayMs);
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const load = (image, url) => new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = reject;
-        image.src = url;
-    });
     const setState = (image, state) => {
         const tile = image.closest('.file-grid-item');
         tile.dataset.thumbnailState = state;
@@ -329,13 +384,16 @@ function setupStaggeredThumbnails() {
         for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
             try {
                 const suffix = attempt || fresh ? `${source.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}` : '';
-                await load(image, `${source}${suffix}`);
+                const blob = await imageCache.downloadThumbnail(`${source}${suffix}`);
+                await imageCache.display(image, blob);
                 setState(image, 'loaded');
+                await imageCache.store(source, blob);
                 return;
             } catch (_) {
                 if (attempt < maxRetries) await delay(retryDelayMs);
             }
         }
+        await imageCache.forget(source);
         setState(image, 'failed');
     };
     const queue = [];
@@ -357,17 +415,31 @@ function setupStaggeredThumbnails() {
             enqueue(image, true);
         });
     });
+    const loadVisible = async (image) => {
+        const source = image.dataset.thumbnailSrc;
+        const cached = await imageCache.read(source);
+        if (cached) {
+            try {
+                await imageCache.display(image, cached);
+                setState(image, 'loaded');
+                return;
+            } catch (_) {
+                await imageCache.forget(source);
+            }
+        }
+        enqueue(image);
+    };
     if ('IntersectionObserver' in window) {
         const observer = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 if (!entry.isIntersecting) return;
                 observer.unobserve(entry.target);
-                enqueue(entry.target);
+                loadVisible(entry.target);
             });
         }, { rootMargin: '200px 0px', threshold: 0.01 });
         images.forEach((image) => observer.observe(image));
     } else {
-        images.forEach((image) => enqueue(image));
+        images.forEach((image) => loadVisible(image));
     }
 }
 
@@ -426,7 +498,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFolderUpload();
     setupRenameModal();
     setupBulkActions();
-    setupImageModal();
-    setupStaggeredThumbnails();
+    const imageCache = new FileStoreImageCache(document.querySelector('.file-store-shell'));
+    setupImageModal(imageCache);
+    setupStaggeredThumbnails(imageCache);
     setupGalleryDensity();
 });

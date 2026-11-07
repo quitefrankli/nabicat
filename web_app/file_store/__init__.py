@@ -1,4 +1,5 @@
 import logging
+import hashlib
 import mimetypes
 import queue
 import stat
@@ -7,7 +8,7 @@ import zipfile
 from pathlib import PurePosixPath
 
 from werkzeug.datastructures import FileStorage
-from flask import Blueprint, Response, render_template, request, send_file, redirect, stream_with_context, url_for, flash
+from flask import Blueprint, Response, abort, render_template, request, send_file, redirect, stream_with_context, url_for, flash
 import flask_login
 
 from web_app.auth import cur_user
@@ -90,6 +91,8 @@ def index():
     return render_template(
         "file_store_index.html", directory=directory, current_path=path,
         storage_info=storage_info, mode=mode, thumbnail_config=ConfigManager().file_store,
+        image_cache_scope=hashlib.sha256(user.id.encode()).hexdigest(),
+        image_cache_name=ConfigManager().cache_service_worker_prefix + ConfigManager().cache_service_worker_version,
     )
 
 
@@ -201,6 +204,7 @@ def upload_file():
 def download_file(filename: str):
     user = cur_user()
     file_path = DataInterface().get_file_path(filename, user)
+    _check_image_cache_request(file_path.name, user)
     log_event(
         "file_store", "file_store.download",
         user=user, bytes=file_path.stat().st_size, path=filename,
@@ -257,6 +261,8 @@ def thumbnail(filename: str):
     if not thumbnail_path or not thumbnail_path.exists():
         flash('Thumbnail not available', 'error')
         return redirect(url_for('.index'))
+
+    _check_image_cache_request(thumbnail_path.stem, cur_user())
     
     response = send_file(thumbnail_path, mimetype='image/jpeg')
 
@@ -264,6 +270,16 @@ def thumbnail(filename: str):
     response.cache_control.no_store = True
 
     return response
+
+
+def _check_image_cache_request(crc: str, user) -> None:
+    """Never store replacement bytes under an obsolete listing's cache key."""
+    version = request.args.get('v')
+    scope = request.args.get('cache_user')
+    if scope is not None and scope != hashlib.sha256(user.id.encode()).hexdigest():
+        abort(403)
+    if version is not None and version != f'{crc}.{ConfigManager().file_store.image_cache_version}':
+        abort(409)
 
 
 @file_store_api.route('/files_list')

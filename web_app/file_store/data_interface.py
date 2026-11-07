@@ -440,6 +440,7 @@ class DataInterface(BaseDataInterface):
                 files.append({
                     'name': entry_path[len(prefix):], 'path': entry_path, 'size': file_meta.size,
                     'size_formatted': format_file_size(file_meta.size), 'mime_type': file_meta.mime_type,
+                    'crc': entry.crc,
                 })
         result = {
             'folders': direct_folders,

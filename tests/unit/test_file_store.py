@@ -686,3 +686,40 @@ class TestFileStoreRoutes:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+def test_versioned_images_reject_stale_content_and_other_account_cache_keys(client, auth_mock, data_interface):
+    from bs4 import BeautifulSoup
+    from PIL import Image
+    from urllib.parse import parse_qsl, urlencode, urlsplit
+
+    def save_image(colour):
+        content = io.BytesIO()
+        Image.new("RGB", (2, 2), colour).save(content, format="PNG")
+        content.seek(0)
+        data_interface.save_file(FileStorage(content, "photo.png", content_type="image/png"), auth_mock, relative_path="photo.png")
+
+    save_image("green")
+    with client.session_transaction() as session:
+        session["_user_id"] = auth_mock.id
+    with patch("web_app.file_store.DataInterface", return_value=data_interface):
+        listing = BeautifulSoup(client.get("/file_store/?mode=grid").text, "html.parser")
+        urls = [
+            listing.select_one("[data-thumbnail-src]")["data-thumbnail-src"],
+            listing.select_one("[data-image-url]")["data-image-url"],
+        ]
+        for url in urls:
+            response = client.get(url)
+            assert response.status_code == 200
+            assert response.mimetype.startswith("image/")
+            assert response.cache_control.no_store
+            parts = urlsplit(url)
+            args = dict(parse_qsl(parts.query), cache_user="another-account")
+            assert client.get(parts.path + "?" + urlencode(args)).status_code == 403
+        save_image("blue")
+        for url in urls:
+            assert client.get(url).status_code == 409
+        updated = BeautifulSoup(client.get("/file_store/?mode=grid").text, "html.parser")
+        new_thumbnail = updated.select_one("[data-thumbnail-src]")["data-thumbnail-src"]
+        assert new_thumbnail != urls[0]
+        assert client.get(new_thumbnail).status_code == 200

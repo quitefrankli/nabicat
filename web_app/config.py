@@ -713,6 +713,12 @@ class FileStoreConfig:
     preview_gesture_animation_ms: int = 240
     preview_gesture_edge_resistance: float = 0.25
     preview_gesture_shrink_ratio: float = 0.2
+    preview_double_tap_ms: int = 300
+    preview_double_tap_distance_px: int = 40
+    preview_double_tap_zoom: float = 2.5
+    image_cache_version: int = 1
+    image_cache_max_entry_bytes: int = 32 * 1024 * 1024
+    image_cache_max_entries: int = 128
 
 
 @dataclass
