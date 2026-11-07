@@ -144,13 +144,15 @@ function setupImageModal(imageCache) {
     const previews = Array.from(document.querySelectorAll('.file-grid-item [data-bs-toggle="modal"]'));
     let activeIndex = -1;
 
-    const showImage = (index) => {
+    const showImage = (index, onReady = () => {}) => {
         if (index < 0 || index >= previews.length) return;
         activeIndex = index;
         const preview = previews[activeIndex];
         image.alt = preview.dataset.imageName;
         imageCache.show(image, preview.dataset.imageUrl).then(() => {
-            if (activeIndex === index) gestures.updateNeighbours();
+            if (activeIndex !== index) return;
+            onReady();
+            gestures.updateNeighbours();
         });
     };
     const gestures = setupMobileImageGestures(modal, shell, previews, () => activeIndex, showImage, imageCache);
@@ -255,10 +257,7 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage, i
         stage.style.setProperty('--preview-x', `${x}px`);
         stage.style.setProperty('--preview-y', `${y}px`);
         stage.style.setProperty('--preview-scale', scale);
-        timer = setTimeout(() => {
-            timer = null;
-            done();
-        }, duration);
+        timer = setTimeout(done, duration);
     };
 
     stage.addEventListener('touchstart', (event) => {
@@ -329,8 +328,11 @@ function setupMobileImageGestures(modal, shell, previews, getIndex, showImage, i
             const target = getIndex() + (x < 0 ? 1 : -1);
             if (previews[target] && Math.abs(x) >= stage.clientWidth * commitRatio) {
                 settle(x < 0 ? -stage.clientWidth : stage.clientWidth, 0, 1, () => {
-                    reset();
-                    showImage(target);
+                    // Keep the decoded neighbour visible until the centre image is ready.
+                    const transition = timer;
+                    showImage(target, () => {
+                        if (timer === transition) reset();
+                    });
                 });
                 return;
             }

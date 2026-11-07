@@ -104,7 +104,7 @@ def drag_preview(page, x, y, *, release=True):
     }""", dict(x=x, y=y, release=release))
 
 
-def open_preview(page, file_store_page):
+def open_preview(page, file_store_page, index=0):
     page.set_viewport_size({"width": 375, "height": 812})
     page.route("**/file_store/thumb/**", lambda route: route.abort())
     page.route("**/file_store/image/**", lambda route: route.fulfill(
@@ -112,7 +112,7 @@ def open_preview(page, file_store_page):
         body='<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="seagreen"/></svg>',
     ))
     file_store_page("grid", count=3)
-    page.locator("[data-image-url]").first.click()
+    page.locator("[data-image-url]").nth(index).click()
     expect(page.locator("#imageModal")).to_be_visible()
     expect(page.locator("#imageModal")).to_have_class("modal fade show")
     expect(page.locator("#imageModal .modal-dialog")).to_have_css("transform", "none")
@@ -308,3 +308,41 @@ def test_image_loading_falls_back_when_browser_storage_is_blocked(page, file_sto
     assert len(requests) == 2
     page.locator("[data-image-url]").first.click()
     expect(page.locator("#modalImage")).to_have_js_property("naturalWidth", 600)
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+def test_swipe_handoff_keeps_a_decoded_image_visible_while_cache_read_is_delayed(page, file_store_page, direction):
+    open_preview(page, file_store_page, index=1)
+    expect(page.locator(".image-preview-neighbour img").first).to_have_js_property("naturalWidth", 600)
+    expect(page.locator(".image-preview-neighbour img").last).to_have_js_property("naturalWidth", 600)
+    page.evaluate("""() => {
+        const read = FileStoreImageCache.prototype.read;
+        FileStoreImageCache.prototype.read = async function(source) {
+            const blob = await read.call(this, source);
+            await new Promise(resolve => setTimeout(resolve, 120));
+            return blob;
+        };
+        window.blankPreviewFrames = 0;
+        window.samplePreview = true;
+        const sample = () => {
+            const stage = document.querySelector('.image-preview-stage');
+            const bounds = stage.getBoundingClientRect();
+            const centre = bounds.left + bounds.width / 2;
+            const visible = [...stage.querySelectorAll('img')].filter(image => {
+                const rect = image.getBoundingClientRect();
+                return rect.left <= centre && rect.right > centre;
+            });
+            if (!visible.some(image => image.complete && image.naturalWidth > 0)) {
+                window.blankPreviewFrames++;
+            }
+            if (window.samplePreview) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+    }""")
+    original = page.locator("#modalImage").get_attribute("data-image-source")
+    drag_preview(page, direction * 150, 0)
+    expect(page.locator("#modalImage")).not_to_have_attribute("data-image-source", original)
+    expect(page.locator("#modalImage")).to_have_js_property("naturalWidth", 600)
+    expect(page.locator(".image-preview-stage")).not_to_have_class("image-preview-stage is-settling")
+    page.evaluate("window.samplePreview = false")
+    assert page.evaluate("window.blankPreviewFrames") == 0
