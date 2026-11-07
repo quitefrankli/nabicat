@@ -150,13 +150,19 @@ function setupImageModal() {
         const preview = previews[activeIndex];
         image.src = preview.dataset.imageUrl;
         image.alt = preview.dataset.imageName;
+        gestures.updateNeighbours();
     };
-    const moveImage = (offset) => showImage(activeIndex + offset);
+    const gestures = setupMobileImageGestures(modal, shell, previews, () => activeIndex, showImage);
+    const moveImage = (offset) => {
+        gestures.reset();
+        showImage(activeIndex + offset);
+    };
 
     previews.forEach((preview, index) => {
         preview.addEventListener('click', () => showImage(index));
     });
     image.addEventListener('click', (event) => {
+        if (gestures.isMobile()) return;
         const imageBounds = image.getBoundingClientRect();
         moveImage(event.clientX < imageBounds.left + imageBounds.width / 2 ? -1 : 1);
     });
@@ -171,8 +177,128 @@ function setupImageModal() {
     });
     modal.addEventListener('hidden.bs.modal', () => {
         activeIndex = -1;
-        image.src = '';
+        image.removeAttribute('src');
+        gestures.updateNeighbours();
     });
+}
+
+function setupMobileImageGestures(modal, shell, previews, getIndex, showImage) {
+    const stage = modal.querySelector('.image-preview-stage');
+    const neighbours = modal.querySelectorAll('.image-preview-neighbour img');
+    const mobile = window.matchMedia(`(max-width: ${shell.dataset.previewMobileMaxWidthPx}px)`);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const lockDistance = Number(shell.dataset.previewGestureLockPx);
+    const commitRatio = Number(shell.dataset.previewGestureCommitRatio);
+    const animationMs = Number(shell.dataset.previewGestureAnimationMs);
+    const edgeResistance = Number(shell.dataset.previewGestureEdgeResistance);
+    const shrinkRatio = Number(shell.dataset.previewGestureShrinkRatio);
+    let gesture = null;
+    let timer = null;
+
+    const updateNeighbours = () => {
+        [getIndex() - 1, getIndex() + 1].forEach((index, slot) => {
+            const preview = mobile.matches && getIndex() >= 0 ? previews[index] : null;
+            if (preview) neighbours[slot].src = preview.dataset.imageUrl;
+            else neighbours[slot].removeAttribute('src');
+        });
+    };
+    const reset = () => {
+        clearTimeout(timer);
+        timer = null;
+        gesture = null;
+        stage.classList.remove('is-settling');
+        stage.style.removeProperty('--preview-x');
+        stage.style.removeProperty('--preview-y');
+        stage.style.removeProperty('--preview-scale');
+    };
+    const settle = (x, y, scale, done = reset) => {
+        const duration = reducedMotion.matches ? 0 : animationMs;
+        stage.style.setProperty('--preview-duration', `${duration}ms`);
+        stage.classList.add('is-settling');
+        stage.style.setProperty('--preview-x', `${x}px`);
+        stage.style.setProperty('--preview-y', `${y}px`);
+        stage.style.setProperty('--preview-scale', scale);
+        timer = setTimeout(() => {
+            timer = null;
+            done();
+        }, duration);
+    };
+
+    stage.addEventListener('touchstart', (event) => {
+        if (!mobile.matches || event.touches.length !== 1 || window.visualViewport?.scale > 1) {
+            reset();
+            return;
+        }
+        if (timer !== null) return;
+        const touch = event.touches[0];
+        gesture = { startX: touch.clientX, startY: touch.clientY, x: 0, y: 0, axis: null };
+    }, { passive: true });
+    stage.addEventListener('touchmove', (event) => {
+        if (!gesture) return;
+        if (event.touches.length !== 1) {
+            reset();
+            return;
+        }
+        const touch = event.touches[0];
+        gesture.x = touch.clientX - gesture.startX;
+        gesture.y = touch.clientY - gesture.startY;
+        if (!gesture.axis) {
+            if (Math.max(Math.abs(gesture.x), Math.abs(gesture.y)) < lockDistance) return;
+            gesture.axis = Math.abs(gesture.x) > Math.abs(gesture.y) ? 'x' : 'y';
+        }
+        // Leave two-finger gestures to the browser for native pinch zoom.
+        if (event.cancelable) event.preventDefault();
+        if (gesture.axis === 'x') {
+            const target = getIndex() + (gesture.x < 0 ? 1 : -1);
+            const x = previews[target] ? gesture.x : gesture.x * edgeResistance;
+            stage.style.setProperty('--preview-x', `${x}px`);
+        } else {
+            stage.style.setProperty('--preview-y', `${gesture.y}px`);
+            stage.style.setProperty('--preview-scale', 1 - Math.min(Math.abs(gesture.y) / stage.clientHeight, 1) * shrinkRatio);
+        }
+    }, { passive: false });
+    stage.addEventListener('touchend', (event) => {
+        if (!gesture) return;
+        if (event.touches.length) {
+            reset();
+            return;
+        }
+        const { axis, x, y } = gesture;
+        gesture = null;
+        if (axis === 'x') {
+            const target = getIndex() + (x < 0 ? 1 : -1);
+            if (previews[target] && Math.abs(x) >= stage.clientWidth * commitRatio) {
+                settle(x < 0 ? -stage.clientWidth : stage.clientWidth, 0, 1, () => {
+                    reset();
+                    showImage(target);
+                });
+                return;
+            }
+        } else if (axis === 'y' && Math.abs(y) >= stage.clientHeight * commitRatio) {
+            settle(0, y < 0 ? -stage.clientHeight : stage.clientHeight, 1 - shrinkRatio, () => {
+                bootstrap.Modal.getOrCreateInstance(modal).hide();
+            });
+            return;
+        }
+        settle(0, 0, 1);
+    }, { passive: true });
+    stage.addEventListener('touchcancel', () => {
+        if (gesture) {
+            gesture = null;
+            settle(0, 0, 1);
+        }
+    }, { passive: true });
+    modal.addEventListener('hide.bs.modal', () => {
+        clearTimeout(timer);
+        timer = null;
+        gesture = null;
+    });
+    modal.addEventListener('hidden.bs.modal', reset);
+    window.addEventListener('resize', () => {
+        reset();
+        updateNeighbours();
+    });
+    return { reset, updateNeighbours, isMobile: () => mobile.matches };
 }
 
 function setupStaggeredThumbnails() {
@@ -189,17 +315,28 @@ function setupStaggeredThumbnails() {
         image.onerror = reject;
         image.src = url;
     });
-    const loadWithRetries = async (image) => {
+    const setState = (image, state) => {
+        const tile = image.closest('.file-grid-item');
+        tile.dataset.thumbnailState = state;
+        const status = tile.querySelector('.thumbnail-status');
+        status.hidden = state === 'loaded';
+        status.querySelector('span').textContent = state === 'failed' ? 'Image unavailable' : 'Loading image…';
+        status.querySelector('button').hidden = state !== 'failed';
+    };
+    const loadWithRetries = async (image, fresh = false) => {
+        setState(image, 'loading');
         const source = image.dataset.thumbnailSrc;
         for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
             try {
-                const suffix = attempt ? `${source.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}` : '';
+                const suffix = attempt || fresh ? `${source.includes('?') ? '&' : '?'}retry=${attempt}&_ts=${Date.now()}` : '';
                 await load(image, `${source}${suffix}`);
+                setState(image, 'loaded');
                 return;
             } catch (_) {
                 if (attempt < maxRetries) await delay(retryDelayMs);
             }
         }
+        setState(image, 'failed');
     };
     const queue = [];
     let processing = false;
@@ -207,12 +344,19 @@ function setupStaggeredThumbnails() {
         if (processing) return;
         processing = true;
         while (queue.length) {
-            await loadWithRetries(queue.shift());
+            const { image, fresh } = queue.shift();
+            await loadWithRetries(image, fresh);
             await delay(staggerMs);
         }
         processing = false;
     };
-    const enqueue = (image) => { queue.push(image); processQueue(); };
+    const enqueue = (image, fresh = false) => { queue.push({ image, fresh }); processQueue(); };
+    images.forEach((image) => {
+        image.closest('.file-grid-item').querySelector('.thumbnail-retry').addEventListener('click', () => {
+            setState(image, 'loading');
+            enqueue(image, true);
+        });
+    });
     if ('IntersectionObserver' in window) {
         const observer = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
@@ -223,7 +367,7 @@ function setupStaggeredThumbnails() {
         }, { rootMargin: '200px 0px', threshold: 0.01 });
         images.forEach((image) => observer.observe(image));
     } else {
-        images.forEach(enqueue);
+        images.forEach((image) => enqueue(image));
     }
 }
 
@@ -238,6 +382,15 @@ function setupGalleryDensity() {
     const maxColumns = Number(slider.max);
     const minTilePx = Number(shell.dataset.galleryMinTilePx);
     let preferredColumns = Number(slider.value);
+    const storageKey = shell.dataset.galleryDensityStorageKey;
+    try {
+        const saved = Number(localStorage.getItem(storageKey));
+        if (Number.isInteger(saved) && saved >= minColumns && saved <= maxColumns) {
+            preferredColumns = saved;
+        }
+    } catch (_) {
+        // Gallery controls remain usable when browser storage is unavailable.
+    }
 
     const applyColumns = () => {
         const gapPx = Number.parseFloat(getComputedStyle(gallery).gap) || 0;
@@ -255,6 +408,11 @@ function setupGalleryDensity() {
 
     slider.addEventListener('input', () => {
         preferredColumns = Number(slider.value);
+        try {
+            localStorage.setItem(storageKey, String(preferredColumns));
+        } catch (_) {
+            // Storage restrictions should not prevent changing the density.
+        }
         applyColumns();
     });
     window.addEventListener('resize', applyColumns);

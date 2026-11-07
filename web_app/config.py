@@ -706,6 +706,13 @@ class FileStoreConfig:
     gallery_columns_max: int = 10
     gallery_columns_default: int = 5
     gallery_min_tile_px: int = 40
+    gallery_density_storage_key: str = "file_store.gallery_columns"
+    preview_mobile_max_width_px: int = 768
+    preview_gesture_lock_px: int = 8
+    preview_gesture_commit_ratio: float = 0.2
+    preview_gesture_animation_ms: int = 240
+    preview_gesture_edge_resistance: float = 0.25
+    preview_gesture_shrink_ratio: float = 0.2
 
 
 @dataclass
