@@ -122,3 +122,23 @@ def test_ordinary_unknown_url_keeps_request_lifecycle_logs(client, caplog):
     assert len(started) == 1
     assert len(completed) == 1
     assert completed[0]["status"] == 404
+
+
+def test_production_logging_creates_private_logs_and_lock_files(tmp_path):
+    subprocess.run(
+        [sys.executable, "-c", """
+import sys
+from pathlib import Path
+from web_app.config import ConfigManager
+from web_app.logging_utils import configure_logging, log_event
+config = ConfigManager()
+config.production_data_root = Path(sys.argv[1]) / "data"
+configure_logging(debug=False)
+log_event("system", "permissions.checked")
+""", str(tmp_path)],
+        check=True,
+    )
+    paths = list(tmp_path.rglob("*"))
+    assert any(path.is_file() for path in paths)
+    for path in paths:
+        assert path.stat().st_mode & 0o777 == (0o700 if path.is_dir() else 0o600)

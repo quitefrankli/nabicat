@@ -43,10 +43,11 @@ class _S3Client:
             source=self._get_s3_path(file), destination=str(file),
         )
         if not file.parent.exists():
-            file.parent.mkdir(exist_ok=True, parents=True)
+            DataInterface().ensure_private_directory(file.parent)
         try:
             bucket = ConfigManager().data_sync_bucket_name
             self.s3_client.download_file(bucket, self._get_s3_path(file), str(file))
+            file.chmod(ConfigManager().app_data_file_mode)
         except ClientError as e:
             if e.response['Error']['Code'] == "404":
                 log_event(
@@ -134,6 +135,20 @@ class DataInterface:
             if current.model_dump_json(exclude_none=exclude_none) != before:
                 self._save_model(path, current, exclude_none=exclude_none)
 
+    def ensure_private_directory(self, path: Path) -> None:
+        """Create missing private parents without touching ancestors outside app data."""
+        self._assert_path(path)
+        if not path.exists():
+            if path != self.data_root:
+                self.ensure_private_directory(path.parent)
+            path.mkdir(mode=ConfigManager().app_data_dir_mode, exist_ok=True)
+
+    def _copy_private_file(self, source: str | Path, destination: str | Path) -> str:
+        path = Path(destination)
+        with Path(source).open("rb") as stream:
+            self.atomic_write(path, stream=stream)
+        return str(path)
+
     def atomic_write(
         self,
         path: Path,
@@ -147,7 +162,7 @@ class DataInterface:
         if data is not None and stream is not None:
             raise ValueError("data and stream are mutually exclusive")
         self._assert_path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_private_directory(path.parent)
         temporary_path: Path | None = None
         try:
             config = ConfigManager()
@@ -161,8 +176,8 @@ class DataInterface:
                         temporary.write(chunk if isinstance(chunk, bytes) else chunk.encode(encoding))
                 temporary.flush()
                 os.fsync(temporary.fileno())
+            temporary_path.chmod(config.atomic_write_file_mode)
             os.replace(temporary_path, path)
-            path.chmod(config.atomic_write_file_mode)
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
@@ -198,16 +213,30 @@ class DataInterface:
         if type(self) != DataInterface:
             raise NotImplementedError("Meothd not overriden")
         self.generate_metadata_file(backup_dir)
-        shutil.copy2(self.users_file, backup_dir / "users.json")
+        self._copy_private_file(self.users_file, backup_dir / "users.json")
 
-    def _backup_subtree(self, src_dir: Path, backup_dir: Path, name: str) -> None:
+    def _backup_subtree(self, src_dir: Path, backup_dir: Path, name: str, *, ignore=None) -> None:
         """Copy a subapp's data subtree into the backup, no-op if it doesn't exist.
 
         Uses ``dirs_exist_ok=True`` so a re-run into an existing backup dir
         merges rather than raising.
         """
         if src_dir.exists():
-            shutil.copytree(src_dir, backup_dir / name, dirs_exist_ok=True)
+            destination = backup_dir / name
+            self.ensure_private_directory(destination)
+            try:
+                shutil.copytree(
+                    src_dir, destination, dirs_exist_ok=True,
+                    copy_function=self._copy_private_file, ignore=ignore,
+                )
+            finally:
+                # copytree copies source directory modes even with a custom copier.
+                for root, directories, _ in os.walk(destination, followlinks=False):
+                    Path(root).chmod(ConfigManager().app_data_dir_mode)
+                    for directory in directories:
+                        path = Path(root) / directory
+                        if not path.is_symlink():
+                            path.chmod(ConfigManager().app_data_dir_mode)
 
     def load_users(self) -> dict[str, User]:
         """Read-only load. For mutations use edit_users() so the write is locked."""
@@ -259,7 +288,7 @@ class DataInterface:
     def generate_backup_dir(self) -> Path:
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         new_backup = self.backups_directory / timestamp
-        new_backup.mkdir(parents=True, exist_ok=True)
+        self.ensure_private_directory(new_backup)
         self._prune_backups()
         return new_backup
 

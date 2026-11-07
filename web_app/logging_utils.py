@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 import flask
@@ -16,6 +17,8 @@ from web_app.config import ConfigManager
 def configure_logging(debug: bool) -> None:
     """Configure consistent process-safe logging for web and scheduled workers."""
     config = ConfigManager()
+    # Web and scheduled workers also create files through media libraries.
+    os.umask(config.private_data_umask)
     log_path = config.log_file_path.resolve()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handlers: list[logging.Handler]
@@ -25,6 +28,7 @@ def configure_logging(debug: bool) -> None:
         handlers = [
             ConcurrentRotatingFileHandler(
                 str(log_path),
+                chmod=config.app_data_file_mode,
                 maxBytes=config.dev.log_rotation_max_bytes,
                 backupCount=config.dev.log_rotation_backup_count,
             )

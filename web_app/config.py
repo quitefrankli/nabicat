@@ -879,9 +879,11 @@ class ConfigManager:
         self.rmw_lock_blocking_timeout_s = 5.0
         self.rmw_lock_renewal_interval_s = 3.0
         self.app_data_file_mode = 0o600
+        self.app_data_dir_mode = 0o700
+        self.private_data_umask = 0o077
         self.app_user_folder_pattern = r"[a-z0-9][a-z0-9._-]*"
         self.data_sync_bucket_name = "todoist"
-        self.atomic_write_file_mode = 0o644
+        self.atomic_write_file_mode = 0o600
         self.atomic_write_chunk_size = 1024 * 1024
         self.random_string_length = 10
         self.random_generation_attempts = 100

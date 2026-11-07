@@ -828,7 +828,7 @@ class DataInterface(GalleryVideoProcessor, BaseDataInterface):
                 for item, filename, destination in destinations:
                     os.replace(item.staged_path, destination)
                     moved_paths.append(destination)
-                    destination.chmod(0o644)
+                    destination.chmod(ConfigManager().app_data_file_mode)
                     added.append(
                         GalleryItem(
                             type=item.media_type,
@@ -1107,10 +1107,8 @@ class DataInterface(GalleryVideoProcessor, BaseDataInterface):
 
     def backup_data(self, backup_dir: Path) -> None:
         if self._content_dir.exists():
-            shutil.copytree(
-                self._content_dir,
-                backup_dir / "loft",
-                dirs_exist_ok=True,
+            self._backup_subtree(
+                self._content_dir, backup_dir, "loft",
                 ignore=shutil.ignore_patterns(
                     *ConfigManager().loft.gallery_backup_excluded_names
                 ),

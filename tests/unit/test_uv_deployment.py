@@ -42,7 +42,7 @@ if name == "python":
     elif args == ["-"]:
         source = sys.stdin.read()
         if "config.gunicorn_workers" in source:
-            print("1\n720\n720\n5001\n1\n0\nnabicat-scheduled-job@.service\n3600\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00")
+            print("1\n720\n720\n5001\n1\n0\nnabicat-scheduled-job@.service\n3600\n0077\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00")
         else:
             print("1\n0\nnabicat-scheduled-job@.service\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00")
 elif name == "git":
@@ -82,6 +82,9 @@ elif name == "sudo":
     reset = calls.index(["git", "reset", "--hard", "candidate"])
     assert stop < reset < sync
     assert (result.returncode != 0) == bool(failure), result.stdout + result.stderr
+    if not failure:
+        assert "UMask=0077" in (units / "nabicat.service").read_text()
+        assert "UMask=0077" in (units / "nabicat-scheduled-job@.service").read_text()
     if failure:
         assert (tmp_path / "revision").read_text() == "previous"
         assert (units / "nabicat.service").read_text() == "original nabicat.service"

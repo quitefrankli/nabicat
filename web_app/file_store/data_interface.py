@@ -207,7 +207,7 @@ class DataInterface(BaseDataInterface):
         if crc not in metadata.files:
             file_path = self.files_dir / str(crc)
             os.replace(temp_path, file_path)
-            file_path.chmod(0o644)
+            file_path.chmod(ConfigManager().app_data_file_mode)
 
             # Create file metadata (use first uploaded name as reference)
             file_metadata = FileMetadata(

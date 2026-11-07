@@ -276,9 +276,9 @@ class DataInterface(BaseDataInterface):
 
     def backup_data(self, backup_dir: Path) -> None:
         tubio_backup_dir = backup_dir / "tubio"
-        tubio_backup_dir.mkdir(parents=True, exist_ok=True)
+        self.ensure_private_directory(tubio_backup_dir)
         audio_backup_dir = tubio_backup_dir / "audio"
-        audio_backup_dir.mkdir(parents=True, exist_ok=True)
+        self.ensure_private_directory(audio_backup_dir)
         
         metadata = deepcopy(self.get_metadata())
         for user_metadata in metadata.users.values():
@@ -303,7 +303,7 @@ class DataInterface(BaseDataInterface):
                 audio.is_cached = False
             else:
                 # only copy files that cannot be easily redownloaded from yt
-                shutil.copy2(self.get_audio_path(audio.crc, metadata), 
+                self._copy_private_file(self.get_audio_path(audio.crc, metadata),
                              audio_backup_dir / f"{audio.crc}.m4a")
 
         self._save_model(tubio_backup_dir / "metadata.json", metadata)

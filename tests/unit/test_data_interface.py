@@ -319,3 +319,38 @@ class TestDataInterface:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+def test_private_writes_and_backups_ignore_permissive_source_modes(config, tmp_path):
+    import os
+    import stat
+
+    interface = DataInterface()
+    previous_umask = os.umask(0)
+    try:
+        source = config.save_data_path / "nested" / "record.json"
+        interface.atomic_write(source, data="{}")
+        assert stat.S_IMODE(source.stat().st_mode) == config.atomic_write_file_mode
+        assert all(
+            stat.S_IMODE(path.stat().st_mode) == config.app_data_dir_mode
+            for path in (config.save_data_path, source.parent)
+        )
+        # Backups must not propagate legacy readable source permissions.
+        source.chmod(0o644)
+        source.parent.chmod(0o755)
+        interface.atomic_write(interface.users_file, data="[]")
+        interface.users_file.chmod(0o644)
+        backup = interface.generate_backup_dir()
+        with patch.object(interface, "generate_metadata_file"):
+            interface.backup_data(backup)
+        interface._backup_subtree(source.parent, backup, "records")
+        assert (backup / "records" / source.name).read_text() == "{}"
+        assert (backup / "users.json").read_text() == "[]"
+        for path in (backup.parent, backup, *backup.rglob("*")):
+            expected = config.app_data_dir_mode if path.is_dir() else config.app_data_file_mode
+            assert stat.S_IMODE(path.stat().st_mode) == expected
+        # Replacing a legacy file also restores the private mode.
+        interface.atomic_write(source, data="{\"updated\": true}")
+        assert stat.S_IMODE(source.stat().st_mode) == config.atomic_write_file_mode
+    finally:
+        os.umask(previous_umask)

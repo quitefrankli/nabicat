@@ -261,11 +261,12 @@ print(config.deployment_health_attempts)
 print(config.deployment_health_interval_s)
 print(config.scheduled_job_service_unit_name)
 print(config.scheduled_job_timeout_s)
+print(format(config.private_data_umask, "04o"))
 for timer_name, job_name, on_calendar in config.scheduled_job_timers:
     print("\t".join((timer_name, job_name, on_calendar)))
 PY
 )
-if [[ "${#DEPLOY_CONFIG[@]}" -lt 9 ]]; then
+if [[ "${#DEPLOY_CONFIG[@]}" -lt 10 ]]; then
     deploy_error "candidate scheduled-job configuration is incomplete"
     false
 fi
@@ -277,7 +278,8 @@ HEALTH_ATTEMPTS="${DEPLOY_CONFIG[4]}"
 HEALTH_INTERVAL="${DEPLOY_CONFIG[5]}"
 SCHEDULED_JOB_SERVICE_UNIT="${DEPLOY_CONFIG[6]}"
 SCHEDULED_JOB_TIMEOUT="${DEPLOY_CONFIG[7]}"
-SCHEDULED_JOB_SPECS=("${DEPLOY_CONFIG[@]:8}")
+PRIVATE_DATA_UMASK="${DEPLOY_CONFIG[8]}"
+SCHEDULED_JOB_SPECS=("${DEPLOY_CONFIG[@]:9}")
 SCHEDULED_JOB_TIMER_NAMES=()
 for timer_spec in "${SCHEDULED_JOB_SPECS[@]}"; do
     IFS=$'\t' read -r timer_name _ _ <<< "$timer_spec"
@@ -327,6 +329,7 @@ StartLimitIntervalSec=60
 [Service]
 Type=simple
 User=${USER_NAME}
+UMask=${PRIVATE_DATA_UMASK}
 WorkingDirectory=${PROJECT_DIR}
 Environment="PATH=${PATH}"
 ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 -w ${WORKERS} --timeout ${REQUEST_TIMEOUT} --graceful-timeout ${GRACEFUL_TIMEOUT} 'web_app.__main__:prod_entry()'
@@ -368,6 +371,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=${USER_NAME}
+UMask=${PRIVATE_DATA_UMASK}
 WorkingDirectory=${PROJECT_DIR}
 Environment="PATH=${PATH}"
 TimeoutStartSec=${SCHEDULED_JOB_TIMEOUT}
