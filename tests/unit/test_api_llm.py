@@ -18,7 +18,7 @@ def llm_request(client, monkeypatch):
         User.create(username="user", password="pass", folder="user", is_admin=False),
     ])
     data = MagicMock()
-    data.edit_users.return_value.__enter__.return_value = users
+    data.load_users_local.return_value = users.as_dict()
     monkeypatch.setattr("web_app.auth.DataInterface", lambda: data)
     payload = dict(username="admin", password="pass", model="test-model",
                    effort="medium", input="  answer this\n")

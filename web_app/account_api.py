@@ -26,13 +26,8 @@ def login():
     
     username = from_req('username')
     password = from_req('password')
-    with DataInterface().edit_users() as users:
-        user = users.get(username)
-        password_before = user.password if user is not None else None
-        authenticated = user is not None and user.verify_password(password)
-        password_migrated = (
-            authenticated and user.password != password_before
-        )
+    user = DataInterface().load_users_local().get(username)
+    authenticated = user is not None and user.verify_password(password)
 
     if authenticated:
         flask_login.login_user(user, remember=True)
@@ -40,7 +35,6 @@ def login():
             "account",
             "account.login_succeeded",
             user=user,
-            password_migrated=password_migrated,
         )
         # Validate next_url to prevent open redirect vulnerabilities
         if next_url and next_url.startswith('/') and not next_url.startswith('//'):

@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from web_app.users import User, UsersFile
 
 
@@ -9,15 +11,13 @@ class TestLoginRoute:
         self,
         mock_data_interface,
         client,
-        wire_edit_users,
     ):
         user = User.create(
             username='testuser',
             password='testpass',
             folder='folder1',
         )
-        users_file = UsersFile(root=[user])
-        wire_edit_users(mock_data_interface, users_file)
+        mock_data_interface.return_value.load_users_local.return_value = {user.id: user}
 
         response = client.post(
             '/account/login',
@@ -29,44 +29,49 @@ class TestLoginRoute:
         with client.session_transaction() as session:
             assert session.get('_user_id') == user.id
 
+    @pytest.mark.parametrize('stored_password', [
+        'legacy-password', '', 'nabicat$', 'nabicat$invalid',
+        'nabicat$scrypt:invalid$salt$hash',
+    ])
     @patch('web_app.account_api.DataInterface')
-    def test_login_migrates_legacy_plaintext_password(
+    def test_login_rejects_plaintext_and_malformed_passwords(
         self,
         mock_data_interface,
         client,
-        wire_edit_users,
+        stored_password,
     ):
         user = User(
             username='legacy',
-            password='legacy-password',
+            password=stored_password,
             folder='legacy-folder',
         )
-        users_file = UsersFile(root=[user])
-        wire_edit_users(mock_data_interface, users_file)
+        mock_data_interface.return_value.load_users_local.return_value = {user.id: user}
 
         response = client.post(
             '/account/login',
-            data={'username': 'legacy', 'password': 'legacy-password'},
+            data={'username': 'legacy', 'password': stored_password},
         )
 
         assert response.status_code == 302
-        assert user.password != 'legacy-password'
-        assert user.verify_password('legacy-password')
+        assert response.location.endswith('/account/login')
+        assert user.password == stored_password
+        with client.session_transaction() as session:
+            assert '_user_id' not in session
+        mock_data_interface.return_value.edit_users.assert_not_called()
 
     @patch('web_app.account_api.DataInterface')
-    def test_login_rejects_incorrect_password_without_migrating_legacy_password(
+    def test_login_rejects_incorrect_password_without_changing_hash(
         self,
         mock_data_interface,
         client,
-        wire_edit_users,
     ):
-        user = User(
+        user = User.create(
             username='testuser',
             password='testpass',
             folder='folder1',
         )
-        users_file = UsersFile(root=[user])
-        wire_edit_users(mock_data_interface, users_file)
+        original_hash = user.password
+        mock_data_interface.return_value.load_users_local.return_value = {user.id: user}
 
         response = client.post(
             '/account/login',
@@ -75,7 +80,7 @@ class TestLoginRoute:
 
         assert response.status_code == 302
         assert response.location.endswith('/account/login')
-        assert user.password == 'testpass'
+        assert user.password == original_hash
         with client.session_transaction() as session:
             assert '_user_id' not in session
 

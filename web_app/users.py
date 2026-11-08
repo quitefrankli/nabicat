@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 import re
 from typing import Any
 
@@ -69,19 +68,21 @@ class User(BaseModel):
     def is_anonymous(self) -> bool:
         return False
 
-    def set_password(self, password: str, *, method: str = "scrypt", prefix: str = "nabicat$") -> None:
-        self.password = f"{prefix}{generate_password_hash(password, method=method)}"
+    def set_password(self, password: str) -> None:
+        config = ConfigManager()
+        self.password = (
+            f"{config.password_hash_prefix}"
+            f"{generate_password_hash(password, method=config.password_hash_method)}"
+        )
 
-    def verify_password(self, password: str, *, prefix: str = "nabicat$") -> bool:
-        if self.password.startswith(prefix):
-            try:
-                return check_password_hash(self.password.removeprefix(prefix), password)
-            except ValueError:
-                return False
-        matches = hmac.compare_digest(self.password.encode(), password.encode())
-        if matches:
-            self.set_password(password, prefix=prefix)
-        return matches
+    def verify_password(self, password: str) -> bool:
+        prefix = ConfigManager().password_hash_prefix
+        if not self.password.startswith(prefix):
+            return False
+        try:
+            return check_password_hash(self.password.removeprefix(prefix), password)
+        except ValueError:
+            return False
 
     def has_elevated_access(self) -> bool:
         return self.is_admin or self.is_elevated
