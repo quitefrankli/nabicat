@@ -324,7 +324,7 @@ def test_pairing_verifies_persists_rotates_and_isolates_modes(admin_client, monk
     rejected = admin_client.post("/jhunt-ui/api/connection", json={"token": "wrong-" * 8})
     assert rejected.status_code == 502
     assert path.read_bytes() == before
-    assert admin_client.post("/jhunt-ui/api/connection", json={"token": token}).json["connection_generation"] != generation
+    assert admin_client.post("/jhunt-ui/api/connection", json={"token": token}).json["connection_generation"] == generation
     config.debug_mode = False
     assert connection_settings()["token"] == "production-secret"
     config.debug_mode = True

@@ -14,7 +14,7 @@ from web_app.blueprint_registration import register_app_name, require_admin_blue
 from web_app.config import ConfigManager
 from web_app.logging_utils import log_event
 from web_app.redis_client import get_redis, rmw_lock
-from .connection_store import save_connection
+from .connection_store import save_verified_connection
 from .bridge import (
     BridgeError,
     JHuntClient,
@@ -22,6 +22,7 @@ from .bridge import (
     valid_generation,
     valid_identifier,
     valid_store_id,
+    valid_token,
 )
 
 
@@ -150,12 +151,7 @@ def connect():
     config = ConfigManager()
     body = _json_body({"token"}, {"token"}, "connect", "connection")
     token = body["token"]
-    if (
-        not isinstance(token, str)
-        or not config.jhunt_token_min_chars <= len(token) <= config.jhunt_token_max_chars
-        or not token.isascii()
-        or any(char.isspace() or not char.isprintable() for char in token)
-    ):
+    if not valid_token(token):
         _audit("connect", status="rejected", reason="invalid_token")
         return _private(jsonify({"error": "Enter a valid JHunt API token."})), 400
     candidate = {
@@ -168,7 +164,7 @@ def connect():
         with JHuntClient(candidate) as client:
             snapshot = client.load_inbox()
             # Persist only after the token and review API have been verified.
-            save_connection(client.settings)
+            generation = save_verified_connection(client.settings, snapshot["store_id"])
     except BridgeError as error:
         _audit("connect", status="failure", reason="verification_failed",
                exc_info=error, error_type=type(error).__name__)
@@ -182,7 +178,7 @@ def connect():
     _audit("connect", status="success", store_id=snapshot["store_id"])
     return _private(jsonify({
         "connected": True,
-        "connection_generation": candidate["generation"],
+        "connection_generation": generation,
         "store_id": snapshot["store_id"],
     }))
 

@@ -1,5 +1,6 @@
 """Private, atomic connection settings shared by all server workers."""
 
+import uuid
 from contextlib import contextmanager
 
 from pydantic import BaseModel, SecretStr, field_serializer
@@ -13,6 +14,7 @@ class Connection(BaseModel):
     base_url: str = ""
     token: SecretStr = SecretStr("")
     generation: str = ""
+    store_id: str = ""
 
     @field_serializer("token")
     def serialize_token(self, value: SecretStr) -> str:
@@ -40,10 +42,19 @@ def load_connection() -> dict | None:
     return connection.model_dump() if connection is not None else None
 
 
-def save_connection(settings: dict) -> None:
+def save_verified_connection(settings: dict, store_id: str) -> str:
     verified = Connection.model_validate(settings)
     with ConnectionStore().edit_connection() as connection:
+        unchanged = (
+            connection.enabled == verified.enabled
+            and connection.base_url == verified.base_url
+            and connection.token == verified.token
+            and connection.store_id == store_id
+        )
         connection.enabled = verified.enabled
         connection.base_url = verified.base_url
         connection.token = verified.token
-        connection.generation = verified.generation
+        connection.store_id = store_id
+        if not unchanged:
+            connection.generation = uuid.uuid4().hex
+        return connection.generation

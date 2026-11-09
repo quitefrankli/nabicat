@@ -17,6 +17,16 @@ class BridgeError(Exception):
         self.status_code = status_code
 
 
+def valid_token(value) -> bool:
+    config = ConfigManager()
+    return (
+        isinstance(value, str)
+        and config.jhunt_token_min_chars <= len(value) <= config.jhunt_token_max_chars
+        and value.isascii()
+        and all(char.isprintable() and not char.isspace() for char in value)
+    )
+
+
 def connection_settings(candidate: dict | None = None) -> dict[str, str | bool]:
     if candidate is not None:
         settings = dict(candidate)

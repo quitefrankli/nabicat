@@ -684,6 +684,9 @@ class ConfigManager:
         self.jhunt_artifact_hash_pattern = r"^[a-f0-9]{64}$"
         self.jhunt_token_min_chars = 24
         self.jhunt_token_max_chars = 4096
+        self.jhunt_pair_input_max_bytes = 8192
+        self.jhunt_pair_port_min = 1
+        self.jhunt_pair_port_max = 65535
         self.jhunt_connection_filename = "connection.json"
         self.jhunt_debug_base_url = "http://127.0.0.1:8080"
         self.jhunt_production_base_url = "http://127.0.0.1:18080"
