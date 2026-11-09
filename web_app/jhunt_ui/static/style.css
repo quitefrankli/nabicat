@@ -48,15 +48,6 @@
   border-bottom: 1px solid var(--hw-border);
 }
 .jhunt-panel-header h2 { font-size: 1.5rem; margin-bottom: 0.375rem; }
-.jhunt-connect-form { display: grid; gap: 0.625rem; padding: 1.25rem 1.5rem 1.5rem; }
-.jhunt-connect-form > label { color: var(--hw-text-primary); font-weight: 700; }
-.jhunt-connect-controls { display: flex; align-items: stretch; gap: 0.75rem; }
-.jhunt-connect-controls input { min-width: 0; flex: 1; min-height: 2.75rem; padding: 0.625rem 0.75rem; border: 2px solid var(--hw-sage); border-radius: var(--hw-radius-md); background: rgba(255,255,255,0.8); color: var(--hw-text-primary); }
-.jhunt-connect-controls input:focus { outline: none; box-shadow: 0 0 0 0.25rem rgba(135,168,120,0.15); }
-.jhunt-connect-controls button { min-height: 2.75rem; flex-shrink: 0; }
-.jhunt-token-help, .jhunt-connect-status { margin: 0; color: var(--hw-text-secondary); font-size: 0.9rem; }
-.jhunt-connect-status.is-success { color: var(--hw-sage-dark); font-weight: 700; }
-.jhunt-connect-status.is-error { color: var(--hw-coral); }
 .jhunt-empty {
   display: flex;
   flex-direction: column;
@@ -91,7 +82,4 @@
 @media (max-width: 768px) {
   .jhunt-workspace { padding-top: 1rem; }
   .jhunt-panel-header, .jhunt-item { padding: 1rem; }
-  .jhunt-connect-form { padding: 1rem; }
-  .jhunt-connect-controls { flex-direction: column; }
-  .jhunt-connect-controls button { justify-self: stretch; }
 }

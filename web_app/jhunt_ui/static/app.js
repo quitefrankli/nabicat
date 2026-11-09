@@ -41,10 +41,6 @@ const resumeHash = data => data.resume?.pdf || data.resume_pdf || data.artifacts
 export async function mountJhunt(root, client) {
   const status = root.querySelector('#jhunt-connection');
   const message = root.querySelector('#jhunt-message');
-  const connectForm = root.querySelector('#jhunt-connect-form');
-  const tokenInput = root.querySelector('#jhunt-api-token');
-  const connectButton = root.querySelector('#jhunt-connect-submit');
-  const connectStatus = root.querySelector('#jhunt-connect-status');
   const drafts = new Map();
   const confirmations = new Map();
   const articleCache = new Map();
@@ -61,35 +57,6 @@ export async function mountJhunt(root, client) {
   let actionOutcome = null;
   let retryDelay = Number(root.dataset.retryInitialMs) || 1000;
   const retryMaximum = Number(root.dataset.retryMaxMs) || 30000;
-
-  connectForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (connectButton.disabled) return;
-    let token = tokenInput.value;
-    tokenInput.value = '';
-    if (!token) {
-      connectStatus.textContent = 'Enter the local JHunt API token to connect.';
-      connectStatus.className = 'jhunt-connect-status is-error';
-      return;
-    }
-    connectButton.disabled = true;
-    connectStatus.textContent = 'Connecting…';
-    connectStatus.className = 'jhunt-connect-status';
-    try {
-      const result = await client.connect(token);
-      token = '';
-      if (result.connected !== true) throw new Error('JHunt did not confirm the connection.');
-      connectStatus.textContent = 'Connected to JHunt.';
-      connectStatus.className = 'jhunt-connect-status is-success';
-      await refresh();
-    } catch (error) {
-      connectStatus.textContent = error.message || 'Unable to connect to JHunt. Check the token and try again.';
-      connectStatus.className = 'jhunt-connect-status is-error';
-    } finally {
-      token = '';
-      connectButton.disabled = false;
-    }
-  });
 
   const setMessage = text => { message.textContent = text; };
   const storeKey = value => `${value.store_id || ''}:${value.connection_generation || ''}`;

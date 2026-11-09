@@ -166,19 +166,20 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             page.set_viewport_size({"width": 375, "height": 812})
             page.goto(origin + "/jhunt-ui/")
             assert page.locator("#jhunt-connection").inner_text().strip() == "Not connected"
-            field_token = page.locator("#jhunt-api-token")
-            field_token.fill("wrong-" * 8)
-            page.get_by_role("button", name="Connect JHunt", exact=True).click()
-            page.wait_for_function(
-                "document.querySelector('#jhunt-connect-status').classList.contains('is-error')"
-            )
-            assert field_token.input_value() == ""
-            field_token.fill("t" * 32)
-            page.get_by_role("button", name="Connect JHunt", exact=True).click()
-            page.wait_for_function(
-                "document.querySelector('#jhunt-connect-status').textContent==='Connected to JHunt.'"
-            )
-            assert field_token.input_value() == ""
+            assert page.get_by_role("button", name="Connect JHunt", exact=True).count() == 0
+            assert page.locator("input[type=password]").count() == 0
+            # Simulate automatic SSH registration while the page retries its inbox.
+            from web_app.jhunt_ui.bridge import JHuntClient
+            from web_app.jhunt_ui.connection_store import save_verified_connection
+
+            with JHuntClient({
+                "enabled": True,
+                "base_url": f"http://127.0.0.1:{backend_port}",
+                "token": "t" * 32,
+                "generation": "fixture",
+            }) as bridge:
+                verified = bridge.load_inbox()
+                save_verified_connection(bridge.settings, verified["store_id"])
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert "t" * 32 not in page.content()
             page.wait_for_function(

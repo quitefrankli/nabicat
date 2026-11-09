@@ -31,26 +31,6 @@
     </span>
   </header>
 
-  <section class="jhunt-panel jhunt-connect-panel" aria-labelledby="jhunt-connect-heading">
-    <div class="jhunt-panel-header">
-      <div>
-        <h2 id="jhunt-connect-heading">Connect JHunt</h2>
-        <p>Paste the token from your local JHunt <code>.data/api-token</code> file to connect this inbox.</p>
-      </div>
-    </div>
-    <form id="jhunt-connect-form" class="jhunt-connect-form" autocomplete="off"
-          method="post" action="{{ url_for('jhunt_ui.connect') }}">
-      <label for="jhunt-api-token">Local JHunt API token</label>
-      <div class="jhunt-connect-controls">
-        <input id="jhunt-api-token" name="token" type="password" required autocomplete="off"
-               autocapitalize="off" spellcheck="false" aria-describedby="jhunt-token-help">
-        <button class="btn btn-primary" id="jhunt-connect-submit" type="submit">Connect JHunt</button>
-      </div>
-      <p class="jhunt-token-help" id="jhunt-token-help">The token is sent securely to this app for connection and is not saved in your browser.</p>
-      <p id="jhunt-connect-status" class="jhunt-connect-status" role="status" aria-live="polite"></p>
-    </form>
-  </section>
-
   <section class="jhunt-panel" aria-labelledby="jhunt-inbox-heading">
     <div class="jhunt-panel-header">
       <div>
