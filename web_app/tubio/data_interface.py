@@ -1,6 +1,5 @@
 import binascii
 import logging
-import shutil
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone

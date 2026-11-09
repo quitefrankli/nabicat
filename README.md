@@ -52,6 +52,16 @@ Tests supply their own secret key; no `FLASK_SECRET_KEY` environment variable is
 needed. CI also runs the integration tests. Keep tests narrowly scoped on the
 production host.
 
+The JHunt bridge browser acceptance is opt-in and uses an isolated backend
+data directory:
+
+```bash
+JHUNT_BACKEND_CHECKOUT=../jhunt uv run --locked pytest tests/unit/test_jhunt_integration.py -q
+```
+
+Install the pinned Playwright Chromium browser first if the development
+environment does not already have it.
+
 ### Playwright UI Tests
 
 ```bash

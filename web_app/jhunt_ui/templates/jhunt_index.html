@@ -17,7 +17,9 @@
 {% set applications_empty = empty_state('bi-file-earmark-check', 'No applications to review', 'Prepared packages, resumes and answers will appear here.') %}
 
 {% block page_content %}
-<main class="jhunt-workspace" id="jhunt-app">
+<main class="jhunt-workspace" id="jhunt-app"
+      data-retry-initial-ms="{{ jhunt_retry_initial_ms }}"
+      data-retry-max-ms="{{ jhunt_retry_max_ms }}">
   <header class="jhunt-header">
     <div>
       <p class="jhunt-eyebrow">Your job search, in view</p>

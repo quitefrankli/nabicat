@@ -263,9 +263,11 @@ print(config.scheduled_job_timeout_s)
 print(format(config.private_data_umask, "04o"))
 for timer_name, job_name, on_calendar in config.scheduled_job_timers:
     print("\t".join((timer_name, job_name, on_calendar)))
+print(config.gunicorn_worker_class)
+print(config.gunicorn_threads)
 PY
 )
-if [[ "${#DEPLOY_CONFIG[@]}" -lt 10 ]]; then
+if [[ "${#DEPLOY_CONFIG[@]}" -lt 12 ]]; then
     deploy_error "candidate scheduled-job configuration is incomplete"
     false
 fi
@@ -278,7 +280,10 @@ HEALTH_INTERVAL="${DEPLOY_CONFIG[5]}"
 SCHEDULED_JOB_SERVICE_UNIT="${DEPLOY_CONFIG[6]}"
 SCHEDULED_JOB_TIMEOUT="${DEPLOY_CONFIG[7]}"
 PRIVATE_DATA_UMASK="${DEPLOY_CONFIG[8]}"
-SCHEDULED_JOB_SPECS=("${DEPLOY_CONFIG[@]:9}")
+GUNICORN_WORKER_CLASS="${DEPLOY_CONFIG[-2]}"
+GUNICORN_THREADS="${DEPLOY_CONFIG[-1]}"
+SCHEDULED_JOB_SPEC_COUNT=$((${#DEPLOY_CONFIG[@]} - 11))
+SCHEDULED_JOB_SPECS=("${DEPLOY_CONFIG[@]:9:$SCHEDULED_JOB_SPEC_COUNT}")
 SCHEDULED_JOB_TIMER_NAMES=()
 for timer_spec in "${SCHEDULED_JOB_SPECS[@]}"; do
     IFS=$'\t' read -r timer_name _ _ <<< "$timer_spec"
@@ -298,6 +303,8 @@ sudo systemctl enable --now redis-server
 
 "$GUNICORN_BIN" -b "127.0.0.1:${CANARY_PORT}" \
     -w 1 \
+    --worker-class "$GUNICORN_WORKER_CLASS" \
+    --threads "$GUNICORN_THREADS" \
     --timeout "$REQUEST_TIMEOUT" \
     --graceful-timeout "$GRACEFUL_TIMEOUT" \
     'web_app.__main__:prod_entry()' &
@@ -331,7 +338,7 @@ User=${USER_NAME}
 UMask=${PRIVATE_DATA_UMASK}
 WorkingDirectory=${PROJECT_DIR}
 Environment="PATH=${PATH}"
-ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 -w ${WORKERS} --timeout ${REQUEST_TIMEOUT} --graceful-timeout ${GRACEFUL_TIMEOUT} 'web_app.__main__:prod_entry()'
+ExecStart=${GUNICORN_BIN} -b 127.0.0.1:5000 -w ${WORKERS} --worker-class ${GUNICORN_WORKER_CLASS} --threads ${GUNICORN_THREADS} --timeout ${REQUEST_TIMEOUT} --graceful-timeout ${GRACEFUL_TIMEOUT} 'web_app.__main__:prod_entry()'
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=always
 RestartSec=3

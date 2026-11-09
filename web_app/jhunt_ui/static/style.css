@@ -30,6 +30,7 @@
   background: var(--hw-bg-secondary);
   font-size: 0.875rem;
 }
+.jhunt-connection.is-stale { color: var(--hw-coral); border-color: var(--hw-coral); }
 .jhunt-panel {
   margin-bottom: 1.5rem;
   overflow: hidden;
@@ -74,6 +75,10 @@
 .jhunt-form .jhunt-confirm { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 0; }
 .jhunt-confirm input { margin-top: 0.25rem; flex-shrink: 0; }
 .jhunt-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.jhunt-manifest { padding: 0.75rem; border-left: 3px solid var(--hw-sage); background: var(--hw-bg-primary); overflow-wrap: anywhere; }
+.jhunt-warning { color: var(--hw-coral); padding: 0.75rem 1rem; border: 1px solid var(--hw-coral); border-radius: var(--hw-radius-md); }
+.jhunt-item a[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.jhunt-form textarea:focus, .jhunt-form input:focus { outline: none; box-shadow: 0 0 0 0.25rem var(--hw-border); }
 @media (max-width: 768px) {
   .jhunt-workspace { padding-top: 1rem; }
   .jhunt-panel-header, .jhunt-item { padding: 1rem; }

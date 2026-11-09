@@ -13,7 +13,7 @@ from web_app.config import ConfigManager
 def test_nginx_forwards_original_https_scheme():
     nginx_config = Path("nabicat.conf").read_text()
 
-    assert nginx_config.count("proxy_set_header X-Forwarded-Proto $scheme;") == 1
+    assert nginx_config.count("proxy_set_header X-Forwarded-Proto $scheme;") == 2
 
 
 def test_synchronous_app_requests_have_aligned_proxy_and_worker_timeouts():
@@ -318,7 +318,15 @@ def test_deployment_loads_scheduled_config_from_candidate_before_reconciling():
     assert reset_index < scheduled_config_index
     assert scheduled_config_index < scheduled_backup_index < dependency_install_index
     assert "deployment_is_reconciled" not in script
-    assert 'if [[ "${#DEPLOY_CONFIG[@]}" -lt 9 ]]; then' in script
+    assert 'if [[ "${#DEPLOY_CONFIG[@]}" -lt 12 ]]; then' in script
+    assert 'print(config.gunicorn_worker_class)' in script
+    assert 'print(config.gunicorn_threads)' in script
+    assert '--worker-class ${GUNICORN_WORKER_CLASS} --threads ${GUNICORN_THREADS}' in script
+    nginx = Path("nabicat.conf").read_text()
+    event_location = nginx.split("location = /jhunt-ui/api/events {", 1)[1].split("}", 1)[0]
+    assert "proxy_buffering off;" in event_location
+    assert "proxy_cache off;" in event_location
+    assert "proxy_read_timeout 45s;" in event_location
 
 
 def test_deployment_installs_persistent_scheduled_job_timers():
@@ -441,6 +449,7 @@ def test_production_logging_identifies_worker_and_thread():
     config = ConfigManager()
     handler.assert_called_once_with(
         str(config.log_file_path.resolve()),
+        chmod=config.app_data_file_mode,
         maxBytes=config.dev.log_rotation_max_bytes,
         backupCount=config.dev.log_rotation_backup_count,
     )

@@ -668,6 +668,29 @@ class ConfigManager:
         self.api_llm_approval_policy = "never"
         self.api_llm_sandbox = "read-only"
         self.gunicorn_workers = 4
+        self.gunicorn_worker_class = "gthread"
+        self.gunicorn_threads = 8
+        self.jhunt_stream_max_active = 6
+        self.jhunt_stream_max_lifetime_s = 600
+        self.jhunt_stream_heartbeat_s = 15
+        self.jhunt_stream_slot_ttl_s = 660
+        self.jhunt_connect_timeout_s = 3.0
+        self.jhunt_read_timeout_s = 22.0
+        self.jhunt_request_timeout_s = 25.0
+        self.jhunt_retry_initial_ms = 1000
+        self.jhunt_retry_max_ms = 30000
+        self.jhunt_answer_max_chars = 20_000
+        self.jhunt_identifier_pattern = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        self.jhunt_artifact_hash_pattern = r"^[a-f0-9]{64}$"
+        self.jhunt_default_generation = "1"
+        self.jhunt_event_endpoint = "/review/events"
+        self.jhunt_inbox_endpoint = "/review/inbox"
+        self.jhunt_task_input_endpoint = "/tasks/{ident}/input"
+        self.jhunt_application_decision_endpoint = "/applications/{ident}/decision"
+        self.jhunt_artifact_endpoint = "/artifacts/{key}"
+        self.jhunt_stream_slot_prefix = "nabicat:jhunt:stream:"
+        self.jhunt_stream_slot_lease_s = 660
+        self.jhunt_stream_slot_lock_name = "jhunt_review_stream_slots"
         self.gunicorn_request_timeout_s = 720
         self.gunicorn_graceful_timeout_s = 720
         self.deployment_canary_port = 5001
@@ -854,6 +877,21 @@ class ConfigManager:
     @property
     def smtp_password(self) -> str:
         return getenv('SMTP_PASSWORD', '')
+
+    def jhunt_connection_settings(self) -> dict[str, str | bool]:
+        """Return isolated connection values for the active server mode."""
+        mode = "DEBUG" if self.debug_mode else "PRODUCTION"
+        enabled = getenv(f"JHUNT_{mode}_ENABLED", "false").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+        return {
+            "enabled": enabled,
+            "base_url": getenv(f"JHUNT_{mode}_BASE_URL", "").strip(),
+            "token": getenv(f"JHUNT_{mode}_TOKEN", "").strip(),
+            "generation": getenv(
+                f"JHUNT_{mode}_GENERATION", self.jhunt_default_generation
+            ).strip(),
+        }
 
     @property
     def alert_email_to(self) -> str:

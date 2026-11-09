@@ -42,7 +42,7 @@ if name == "python":
     elif args == ["-"]:
         source = sys.stdin.read()
         if "config.gunicorn_workers" in source:
-            print("1\n720\n720\n5001\n1\n0\nnabicat-scheduled-job@.service\n3600\n0077\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00")
+            print("1\n720\n720\n5001\n1\n0\nnabicat-scheduled-job@.service\n3600\n0077\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00\ngthread\n8")
         else:
             print("1\n0\nnabicat-scheduled-job@.service\nnabicat-backup.timer\tbackup\tSun *-*-* 00:00:00")
 elif name == "git":

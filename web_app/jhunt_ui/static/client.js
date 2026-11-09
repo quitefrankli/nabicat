@@ -1,25 +1,58 @@
-/**
- * Replace this adapter when the authenticated NabiCat bridge is available.
- * Records retain jhunt's {id, state, created, data} response shape.
- * Credentials and direct access to jhunt stay outside the browser.
- */
-export class DisconnectedClient {
+const API = '/jhunt-ui/api';
+
+function csrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
+export class BridgeClient {
+  async request(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (options.body) headers.set('Content-Type', 'application/json');
+    if (options.method && options.method !== 'GET') headers.set('X-CSRFToken', csrfToken());
+    const response = await fetch(`${API}${path}`, {
+      ...options,
+      headers,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const error = new Error(payload.error || `JHunt request failed (${response.status}).`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.status === 204 ? {} : response.json();
+  }
+
   async loadInbox() {
-    return { connected: false, notifications: [], tasks: [], applications: [] };
+    const inbox = await this.request('/inbox');
+    for (const application of inbox.applications || []) {
+      application.data ||= {};
+      if (application.manifest_hash && !application.data.manifest_hash) {
+        application.data.manifest_hash = application.manifest_hash;
+      }
+    }
+    return inbox;
   }
 
-  // POST /tasks/{id}/input: {answer: {text}}
-  async answerTask(id, body) {
-    throw new Error('JHunt is not connected. Your answer has not been sent.');
+  answerTask(id, body) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/input`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
   }
 
-  // POST /applications/{id}/decision: {manifest_hash, decision}
-  async decideApplication(id, body) {
-    throw new Error('JHunt is not connected. Your decision has not been sent.');
+  decideApplication(id, body) {
+    return this.request(`/applications/${encodeURIComponent(id)}/decision`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
   }
 
-  // GET /artifacts/{hash}: return an authenticated, same-origin download URL.
-  async artifactUrl(hash) {
-    throw new Error('JHunt is not connected. Documents are unavailable.');
+  artifactUrl(hash) {
+    return `${API}/artifacts/${encodeURIComponent(hash)}`;
+  }
+
+  eventsUrl(cursor) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return `${API}/events${query}`;
   }
 }
