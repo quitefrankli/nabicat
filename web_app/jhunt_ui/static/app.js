@@ -256,16 +256,34 @@ export async function mountJhunt(root, client) {
     const entry = element('article', undefined, 'jhunt-search-entry');
     const state = String(record.state || 'unknown').replaceAll('_', ' ');
     const data = record.data || {};
+    const terminal = ['completed', 'partial-failure', 'failed', 'cancelled'].includes(record.state);
+    entry.dataset.searchId = record.id;
+    entry.append(element('h4', data.origin === 'scheduled' ? 'Automatic search' : 'Manual search'));
     entry.append(element('strong', state));
+    const outcomes = data.outcomes || {};
+    const finished = Object.values(outcomes).filter(value => ['completed', 'failed', 'cancelled'].includes(value.state)).length;
+    entry.append(element('p', `${finished} of ${Object.keys(outcomes).length} sources finished`));
+    if (!terminal) {
+      const cancel = element('button', 'Cancel search', 'btn btn-outline-primary');
+      cancel.type = 'button';
+      cancel.dataset.reviewAction = 'true';
+      cancel.disabled = !canAct();
+      cancel.addEventListener('click', () => {
+        const body = {expected_store_id: snapshot.store_id, expected_connection_generation: snapshot.connection_generation};
+        void perform(cancel, () => client.cancelSearch(record.id, body));
+      });
+      entry.append(cancel);
+    }
     if (state === 'queued') entry.append(element('p', 'Queued; waiting for a worker.'));
     if (record.created || data.accepted_at) {
       const timestamp = record.created || data.accepted_at;
       const time = element('time', new Date(Number(timestamp) * 1000).toLocaleString());
       entry.append(time);
     }
-    const outcomes = data.outcomes || {};
     for (const [name, outcome] of Object.entries(outcomes)) {
       const line = element('p', `${name}: ${String(outcome.state || 'unknown').replaceAll('_', ' ')}`);
+      if (outcome.state === 'running' && outcome.phase === 'deriving-queries') line.append(document.createTextNode('; preparing search queries'));
+      if (outcome.query_number) line.append(document.createTextNode(`; query ${outcome.query_number} of ${outcome.query_count}, page ${outcome.page_number} (limit ${outcome.page_limit})`));
       if (outcome.error) line.append(document.createTextNode(` — ${outcome.error}`));
       if (outcome.retry_at) line.append(document.createTextNode(`; retry at ${new Date(Number(outcome.retry_at) * 1000).toLocaleString()}`));
       if (outcome.task_id) line.append(document.createTextNode(`; task ${outcome.task_id}`));
@@ -273,7 +291,8 @@ export async function mountJhunt(root, client) {
       if (outcome.new_vacancies !== undefined) line.append(document.createTextNode(`; ${outcome.new_vacancies} new vacancies`));
       entry.append(line);
     }
-    if (['completed', 'partial-failure', 'failed'].includes(record.state)) {
+    if (record.state === 'cancelled') entry.append(element('p', 'Search cancelled. Jobs already found are retained; existing assessment and preparation work may continue.'));
+    if (terminal) {
       entry.append(element('p', 'Discovery outcome only. Assessment and preparation continue separately.'));
     }
     return entry;

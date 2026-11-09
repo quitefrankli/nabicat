@@ -698,6 +698,7 @@ class ConfigManager:
         self.jhunt_search_endpoint = "/search/requests"
         self.jhunt_search_command_endpoint = "/search/commands/{request_key}"
         self.jhunt_search_request_endpoint = "/search/requests/{ident}"
+        self.jhunt_search_cancel_endpoint = "/search/requests/{ident}/cancel"
         self.jhunt_task_input_endpoint = "/tasks/{ident}/input"
         self.jhunt_application_decision_endpoint = "/applications/{ident}/decision"
         self.jhunt_artifact_endpoint = "/artifacts/{key}"

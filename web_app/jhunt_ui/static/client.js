@@ -47,6 +47,10 @@ export class BridgeClient {
     return this.request(`/search/commands/${encodeURIComponent(key)}`);
   }
 
+  cancelSearch(id, body) {
+    return this.request(`/search/requests/${encodeURIComponent(id)}/cancel`, {method: 'POST', body: JSON.stringify(body)});
+  }
+
   searchRequest(id) {
     return this.request(`/search/requests/${encodeURIComponent(id)}`);
   }

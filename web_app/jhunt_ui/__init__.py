@@ -258,6 +258,28 @@ def search_command_receipt(request_key: str):
     return _private(jsonify(receipt))
 
 
+@jhunt_ui_api.post("/api/search/requests/<ident>/cancel")
+def cancel_search(ident: str):
+    if not valid_identifier(ident):
+        _audit("cancel_search", status="rejected", reason="invalid_identifier", resource_id="invalid")
+        abort(400)
+    body = _json_body({"expected_store_id", "expected_connection_generation"},
+                      {"expected_store_id", "expected_connection_generation"}, "cancel_search", ident)
+    if not valid_store_id(body["expected_store_id"]) or not valid_generation(body["expected_connection_generation"]):
+        _audit("cancel_search", status="rejected", reason="invalid_body", resource_id=ident)
+        abort(400)
+    try:
+        with JHuntClient() as client:
+            _check_search_generation(client, body)
+            result = client.cancel_search(ident, {"expected_store_id": body["expected_store_id"]})
+    except BridgeError as error:
+        _audit("cancel_search", status="failure", reason="upstream_rejected", resource_id=ident,
+               status_code=error.status_code, exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    _audit("cancel_search", status="success", resource_id=ident)
+    return _private(jsonify(result))
+
+
 @jhunt_ui_api.get("/api/search/requests/<ident>")
 def search_request(ident: str):
     if not valid_identifier(ident):

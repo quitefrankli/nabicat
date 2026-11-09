@@ -258,6 +258,30 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             backend_command(data, RUN_SEARCH)
             page.wait_for_function("document.querySelector('#jhunt-latest-search').textContent.includes('partial-failure')")
             assert 'Fixture source unavailable' in page.locator('#jhunt-latest-search').inner_text()
+
+            # Manual and automatic searches share one live list and cancellation.
+            page.get_by_role('button', name='Search now', exact=True).click()
+            page.wait_for_function("document.querySelector('#jhunt-active-searches').textContent.includes('Manual search')")
+            backend_command(data, SEARCH_SETUP + "\nr.discovery.save_criteria('Automatic fixture criteria')\nr.db.schedule(86400, accept=r.searches.accept_scheduled_in_session)\n")
+            page.wait_for_function("document.querySelector('#jhunt-active-searches').textContent.includes('Automatic search')")
+            assert page.get_by_role('heading', name='Searches in progress', exact=True).count() == 1
+            active = page.locator('#jhunt-active-searches article')
+            assert active.count() == 2
+            assert '0 of 2 sources finished' in active.first.inner_text()
+            cancellation_attempts = []
+            def lose_cancel_response(route):
+                cancellation_attempts.append(route.request.url)
+                route.fetch()
+                route.abort('failed')
+            page.route('**/api/search/requests/*/cancel', lose_cancel_response)
+            active.filter(has_text='Manual search').get_by_role('button', name='Cancel search', exact=True).click()
+            page.wait_for_function("document.querySelectorAll('#jhunt-active-searches article').length===1")
+            assert len(cancellation_attempts) == 1
+            page.unroute('**/api/search/requests/*/cancel', lose_cancel_response)
+            page.get_by_role('button', name='Cancel search', exact=True).click()
+            page.wait_for_function("document.querySelector('#jhunt-active-searches').textContent.includes('No active searches')")
+            page.wait_for_function("document.querySelector('#jhunt-latest-search strong')?.textContent==='cancelled'")
+
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             field = page.locator("#jhunt-questions textarea")
             field.fill("Unsent fixture answer")
@@ -335,7 +359,7 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
                 "document.querySelector('#jhunt-connection').textContent==='Connected'"
             )
             assert field.input_value() == "Fresh answer"
-            assert 'partial-failure' in page.locator('#jhunt-latest-search').inner_text()
+            assert 'cancelled' in page.locator('#jhunt-latest-search').inner_text()
             # Reject the fixture package; this never schedules an external submission.
             page.get_by_role("button", name="Reject package").click()
             page.wait_for_function(

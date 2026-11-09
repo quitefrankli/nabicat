@@ -90,6 +90,7 @@ def test_connection_settings_are_independent_and_require_loopback(monkeypatch):
         ("get", "/jhunt-ui/api/inbox", None),
         ("get", "/jhunt-ui/api/search/commands/key-1", None),
         ("get", "/jhunt-ui/api/search/requests/request-1", None),
+        ("post", "/jhunt-ui/api/search/requests/request-1/cancel", {"expected_store_id": "store-1"}),
         ("post", "/jhunt-ui/api/search/criteria", {"text": "roles"}),
         ("post", "/jhunt-ui/api/search/requests", {"text": "roles"}),
         ("get", "/jhunt-ui/api/events", None),
@@ -414,3 +415,27 @@ def test_search_snapshot_receipts_and_upstream_errors(admin_client, monkeypatch)
     assert admin_client.get("/jhunt-ui/api/search/commands/command-1").status_code == 404
     status[0] = 503
     assert admin_client.get("/jhunt-ui/api/search/requests/request-1").status_code == 502
+
+
+
+def test_cancel_search_guards_and_forwards(admin_client, monkeypatch):
+    configure_debug(monkeypatch)
+    calls = []
+    def request(session, method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return FakeResponse(payload={"id": "request-1", "state": "cancelled"})
+    monkeypatch.setattr("requests.Session.request", request)
+    body = {"expected_store_id": "store-1", "expected_connection_generation": "local-1"}
+    url = "/jhunt-ui/api/search/requests/request-1/cancel"
+    response = admin_client.post(url, json=body)
+    assert response.status_code == 200
+    assert response.json["state"] == "cancelled"
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert calls[0][:2] == ("POST", "http://127.0.0.1:8080/search/requests/request-1/cancel")
+    assert calls[0][2]["json"] == {"expected_store_id": "store-1"}
+    assert calls[0][2]["headers"]["Authorization"] == "Bearer server-only-secret"
+    for invalid in [{"expected_store_id": {}}, {"expected_connection_generation": "old"}]:
+        assert admin_client.post(url, json={**body, **invalid}).status_code in (400, 409)
+    admin_client.application.config["WTF_CSRF_ENABLED"] = True
+    assert admin_client.post(url, json=body).status_code == 400
+    assert len(calls) == 1

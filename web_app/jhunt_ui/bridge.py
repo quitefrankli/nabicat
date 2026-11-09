@@ -163,6 +163,9 @@ class JHuntClient:
     def command_receipt(self, request_key: str):
         return self._json_get(self.config.jhunt_search_command_endpoint.format(request_key=request_key))
 
+    def cancel_search(self, ident: str, body: dict):
+        return self._json_post(self.config.jhunt_search_cancel_endpoint.format(ident=ident), body)
+
     def search_request(self, ident: str):
         return self._json_get(self.config.jhunt_search_request_endpoint.format(ident=ident))
 
