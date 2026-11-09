@@ -680,6 +680,7 @@ class ConfigManager:
         self.jhunt_retry_initial_ms = 1000
         self.jhunt_retry_max_ms = 30000
         self.jhunt_answer_max_chars = 20_000
+        self.jhunt_criteria_max_chars = 20_000
         self.jhunt_identifier_pattern = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         self.jhunt_artifact_hash_pattern = r"^[a-f0-9]{64}$"
         self.jhunt_token_min_chars = 24
@@ -693,6 +694,10 @@ class ConfigManager:
         self.jhunt_default_generation = "1"
         self.jhunt_event_endpoint = "/review/events"
         self.jhunt_inbox_endpoint = "/review/inbox"
+        self.jhunt_save_criteria_endpoint = "/search/criteria"
+        self.jhunt_search_endpoint = "/search/requests"
+        self.jhunt_search_command_endpoint = "/search/commands/{request_key}"
+        self.jhunt_search_request_endpoint = "/search/requests/{ident}"
         self.jhunt_task_input_endpoint = "/tasks/{ident}/input"
         self.jhunt_application_decision_endpoint = "/applications/{ident}/decision"
         self.jhunt_artifact_endpoint = "/artifacts/{key}"

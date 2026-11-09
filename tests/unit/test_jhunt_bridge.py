@@ -88,6 +88,10 @@ def test_connection_settings_are_independent_and_require_loopback(monkeypatch):
     ("method", "path", "body"),
     [
         ("get", "/jhunt-ui/api/inbox", None),
+        ("get", "/jhunt-ui/api/search/commands/key-1", None),
+        ("get", "/jhunt-ui/api/search/requests/request-1", None),
+        ("post", "/jhunt-ui/api/search/criteria", {"text": "roles"}),
+        ("post", "/jhunt-ui/api/search/requests", {"text": "roles"}),
         ("get", "/jhunt-ui/api/events", None),
         ("get", "/jhunt-ui/api/artifacts/" + "a" * 64, None),
         ("post", "/jhunt-ui/api/tasks/task-2/input", {"answer": {"text": "x"}}),
@@ -364,3 +368,49 @@ def test_pairing_requires_csrf(admin_client, monkeypatch):
     admin_client.application.config["WTF_CSRF_ENABLED"] = True
     assert admin_client.post("/jhunt-ui/api/connection", json={"token": "x" * 32}).status_code == 400
     assert not calls
+
+
+@pytest.mark.parametrize("path", ["criteria", "requests"])
+def test_search_commands_guard_and_forward(admin_client, monkeypatch, path):
+    configure_debug(monkeypatch)
+    calls = []
+    receipt = {"criteria": {"id": "criteria-1", "data": {"text": "Systems"}},
+               "search": None, "request_key": "command-1", "work_id": None}
+    def request(session, method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return FakeResponse(payload=receipt)
+    monkeypatch.setattr("requests.Session.request", request)
+    body = {"text": "Systems", "expected_criteria_id": None, "expected_store_id": "store-1",
+            "expected_connection_generation": "local-1", "request_key": "command-1"}
+    response = admin_client.post("/jhunt-ui/api/search/" + path, json=body)
+    assert response.status_code == 200
+    assert response.json == receipt
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert calls[0][0:2] == ("POST", "http://127.0.0.1:8080/search/" + path)
+    assert "expected_connection_generation" not in calls[0][2]["json"]
+    assert calls[0][2]["headers"]["Authorization"] == "Bearer server-only-secret"
+    for invalid in [{"text": " "}, {"text": "x" * 20001}, {"expected_criteria_id": {}},
+                    {"expected_connection_generation": "old"}, {"request_key": "../bad"}]:
+        response = admin_client.post("/jhunt-ui/api/search/" + path, json={**body, **invalid})
+        assert response.status_code in (400, 409)
+    assert len(calls) == 1
+    admin_client.application.config["WTF_CSRF_ENABLED"] = True
+    assert admin_client.post("/jhunt-ui/api/search/" + path, json=body).status_code == 400
+    assert len(calls) == 1
+
+
+def test_search_snapshot_receipts_and_upstream_errors(admin_client, monkeypatch):
+    configure_debug(monkeypatch)
+    search = {"criteria": None, "sources": ["fixture"], "active_requests": [], "latest_request": None}
+    status = [200]
+    def request(session, method, url, **kwargs):
+        if url.endswith("/review/inbox"):
+            return FakeResponse(payload={"store_id": "store-1", "revision": 1, "search": search})
+        return FakeResponse(status=status[0], payload={"request_key": "command-1"})
+    monkeypatch.setattr("requests.Session.request", request)
+    assert admin_client.get("/jhunt-ui/api/inbox").json["search"] == search
+    assert admin_client.get("/jhunt-ui/api/search/commands/command-1").json["request_key"] == "command-1"
+    status[0] = 404
+    assert admin_client.get("/jhunt-ui/api/search/commands/command-1").status_code == 404
+    status[0] = 503
+    assert admin_client.get("/jhunt-ui/api/search/requests/request-1").status_code == 502

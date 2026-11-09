@@ -120,6 +120,7 @@ def index():
     config = ConfigManager()
     return render_template(
         "jhunt_index.html",
+        jhunt_criteria_max_chars=config.jhunt_criteria_max_chars,
         jhunt_retry_initial_ms=config.jhunt_retry_initial_ms,
         jhunt_retry_max_ms=config.jhunt_retry_max_ms,
     )
@@ -181,6 +182,95 @@ def connect():
         "connection_generation": generation,
         "store_id": snapshot["store_id"],
     }))
+
+
+def _search_command_body(operation: str) -> dict:
+    config = ConfigManager()
+    body = _json_body(
+        {"text", "expected_criteria_id", "expected_store_id", "request_key", "expected_connection_generation"},
+        {"text", "expected_criteria_id", "expected_store_id", "request_key", "expected_connection_generation"},
+        operation, "search",
+    )
+    criteria_id = body["expected_criteria_id"]
+    if (
+        not isinstance(body["text"], str)
+        or not body["text"].strip()
+        or len(body["text"]) > config.jhunt_criteria_max_chars
+        or (criteria_id is not None and not valid_identifier(criteria_id))
+        or not valid_store_id(body["expected_store_id"])
+        or not valid_identifier(body["request_key"])
+        or not valid_generation(body["expected_connection_generation"])
+    ):
+        _audit(operation, status="rejected", reason="invalid_body", resource_id="search")
+        abort(400)
+    return body
+
+
+def _check_search_generation(client: JHuntClient, body: dict):
+    if body["expected_connection_generation"] != client.generation:
+        raise BridgeError("JHunt connection changed; refresh before sending.", 409)
+
+
+@jhunt_ui_api.post("/api/search/criteria")
+def save_criteria():
+    body = _search_command_body("save_criteria")
+    upstream_body = {key: body[key] for key in ("text", "expected_criteria_id", "expected_store_id", "request_key")}
+    try:
+        with JHuntClient() as client:
+            _check_search_generation(client, body)
+            result = client.save_criteria(upstream_body)
+    except BridgeError as error:
+        _audit("save_criteria", status="failure", reason="upstream_rejected", status_code=error.status_code,
+               exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    _audit("save_criteria", status="success", resource_id="search")
+    return _private(jsonify(result))
+
+
+@jhunt_ui_api.post("/api/search/requests")
+def start_search():
+    body = _search_command_body("start_search")
+    upstream_body = {key: body[key] for key in ("text", "expected_criteria_id", "expected_store_id", "request_key")}
+    try:
+        with JHuntClient() as client:
+            _check_search_generation(client, body)
+            result = client.start_search(upstream_body)
+    except BridgeError as error:
+        _audit("start_search", status="failure", reason="upstream_rejected", status_code=error.status_code,
+               exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    _audit("start_search", status="success", resource_id="search")
+    return _private(jsonify(result))
+
+
+@jhunt_ui_api.get("/api/search/commands/<request_key>")
+def search_command_receipt(request_key: str):
+    if not valid_identifier(request_key):
+        abort(404)
+    try:
+        with JHuntClient() as client:
+            receipt = client.command_receipt(request_key)
+    except BridgeError as error:
+        _audit("search_receipt", status="failure", reason="upstream_rejected", status_code=error.status_code,
+               resource_id=request_key, exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    _audit("search_receipt", status="success", resource_id=request_key)
+    return _private(jsonify(receipt))
+
+
+@jhunt_ui_api.get("/api/search/requests/<ident>")
+def search_request(ident: str):
+    if not valid_identifier(ident):
+        abort(404)
+    try:
+        with JHuntClient() as client:
+            result = client.search_request(ident)
+    except BridgeError as error:
+        _audit("search_request", status="failure", reason="upstream_rejected", status_code=error.status_code,
+               resource_id=ident, exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    _audit("search_request", status="success", resource_id=ident)
+    return _private(jsonify(result))
 
 
 @jhunt_ui_api.post("/api/tasks/<ident>/input")

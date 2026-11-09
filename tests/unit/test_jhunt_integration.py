@@ -35,6 +35,39 @@ print(json.dumps({'task':task['id'],'package':package['id'],'pdf':pdf}))
 """
 
 
+SEARCH_SETUP = """
+import sys
+from pathlib import Path
+from jhunt.config import Settings
+from jhunt.runtime import Runtime
+from jhunt.discovery import SourcePage, SourceError
+class SearchSource:
+    name = 'fixture'
+    query_independent = True
+    async def search(self, query, cursor=None):
+        return SourcePage(listings=[])
+class OtherSource(SearchSource):
+    name = 'other'
+    async def search(self, query, cursor=None):
+        if (Path(sys.argv[1]) / 'fail-source').exists():
+            raise SourceError('Fixture source unavailable', retry_after=0)
+        return SourcePage(listings=[])
+r=Runtime(Settings(_env_file=None, data_dir=Path(sys.argv[1]), api_token='t'*32,
+                   tunnel_ssh_host='', max_attempts=2), source=SearchSource())
+r.discovery.sources=[r.discovery.source, OtherSource()]
+"""
+SERVE = SEARCH_SETUP + """
+import uvicorn
+from jhunt.api import create_app
+uvicorn.run(create_app(r), host='127.0.0.1', port=int(sys.argv[2]), log_level='error', timeout_graceful_shutdown=1)
+"""
+RUN_SEARCH = SEARCH_SETUP + """
+import asyncio
+from jhunt.worker import tick
+asyncio.run(tick(r))
+"""
+
+
 def backend_command(data, code):
     return subprocess.run(
         [PYTHON, "-c", code, str(data)],
@@ -70,19 +103,7 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
     }
     backend = subprocess.Popen(
         [
-            PYTHON,
-            "-m",
-            "uvicorn",
-            "jhunt.api:create_app",
-            "--factory",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(backend_port),
-            "--log-level",
-            "error",
-            "--timeout-graceful-shutdown",
-            "1",
+            PYTHON, "-c", SERVE, str(data), str(backend_port),
         ],
         cwd=BACKEND,
         env=env,
@@ -192,6 +213,52 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
                 "Fixture relevance rationale"
                 in page.locator("#jhunt-applications").text_content()
             )
+            # Search controls exercise the real bridge, API and separate worker.
+            criteria = page.locator('#jhunt-criteria')
+            criteria.fill('First systems search')
+            page.get_by_role('button', name='Save criteria', exact=True).click()
+            page.wait_for_function("document.querySelector('#jhunt-message').textContent.includes('Criteria saved')")
+            assert page.locator('#jhunt-active-searches').inner_text() == 'No active searches.'
+            criteria.fill('Updated systems search')
+            page.get_by_role('button', name='Search now', exact=True).click()
+            page.wait_for_function("document.querySelector('#jhunt-active-searches').textContent.includes('Queued')")
+            criteria.fill('Unsent criteria draft')
+            criteria.focus()
+            backend_command(data, RUN_SEARCH)
+            page.wait_for_function("document.querySelector('#jhunt-latest-search strong')?.textContent==='completed'")
+            assert criteria.input_value() == 'Unsent criteria draft'
+            assert criteria.evaluate('(node)=>node===document.activeElement')
+            assert 'Assessment and preparation continue separately' in page.locator('#jhunt-latest-search').inner_text()
+            second = context.new_page()
+            second.goto(origin + '/jhunt-ui/')
+            second.wait_for_function("document.querySelector('#jhunt-connection').textContent==='Connected'")
+            second.locator('#jhunt-criteria').fill('Other tab criteria')
+            second.get_by_role('button', name='Save criteria', exact=True).click()
+            page.get_by_role('button', name='Compare with saved criteria').wait_for()
+            assert criteria.input_value() == 'Unsent criteria draft'
+            assert page.get_by_role('button', name='Save criteria', exact=True).is_disabled()
+            page.get_by_role('button', name='Compare with saved criteria').click()
+            assert 'Other tab criteria' in page.locator('#jhunt-search-conflict').inner_text()
+            page.get_by_role('button', name='Reload saved criteria', exact=True).click()
+            assert criteria.input_value() == 'Other tab criteria'
+            second.close()
+            # Lose a response after acceptance: reconcile the receipt, never replay.
+            search_attempts = []
+            def lose_search_response(route):
+                search_attempts.append(route.request.url)
+                route.fetch()
+                route.abort('failed')
+            page.route('**/api/search/requests', lose_search_response)
+            page.get_by_role('button', name='Search now', exact=True).click()
+            page.wait_for_function("document.querySelector('#jhunt-active-searches').textContent.includes('Queued')")
+            page.wait_for_function("!document.querySelector('#jhunt-search-now').disabled")
+            assert len(search_attempts) == 1
+            page.unroute('**/api/search/requests', lose_search_response)
+            (data / 'fail-source').write_text('fixture failure')
+            backend_command(data, RUN_SEARCH)
+            page.wait_for_function("document.querySelector('#jhunt-latest-search').textContent.includes('partial-failure')")
+            assert 'Fixture source unavailable' in page.locator('#jhunt-latest-search').inner_text()
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             field = page.locator("#jhunt-questions textarea")
             field.fill("Unsent fixture answer")
             field.focus()
@@ -257,19 +324,7 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             assert page.get_by_role("button", name="Send answer").is_disabled()
             backend = subprocess.Popen(
                 [
-                    PYTHON,
-                    "-m",
-                    "uvicorn",
-                    "jhunt.api:create_app",
-                    "--factory",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    str(backend_port),
-                    "--log-level",
-                    "error",
-                    "--timeout-graceful-shutdown",
-                    "1",
+                PYTHON, "-c", SERVE, str(data), str(backend_port),
                 ],
                 cwd=BACKEND,
                 env=env,
@@ -280,6 +335,7 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
                 "document.querySelector('#jhunt-connection').textContent==='Connected'"
             )
             assert field.input_value() == "Fresh answer"
+            assert 'partial-failure' in page.locator('#jhunt-latest-search').inner_text()
             # Reject the fixture package; this never schedules an external submission.
             page.get_by_role("button", name="Reject package").click()
             page.wait_for_function(
@@ -324,6 +380,19 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             )
             assert len(inbox_calls) > 1
             recovered.close()
+            # A replacement backend clears old drafts and pending mutation context.
+            criteria.fill('Draft for previous backend')
+            def replace_backend(route):
+                response = route.fetch()
+                inbox = response.json()
+                inbox.update(store_id='replacement-store', connection_generation='replacement-generation')
+                inbox['search'] = {'criteria': None, 'sources': [], 'active_requests': [], 'latest_request': None}
+                route.fulfill(response=response, json=inbox)
+            page.route('**/api/inbox', replace_backend)
+            backend_command(data, update)
+            page.wait_for_function("document.querySelector('#jhunt-criteria').value===''")
+            assert page.get_by_role('button', name='Search now', exact=True).is_disabled()
+            assert 'No active searches' in page.locator('#jhunt-active-searches').inner_text()
             assert not errors, errors
             context.close()
             browser.close()

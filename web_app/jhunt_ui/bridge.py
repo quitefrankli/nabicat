@@ -139,6 +139,11 @@ class JHuntClient:
                 not isinstance(snapshot.get(name, []), list)
                 for name in ("notifications", "tasks", "applications")
             )
+            or ("search" in snapshot and (
+                not isinstance(snapshot["search"], dict)
+                or not isinstance(snapshot["search"].get("sources", []), list)
+                or not isinstance(snapshot["search"].get("active_requests", []), list)
+            ))
         ):
             raise BridgeError("JHunt returned an invalid inbox.", 502)
         snapshot["connected"] = True
@@ -146,7 +151,29 @@ class JHuntClient:
         snapshot.setdefault("notifications", [])
         snapshot.setdefault("tasks", [])
         snapshot.setdefault("applications", [])
+        snapshot.setdefault("search", {"criteria": None, "sources": [], "active_requests": [], "latest_request": None})
         return snapshot
+
+    def save_criteria(self, body: dict):
+        return self._json_post(self.config.jhunt_save_criteria_endpoint, body)
+
+    def start_search(self, body: dict):
+        return self._json_post(self.config.jhunt_search_endpoint, body)
+
+    def command_receipt(self, request_key: str):
+        return self._json_get(self.config.jhunt_search_command_endpoint.format(request_key=request_key))
+
+    def search_request(self, ident: str):
+        return self._json_get(self.config.jhunt_search_request_endpoint.format(ident=ident))
+
+    def _json_get(self, path: str):
+        response = self._request("GET", path)
+        try:
+            return response.json()
+        except (ValueError, requests.RequestException) as exc:
+            raise BridgeError("JHunt returned an invalid response.", 502) from exc
+        finally:
+            response.close()
 
     def answer_task(self, ident: str, body: dict):
         return self._json_post(self.config.jhunt_task_input_endpoint.format(ident=ident), body)

@@ -35,6 +35,22 @@ export class BridgeClient {
     return inbox;
   }
 
+  saveCriteria(body) {
+    return this.request('/search/criteria', {method: 'POST', body: JSON.stringify(body)});
+  }
+
+  startSearch(body) {
+    return this.request('/search/requests', {method: 'POST', body: JSON.stringify(body)});
+  }
+
+  searchReceipt(key) {
+    return this.request(`/search/commands/${encodeURIComponent(key)}`);
+  }
+
+  searchRequest(id) {
+    return this.request(`/search/requests/${encodeURIComponent(id)}`);
+  }
+
   answerTask(id, body) {
     return this.request(`/tasks/${encodeURIComponent(id)}/input`, {
       method: 'POST', body: JSON.stringify(body),

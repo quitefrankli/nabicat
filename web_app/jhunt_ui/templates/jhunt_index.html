@@ -31,6 +31,39 @@
     </span>
   </header>
 
+  <section class="jhunt-panel jhunt-search" aria-labelledby="jhunt-search-heading">
+    <div class="jhunt-panel-header">
+      <div>
+        <h2 id="jhunt-search-heading">Search criteria</h2>
+        <p>Edit the shared search instructions. Saving criteria reassesses retained jobs; Search now also starts source discovery.</p>
+      </div>
+    </div>
+    <form id="jhunt-search-form" class="jhunt-form">
+      <label for="jhunt-criteria">Search criteria</label>
+      <textarea id="jhunt-criteria" data-criteria-input="true" disabled maxlength="{{ jhunt_criteria_max_chars }}" rows="8" aria-describedby="jhunt-criteria-help"></textarea>
+      <p id="jhunt-criteria-help" class="jhunt-help">Changes stay in this tab until saved. Search now submits the text shown here.</p>
+      <div class="jhunt-actions">
+        <button type="button" class="btn btn-outline-primary" data-search-action="true" disabled id="jhunt-save-criteria">Save criteria</button>
+        <button type="button" class="btn btn-primary" data-search-action="true" disabled id="jhunt-search-now">Search now</button>
+      </div>
+    </form>
+    <div id="jhunt-search-conflict" role="alert"></div>
+    <p id="jhunt-search-command" role="status" aria-live="polite"></p>
+    <div class="jhunt-search-grid">
+      <section aria-labelledby="jhunt-sources-heading">
+        <h3 id="jhunt-sources-heading">Sources</h3>
+        <ul id="jhunt-search-sources"></ul>
+      </section>
+      <section aria-labelledby="jhunt-active-heading">
+        <h3 id="jhunt-active-heading">Active searches</h3>
+        <div id="jhunt-active-searches"></div>
+      </section>
+      <section aria-labelledby="jhunt-latest-heading">
+        <h3 id="jhunt-latest-heading">Latest search</h3>
+        <div id="jhunt-latest-search"></div>
+      </section>
+    </div>
+  </section>
   <section class="jhunt-panel" aria-labelledby="jhunt-inbox-heading">
     <div class="jhunt-panel-header">
       <div>
