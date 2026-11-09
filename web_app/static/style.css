@@ -720,6 +720,10 @@ h6 {
   background: linear-gradient(135deg, var(--hw-sage) 0%, var(--hw-gold) 100%);
 }
 
+.app-icon-jhunt {
+  background: var(--hw-gradient-sage);
+}
+
 .app-disabled {
   pointer-events: none;
   cursor: default;

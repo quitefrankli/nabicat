@@ -153,7 +153,7 @@ class TestHome:
 
         assert response.status_code == 200
         assert b'<span class="section-label">Admin</span>' not in response.data
-        for app_id in ("proxy", "dev"):
+        for app_id in ("proxy", "dev", "jhunt"):
             assert f'app-icon-{app_id}'.encode() not in response.data
 
 

@@ -1,0 +1,71 @@
+{% extends "subpage_base.html" %}
+
+{% block page_title %}JHunt · NabiCat{% endblock %}
+{% block navbar_brand %}JHunt{% endblock %}
+{% block subapp_index_url %}{{ url_for('jhunt_ui.index') }}{% endblock %}
+
+{% macro empty_state(icon, title, message) -%}
+<div class="jhunt-empty">
+  <i class="bi {{ icon }}" aria-hidden="true"></i>
+  <h3>{{ title }}</h3>
+  <p>{{ message }}</p>
+</div>
+{%- endmacro %}
+
+{% set inbox_empty = empty_state('bi-inbox', 'Nothing here yet', 'Once JHunt is connected, you’ll see updates and items that need your attention.') %}
+{% set questions_empty = empty_state('bi-chat-square-text', 'No questions waiting', 'Questions from JHunt will appear here.') %}
+{% set applications_empty = empty_state('bi-file-earmark-check', 'No applications to review', 'Prepared packages, resumes and answers will appear here.') %}
+
+{% block page_content %}
+<main class="jhunt-workspace" id="jhunt-app">
+  <header class="jhunt-header">
+    <div>
+      <p class="jhunt-eyebrow">Your job search, in view</p>
+      <h1>JHunt</h1>
+      <p class="jhunt-intro">Updates and requests from your job search assistant.</p>
+    </div>
+    <span class="jhunt-connection" id="jhunt-connection" role="status">
+      <i class="bi bi-plug" aria-hidden="true"></i> Not connected
+    </span>
+  </header>
+
+  <section class="jhunt-panel" aria-labelledby="jhunt-inbox-heading">
+    <div class="jhunt-panel-header">
+      <div>
+        <h2 id="jhunt-inbox-heading">Inbox</h2>
+        <p>Updates from JHunt will appear here.</p>
+      </div>
+      <span class="jhunt-count" id="jhunt-count" aria-label="Inbox items">0</span>
+    </div>
+    <div id="jhunt-notifications" data-empty-template="#jhunt-inbox-empty" aria-live="polite">
+      {{ inbox_empty }}
+    </div>
+  </section>
+  <section class="jhunt-panel" aria-labelledby="jhunt-questions-heading">
+    <div class="jhunt-panel-header">
+      <div><h2 id="jhunt-questions-heading">Questions</h2><p>Reply when your assistant needs more information.</p></div>
+    </div>
+    <div id="jhunt-questions" data-empty-template="#jhunt-questions-empty" aria-live="polite">
+      {{ questions_empty }}
+    </div>
+  </section>
+  <section class="jhunt-panel" aria-labelledby="jhunt-applications-heading">
+    <div class="jhunt-panel-header">
+      <div><h2 id="jhunt-applications-heading">Application review</h2><p>Review each package before authorizing submission.</p></div>
+    </div>
+    <div id="jhunt-applications" data-empty-template="#jhunt-applications-empty" aria-live="polite">
+      {{ applications_empty }}
+    </div>
+  </section>
+  <p id="jhunt-message" role="status" aria-live="polite"></p>
+  <template id="jhunt-inbox-empty">{{ inbox_empty }}</template>
+  <template id="jhunt-questions-empty">{{ questions_empty }}</template>
+  <template id="jhunt-applications-empty">{{ applications_empty }}</template>
+</main>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
+  <script type="module" src="{{ url_for('.static', filename='app.js') }}"></script>
+{% endblock %}

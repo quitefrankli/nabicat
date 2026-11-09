@@ -764,6 +764,7 @@ class ConfigManager:
             "/static/",
             "/crosswords/static/",
             "/dev/static/",
+            "/jhunt-ui/static/",
             "/file_store/static/",
             "/loft/static/",
             "/sentinel/static/",

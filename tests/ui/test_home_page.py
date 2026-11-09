@@ -24,6 +24,7 @@ def test_app_grid_visible(logged_in_page, test_server):
         "File Store",
         "Proxy",
         "Dev",
+        "JHunt",
     ]
     
     for app_name in expected_apps:
@@ -105,5 +106,5 @@ def test_admin_only_apps_hidden_for_non_admin(page, test_server):
     expect(page.locator("text=Crosswords")).to_be_visible()
 
     # Verify admin-only apps are not disclosed on the homepage.
-    for app_name in ["Proxy", "Dev"]:
+    for app_name in ["Proxy", "Dev", "JHunt"]:
         expect(page.locator(f".home-app-card:has-text('{app_name}')")).to_have_count(0)
