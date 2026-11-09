@@ -284,3 +284,83 @@ def test_stream_disconnect_closes_upstream_and_releases_slot(admin_client, monke
     assert closed == [True]
     redis = __import__("web_app.redis_client", fromlist=["get_redis"]).get_redis()
     assert not any(redis.exists(f"nabicat:jhunt:stream:{index}") for index in range(ConfigManager().jhunt_stream_max_active))
+
+
+def test_pairing_verifies_persists_rotates_and_isolates_modes(admin_client, monkeypatch, caplog):
+    from web_app.jhunt_ui.bridge import connection_settings
+    from web_app.jhunt_ui.connection_store import ConnectionStore
+
+    config = configure_debug(monkeypatch)
+    monkeypatch.delenv("JHUNT_DEBUG_ENABLED")
+    monkeypatch.delenv("JHUNT_DEBUG_TOKEN")
+    token = "new-private-token-" + "a" * 32
+    snapshot = {"store_id": "store-1", "revision": 1}
+    calls = []
+
+    def upstream(session, method, url, **kwargs):
+        calls.append((url, kwargs))
+        if kwargs["headers"]["Authorization"] != "Bearer " + token:
+            return FakeResponse(status=401)
+        return FakeResponse(payload=snapshot)
+
+    monkeypatch.setattr("requests.Session.request", upstream)
+    response = admin_client.post("/jhunt-ui/api/connection", json={"token": token})
+    assert response.status_code == 200
+    assert response.json["connected"] is True
+    assert response.headers["Cache-Control"] == "private, no-store"
+    generation = response.json["connection_generation"]
+    assert generation != "local-1"
+    path = ConnectionStore().path
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert path.parent.stat().st_mode & 0o777 == 0o700
+    assert token not in response.get_data(as_text=True)
+    assert token not in caplog.text
+    # A fresh store/client reads the persisted credentials, without env changes.
+    assert connection_settings()["token"] == token
+    assert connection_settings()["enabled"] is True
+    assert admin_client.get("/jhunt-ui/api/inbox").json["connection_generation"] == generation
+    assert all(url == "http://127.0.0.1:8080/review/inbox" for url, _ in calls)
+    before = path.read_bytes()
+    rejected = admin_client.post("/jhunt-ui/api/connection", json={"token": "wrong-" * 8})
+    assert rejected.status_code == 502
+    assert path.read_bytes() == before
+    assert admin_client.post("/jhunt-ui/api/connection", json={"token": token}).json["connection_generation"] != generation
+    config.debug_mode = False
+    assert connection_settings()["token"] == "production-secret"
+    config.debug_mode = True
+    # Persisted configuration survives recreation of ConfigManager as on restart.
+    old_root = config.debug_data_root
+    monkeypatch.setattr(ConfigManager, "_instance", None)
+    fresh = ConfigManager()
+    fresh.debug_mode = True
+    fresh.debug_data_root = old_root
+    assert connection_settings()["token"] == token
+
+
+def test_pairing_rejects_invalid_input_without_sending_credentials(admin_client, monkeypatch):
+    configure_debug(monkeypatch)
+    calls = []
+    monkeypatch.setattr("requests.Session.request", lambda *a, **kw: calls.append(kw))
+    for body in ({"token": "short"}, {"token": "a" * 24 + "\r\n"},
+                 {"token": "é" * 32}, {"token": 123}, {"token": "a" * 24, "base_url": "http://example.com"}):
+        assert admin_client.post("/jhunt-ui/api/connection", json=body).status_code == 400
+    assert not calls
+
+
+@pytest.mark.parametrize(("identity", "expected"), [("anonymous_client", 302), ("viewer_client", 403)])
+def test_pairing_requires_admin(request, monkeypatch, identity, expected):
+    client = request.getfixturevalue(identity)
+    configure_debug(monkeypatch).debug_mode = False
+    calls = []
+    monkeypatch.setattr("requests.Session.request", lambda *a, **kw: calls.append(kw))
+    assert client.post("/jhunt-ui/api/connection", json={"token": "x" * 32}).status_code == expected
+    assert not calls
+
+
+def test_pairing_requires_csrf(admin_client, monkeypatch):
+    configure_debug(monkeypatch)
+    calls = []
+    monkeypatch.setattr("requests.Session.request", lambda *a, **kw: calls.append(kw))
+    admin_client.application.config["WTF_CSRF_ENABLED"] = True
+    assert admin_client.post("/jhunt-ui/api/connection", json={"token": "x" * 32}).status_code == 400
+    assert not calls

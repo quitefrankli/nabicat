@@ -682,6 +682,11 @@ class ConfigManager:
         self.jhunt_answer_max_chars = 20_000
         self.jhunt_identifier_pattern = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         self.jhunt_artifact_hash_pattern = r"^[a-f0-9]{64}$"
+        self.jhunt_token_min_chars = 24
+        self.jhunt_token_max_chars = 4096
+        self.jhunt_connection_filename = "connection.json"
+        self.jhunt_debug_base_url = "http://127.0.0.1:8080"
+        self.jhunt_production_base_url = "http://127.0.0.1:18080"
         self.jhunt_default_generation = "1"
         self.jhunt_event_endpoint = "/review/events"
         self.jhunt_inbox_endpoint = "/review/inbox"
@@ -886,7 +891,10 @@ class ConfigManager:
         }
         return {
             "enabled": enabled,
-            "base_url": getenv(f"JHUNT_{mode}_BASE_URL", "").strip(),
+            "base_url": getenv(
+                f"JHUNT_{mode}_BASE_URL",
+                self.jhunt_debug_base_url if self.debug_mode else self.jhunt_production_base_url,
+            ).strip(),
             "token": getenv(f"JHUNT_{mode}_TOKEN", "").strip(),
             "generation": getenv(
                 f"JHUNT_{mode}_GENERATION", self.jhunt_default_generation

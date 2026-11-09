@@ -14,6 +14,7 @@ from web_app.blueprint_registration import register_app_name, require_admin_blue
 from web_app.config import ConfigManager
 from web_app.logging_utils import log_event
 from web_app.redis_client import get_redis, rmw_lock
+from .connection_store import save_connection
 from .bridge import (
     BridgeError,
     JHuntClient,
@@ -142,6 +143,48 @@ def inbox():
         return _error(error)
     _audit("inbox", status="success", revision=snapshot["revision"])
     return _private(jsonify(snapshot))
+
+
+@jhunt_ui_api.post("/api/connection")
+def connect():
+    config = ConfigManager()
+    body = _json_body({"token"}, {"token"}, "connect", "connection")
+    token = body["token"]
+    if (
+        not isinstance(token, str)
+        or not config.jhunt_token_min_chars <= len(token) <= config.jhunt_token_max_chars
+        or not token.isascii()
+        or any(char.isspace() or not char.isprintable() for char in token)
+    ):
+        _audit("connect", status="rejected", reason="invalid_token")
+        return _private(jsonify({"error": "Enter a valid JHunt API token."})), 400
+    candidate = {
+        **config.jhunt_connection_settings(),
+        "enabled": True,
+        "token": token,
+        "generation": uuid.uuid4().hex,
+    }
+    try:
+        with JHuntClient(candidate) as client:
+            snapshot = client.load_inbox()
+            # Persist only after the token and review API have been verified.
+            save_connection(client.settings)
+    except BridgeError as error:
+        _audit("connect", status="failure", reason="verification_failed",
+               exc_info=error, error_type=type(error).__name__)
+        return _error(error)
+    except (OSError, ValueError, TimeoutError, RuntimeError) as error:
+        # Do not attach validation errors or values containing the token.
+        safe_error = BridgeError("JHunt connection could not be saved.")
+        _audit("connect", status="failure", reason="save_failed",
+               exc_info=safe_error, error_type=type(error).__name__)
+        return _error(safe_error)
+    _audit("connect", status="success", store_id=snapshot["store_id"])
+    return _private(jsonify({
+        "connected": True,
+        "connection_generation": candidate["generation"],
+        "store_id": snapshot["store_id"],
+    }))
 
 
 @jhunt_ui_api.post("/api/tasks/<ident>/input")

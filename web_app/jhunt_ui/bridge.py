@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 import requests
 from web_app.config import ConfigManager
+from .connection_store import load_connection
 
 
 class BridgeError(Exception):
@@ -16,8 +17,17 @@ class BridgeError(Exception):
         self.status_code = status_code
 
 
-def connection_settings() -> dict[str, str | bool]:
-    settings = ConfigManager().jhunt_connection_settings()
+def connection_settings(candidate: dict | None = None) -> dict[str, str | bool]:
+    if candidate is not None:
+        settings = dict(candidate)
+    else:
+        settings = ConfigManager().jhunt_connection_settings()
+        try:
+            saved = load_connection()
+        except (OSError, ValueError):
+            raise BridgeError("JHunt connection settings could not be read.") from None
+        if saved is not None:
+            settings.update(saved)
     raw_url = str(settings["base_url"])
     try:
         parsed = urlsplit(raw_url)
@@ -54,8 +64,8 @@ def connection_settings() -> dict[str, str | bool]:
 
 
 class JHuntClient:
-    def __init__(self):
-        self.settings = connection_settings()
+    def __init__(self, settings: dict | None = None):
+        self.settings = connection_settings(settings)
         self.config = ConfigManager()
         self.session = requests.Session()
         self.session.trust_env = False

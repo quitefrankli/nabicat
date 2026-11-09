@@ -35,6 +35,12 @@ export class BridgeClient {
     return inbox;
   }
 
+  connect(token) {
+    return this.request('/connection', {
+      method: 'POST', body: JSON.stringify({token}),
+    });
+  }
+
   answerTask(id, body) {
     return this.request(`/tasks/${encodeURIComponent(id)}/input`, {
       method: 'POST', body: JSON.stringify(body),

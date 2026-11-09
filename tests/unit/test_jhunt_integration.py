@@ -66,6 +66,7 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
         "JHUNT_CODEX_ENABLED": "false",
         "JHUNT_JSEARCH_ENABLED": "false",
         "JHUNT_CAREER_OPS_ENABLED": "false",
+        "JHUNT_TUNNEL_SSH_HOST": "",
     }
     backend = subprocess.Popen(
         [
@@ -108,9 +109,9 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             assert backend.poll() is None and time.monotonic() < deadline
             time.sleep(0.05)
         for key, value in {
-            "ENABLED": "true",
+            "ENABLED": "false",
             "BASE_URL": f"http://127.0.0.1:{backend_port}",
-            "TOKEN": "t" * 32,
+            "TOKEN": "",
             "GENERATION": "fixture",
         }.items():
             monkeypatch.setenv("JHUNT_DEBUG_" + key, value)
@@ -162,7 +163,24 @@ def test_debug_browser_with_live_backend(app, auth_loader, monkeypatch, tmp_path
             page = context.new_page()
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
+            page.set_viewport_size({"width": 375, "height": 812})
             page.goto(origin + "/jhunt-ui/")
+            assert page.locator("#jhunt-connection").inner_text().strip() == "Not connected"
+            field_token = page.locator("#jhunt-api-token")
+            field_token.fill("wrong-" * 8)
+            page.get_by_role("button", name="Connect JHunt", exact=True).click()
+            page.wait_for_function(
+                "document.querySelector('#jhunt-connect-status').classList.contains('is-error')"
+            )
+            assert field_token.input_value() == ""
+            field_token.fill("t" * 32)
+            page.get_by_role("button", name="Connect JHunt", exact=True).click()
+            page.wait_for_function(
+                "document.querySelector('#jhunt-connect-status').textContent==='Connected to JHunt.'"
+            )
+            assert field_token.input_value() == ""
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert "t" * 32 not in page.content()
             page.wait_for_function(
                 "document.querySelector('#jhunt-connection').textContent.includes('Connected')"
             )
