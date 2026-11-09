@@ -32,7 +32,7 @@ def test_debug_logging_emits_application_debug_events_without_gitpython_noise() 
                 "from web_app.logging_utils import configure_logging, log_event; "
                 "configure_logging(debug=True); "
                 "logging.getLogger('git.util').debug('gitpython-debug-probe'); "
-                "log_event('jswipe', 'jswipe.debug_probe', level=logging.DEBUG)"
+                "log_event('dev', 'dev.debug_probe', level=logging.DEBUG)"
             ),
         ],
         capture_output=True,
@@ -40,7 +40,7 @@ def test_debug_logging_emits_application_debug_events_without_gitpython_noise() 
         check=True,
     )
 
-    assert '"event": "jswipe.debug_probe"' in result.stderr
+    assert '"event": "dev.debug_probe"' in result.stderr
     assert "gitpython-debug-probe" not in result.stderr
 
 

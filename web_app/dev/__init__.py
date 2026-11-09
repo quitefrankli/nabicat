@@ -3,7 +3,6 @@ from flask import Blueprint, render_template
 from web_app.config import ConfigManager
 from web_app.dev.logs import register_logs_routes
 from web_app.dev.map import register_map_routes
-from web_app.dev.terminal import register_terminal_routes
 from web_app.blueprint_registration import register_app_name, require_admin_blueprint
 
 
@@ -29,4 +28,3 @@ def index():
 
 register_logs_routes(dev_api)
 register_map_routes(dev_api)
-register_terminal_routes(dev_api)

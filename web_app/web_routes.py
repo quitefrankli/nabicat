@@ -28,10 +28,6 @@ def inject_app_name():
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-def _skip_request_log(path: str, method: str, config: ConfigManager) -> bool:
-    return path in config.request_log_suppressed_paths
-
-
 def _has_scanner_path_signature(path: str, config: ConfigManager) -> bool:
     segments = tuple(
         segment
@@ -86,9 +82,7 @@ def before_request():
     else:
         g.request_user = None
 
-    g.request_log_suppressed = _skip_request_log(request.path, request.method, config)
-    if g.request_log_suppressed:
-        return
+    g.request_log_suppressed = False
 
     log_event(
         g.request_app,

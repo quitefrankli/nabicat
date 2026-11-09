@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from os import getenv
 from pathlib import Path
 from datetime import timedelta
-from math import ceil
 from typing import Callable, Literal
 from dotenv import load_dotenv
 
@@ -11,163 +10,6 @@ LLMSource = Literal["meridian", "codex", "bedrock"]
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
-
-
-def default_career_ops_root() -> str:
-    return str(Path.home() / ".local" / "share" / "nabicat" / "jswipe" / "career-ops")
-
-
-@dataclass(frozen=True, slots=True)
-class JswipeConfig:
-    career_ops_root: str = field(default_factory=default_career_ops_root)
-    node_command: str = "node"
-    scan_script: str = "scan-ats-full.mjs"
-    ats_sources: tuple[str, ...] = (
-        "greenhouse",
-        "lever",
-        "ashby",
-        "workday",
-        "icims",
-    )
-    default_keywords: tuple[str, ...] = (
-        "Software Engineer",
-        "C++",
-        "Platform Engineer",
-        "Systems Engineer",
-        "Infrastructure Engineer",
-    )
-    default_locations: tuple[str, ...] = (
-        "Sydney",
-        "New South Wales",
-        "Australia",
-        "Remote",
-    )
-    remote_preferences: tuple[str, ...] = ("any", "prefer", "require", "exclude")
-    default_since_days: int = 7
-    minimum_since_days: int = 1
-    maximum_since_days: int = 30
-    minimum_companies_per_source: int = 1
-    companies_per_source: int = 100
-    maximum_companies_per_source: int = 500
-    companies_per_source_step: int = 1
-    maximum_results: int = 250
-    description_enrichment_limit: int = 50
-    job_description_max_chars: int = 50_000
-    maximum_retained_jobs: int = 1_000
-    maximum_keywords: int = 24
-    maximum_locations: int = 16
-    maximum_filter_chars: int = 80
-    scan_timeout_seconds: int = 240
-    scan_lease_grace_seconds: int = 30
-    scan_retry_after_seconds: int = 10
-    user_operation_retry_after_seconds: int = 10
-    scan_rate_limit_requests: int = 10
-    scan_rate_limit_window_minutes: int = 60
-    resume_rate_limit_requests: int = 6
-    profile_rate_limit_requests: int = 30
-    personalization_rate_limit_window_minutes: int = 60
-    scanner_output_max_bytes: int = 2_000_000
-    node_max_old_space_mb: int = 256
-    resume_max_bytes: int = 5 * 1024 * 1024
-    resume_max_pages: int = 20
-    resume_text_max_chars: int = 50_000
-    profile_model_max_tokens: int = 2_048
-    profile_model_timeout_seconds: int = 60
-    ranking_batch_size: int = 10
-    ranking_model_max_tokens: int = 4_096
-    ranking_model_timeout_seconds: int = 60
-    ranking_dimension_weights: dict[str, int] = field(default_factory=lambda: {
-        "role": 30,
-        "skills_experience": 30,
-        "seniority": 15,
-        "location_remote": 10,
-        "constraints": 15,
-    })
-    truncated_description_confidence_cap: int = 85
-
-    def __post_init__(self) -> None:
-        if not self.career_ops_root.strip():
-            raise ValueError("career_ops_root must be non-empty")
-        if not self.node_command.strip():
-            raise ValueError("node_command must be non-empty")
-        if not self.scan_script.strip():
-            raise ValueError("scan_script must be non-empty")
-        if not self.ats_sources or len(set(self.ats_sources)) != len(self.ats_sources):
-            raise ValueError("ats_sources must be non-empty and unique")
-        if not self.remote_preferences or len(set(self.remote_preferences)) != len(
-            self.remote_preferences
-        ):
-            raise ValueError("remote_preferences must be non-empty and unique")
-        if self.minimum_companies_per_source < 1:
-            raise ValueError("minimum_companies_per_source must be positive")
-        if self.maximum_companies_per_source < self.minimum_companies_per_source:
-            raise ValueError("maximum_companies_per_source is below its minimum")
-        if self.companies_per_source_step < 1:
-            raise ValueError("companies_per_source_step must be positive")
-        if not (
-            self.minimum_companies_per_source
-            <= self.companies_per_source
-            <= self.maximum_companies_per_source
-        ):
-            raise ValueError("companies_per_source is outside the configured range")
-        if not self.minimum_since_days <= self.default_since_days <= self.maximum_since_days:
-            raise ValueError("default_since_days is outside the configured range")
-        positive_values = (
-            self.maximum_results,
-            self.description_enrichment_limit,
-            self.job_description_max_chars,
-            self.maximum_retained_jobs,
-            self.maximum_keywords,
-            self.maximum_locations,
-            self.maximum_filter_chars,
-            self.scan_timeout_seconds,
-            self.scan_lease_grace_seconds,
-            self.scan_retry_after_seconds,
-            self.user_operation_retry_after_seconds,
-            self.scan_rate_limit_requests,
-            self.scan_rate_limit_window_minutes,
-            self.resume_rate_limit_requests,
-            self.profile_rate_limit_requests,
-            self.personalization_rate_limit_window_minutes,
-            self.scanner_output_max_bytes,
-            self.node_max_old_space_mb,
-            self.resume_max_bytes,
-            self.resume_max_pages,
-            self.resume_text_max_chars,
-            self.profile_model_max_tokens,
-            self.profile_model_timeout_seconds,
-            self.ranking_batch_size,
-            self.ranking_model_max_tokens,
-            self.ranking_model_timeout_seconds,
-            self.truncated_description_confidence_cap,
-        )
-        if any(value < 1 for value in positive_values):
-            raise ValueError("numeric limits must be positive")
-        if self.truncated_description_confidence_cap > 100:
-            raise ValueError("truncated description confidence cap must not exceed 100")
-
-    @property
-    def maximum_ranking_seconds(self) -> int:
-        return (
-            ceil(self.description_enrichment_limit / self.ranking_batch_size)
-            * self.ranking_model_timeout_seconds
-        )
-
-    @property
-    def scan_lease_seconds(self) -> int:
-        return (
-            self.scan_timeout_seconds + self.maximum_ranking_seconds + self.scan_lease_grace_seconds
-        )
-
-    @property
-    def user_operation_lease_seconds(self) -> int:
-        return (
-            max(
-                self.scan_timeout_seconds + self.maximum_ranking_seconds,
-                self.profile_model_timeout_seconds + self.maximum_ranking_seconds,
-            )
-            + self.scan_lease_grace_seconds
-        )
 
 
 @dataclass(slots=True)
@@ -541,11 +383,6 @@ class GPTActionsConfig:
 
 @dataclass
 class DevConfig:
-    terminal_shell: str = "/bin/bash"
-    terminal_max_sessions: int = 4
-    terminal_idle_timeout_s: int = 1800
-    terminal_buffer_bytes: int = 1_048_576
-    terminal_read_chunk: int = 4096
     log_relative_path: Path = Path("logs/web_app.log")
     log_rotation_max_bytes: int = 5_000_000
     log_rotation_backup_count: int = 20
@@ -887,16 +724,12 @@ class ConfigManager:
         self.atomic_write_chunk_size = 1024 * 1024
         self.random_string_length = 10
         self.random_generation_attempts = 100
-        self.career_ops_repository = "https://github.com/santifer/career-ops.git"
-        self.career_ops_revision = "fdda56138988873022bf0e1b42baa1fdef665494"
         self.backup_max_count = 8
-        self.jswipe_request_path_prefix = "/jswipe/"
         self.qread_max_image_bytes = 20 * 1024 * 1024
         self.qread_scan_max_dimension = 1600
         self.qread_scan_interval_ms = 200
         self.qread_qr_quiet_modules = 4
         self.qread_qr_module_pixels = 8
-        self.jswipe_multipart_request_max_bytes = 6 * 1024 * 1024
         self.production_sync_excluded_paths = (
             "backups/",
             "data/logs/",
@@ -923,10 +756,6 @@ class ConfigManager:
             "wp-",
         )
         self.scanner_methods = frozenset({"PROPFIND", "TRACK", "TRACE"})
-        self.request_log_suppressed_paths = {
-            '/dev/terminal/input',
-            '/dev/terminal/output',
-        }
         self.cache_max_age = 606461 # Default cache max age (1 week) in seconds, can be overridden by environment variable
         self.cache_browser_max_size_bytes = 10 * 1024 * 1024 * 1024
         self.cache_service_worker_version = "v2"
@@ -937,7 +766,6 @@ class ConfigManager:
             "/dev/static/",
             "/file_store/static/",
             "/loft/static/",
-            "/jswipe/static/",
             "/sentinel/static/",
             "/metrics/static/",
             "/proxy/static/",
@@ -962,13 +790,12 @@ class ConfigManager:
         self.access_denied_redirect_endpoint = "home"
         self.elevated_access_denied_message = "You need elevated access to use this app."
         self.admin_access_denied_message = "You need admin access to use this app."
-        self.dev_access_denied_api_prefixes = ("/dev/logs", "/dev/map-data", "/dev/terminal/")
+        self.dev_access_denied_api_prefixes = ("/dev/logs", "/dev/map-data")
         self.smtp_port = 587
         self.project_dir = Path.cwd()
         # TTL for the ephemeral RSA keypair minted during the encrypted-request
         # handshake. Surfaced to clients as `expires_in` in /api/handshake.
         self.ephemeral_key_ttl_s = 300
-        self.jswipe = JswipeConfig()
         self.sentinel = SentinelConfig()
         self.llm = LLMConfig()
         self.tubio = TubioConfig(lambda: self.save_data_path)

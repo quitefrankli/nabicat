@@ -24,7 +24,6 @@ def test_app_grid_visible(logged_in_page, test_server):
         "File Store",
         "Proxy",
         "Dev",
-        "JSwipe",
     ]
     
     for app_name in expected_apps:
@@ -40,7 +39,6 @@ def test_all_app_cards_clickable(logged_in_page, test_server):
         ("Metrics", "/metrics"),
         ("Tubio", "/tubio"),
         ("File Store", "/file_store"),
-        ("JSwipe", "/jswipe/"),
     ]
     
     for app_name, path in apps:
@@ -107,5 +105,5 @@ def test_admin_only_apps_hidden_for_non_admin(page, test_server):
     expect(page.locator("text=Crosswords")).to_be_visible()
 
     # Verify admin-only apps are not disclosed on the homepage.
-    for app_name in ["Proxy", "Dev", "JSwipe"]:
+    for app_name in ["Proxy", "Dev"]:
         expect(page.locator(f".home-app-card:has-text('{app_name}')")).to_have_count(0)

@@ -90,41 +90,6 @@ def test_read_log_lines_reads_two_most_recent_rotated_logs_oldest_first(tmp_path
     assert _read_log_lines(tmp_path) == ["previous", "current"]
 
 
-def test_read_log_lines_hides_suppressed_request_paths(tmp_path):
-    (tmp_path / "web_app.log").write_text(
-        "2026-05-25 17:41:09,281 INFO Processing request: client=1.1.1.1, path=/dev/terminal/input, method=POST\n"
-        "2026-05-25 17:41:10,281 INFO Processing request: client=1.1.1.1, path=/example, method=GET\n"
-    )
-
-    assert _read_log_lines(tmp_path) == [
-        "2026-05-25 17:41:10,281 INFO Processing request: client=1.1.1.1, path=/example, method=GET"
-    ]
-
-
-def test_read_log_lines_hides_structured_lifecycle_logs_for_suppressed_paths(tmp_path):
-    lifecycle_started = (
-        '2026-07-30 10:00:00,000 INFO {"app":"dev","event":"request.started",'
-        '"path":"/dev/terminal/input"}'
-    )
-    lifecycle_completed = (
-        '2026-07-30 10:00:00,010 INFO {"app":"dev","event":"request.completed",'
-        '"path":"/dev/terminal/input","status":200}'
-    )
-    audit_event = (
-        '2026-07-30 10:00:00,005 INFO {"app":"dev","event":"terminal.input_written",'
-        '"bytes":4}'
-    )
-    regular_request = (
-        '2026-07-30 10:00:01,000 INFO {"app":"dev","event":"request.started",'
-        '"path":"/example"}'
-    )
-    (tmp_path / "web_app.log").write_text(
-        "\n".join((lifecycle_started, audit_event, lifecycle_completed, regular_request))
-    )
-
-    assert _read_log_lines(tmp_path) == [audit_event, regular_request]
-
-
 def test_get_logs_returns_all_selected_files_without_default_line_limit(tmp_path, app):
     (tmp_path / "web_app.log").write_text("".join(f"line {idx}\n" for idx in range(2100)))
 

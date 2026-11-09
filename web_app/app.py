@@ -47,14 +47,6 @@ class NabicatRequest(Request):
                 configured_limit,
                 loft.gallery_request_max_bytes,
             )
-        if (
-            self.method == "POST"
-            and self.path.startswith(config.jswipe_request_path_prefix)
-            and (self.content_type or "").startswith("multipart/")
-        ):
-            if configured_limit is None:
-                return config.jswipe_multipart_request_max_bytes
-            return min(configured_limit, config.jswipe_multipart_request_max_bytes)
         return configured_limit
 
     @max_content_length.setter

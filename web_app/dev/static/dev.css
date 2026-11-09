@@ -167,38 +167,6 @@
     color: var(--hw-text-primary);
 }
 
-.term-shortcuts {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-}
-
-.shortcut-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.22rem 0.5rem;
-    background: rgba(27, 42, 36, 0.6);
-    border: 1.5px solid rgba(135, 168, 120, 0.25);
-    border-radius: var(--hw-radius-sm);
-    color: #a8c686;
-    font-size: 0.72rem;
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: var(--hw-transition-fast);
-    letter-spacing: 0.02em;
-}
-.shortcut-btn:hover {
-    background: rgba(135, 168, 120, 0.18);
-    border-color: #a8c686;
-    color: #f0fff0;
-}
-.shortcut-btn:active {
-    background: rgba(135, 168, 120, 0.3);
-    transform: scale(0.94);
-}
-
 .follow-btn.active {
     background: rgba(224, 122, 95, 0.1);
     border-color: var(--hw-coral);
@@ -261,31 +229,6 @@
     text-align: center;
     font-style: italic;
 }
-
-/* Terminal panel */
-.terminal-output {
-    flex: 1;
-    min-height: 0;
-    background: #1b2a24;
-    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-    overflow: hidden;
-    position: relative;
-}
-
-.terminal-output .xterm {
-    height: 100%;
-    width: 100%;
-    padding: 0;
-}
-
-.terminal-output .xterm-viewport::-webkit-scrollbar       { width: 8px; }
-.terminal-output .xterm-viewport::-webkit-scrollbar-track { background: #141f1b; }
-.terminal-output .xterm-viewport::-webkit-scrollbar-thumb { background: #2d4a3e; border-radius: 4px; }
-.terminal-output .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #3d6350; }
-
-#term-status.connected    { color: #7dba7d; background: rgba(125, 186, 125, 0.12); border-color: rgba(125, 186, 125, 0.3); }
-#term-status.connecting   { color: #ddb96a; background: rgba(221, 185, 106, 0.12); border-color: rgba(221, 185, 106, 0.3); }
-#term-status.disconnected { color: #e07a5f; background: rgba(224, 122, 95, 0.12); border-color: rgba(224, 122, 95, 0.3); }
 
 /* Client map */
 .map-toolbar {
@@ -555,8 +498,6 @@
     }
 
     .follow-btn span { display: none; }
-    #term-reconnect-btn span { display: none; }
-    .term-shortcuts { max-width: 55vw; }
 
     .map-layout {
         grid-template-columns: 1fr;

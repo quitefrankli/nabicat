@@ -1,6 +1,5 @@
-const TAB_IDS = ['logs', 'terminal', 'map'];
+const TAB_IDS = ['logs', 'map'];
 
-let _terminalView = null;
 let _mapView = null;
 
 function switchTab(tabName) {
@@ -19,9 +18,6 @@ function switchTab(tabName) {
         window.location.hash = '#' + tabName;
     }
 
-    if (tabName === 'terminal' && _terminalView) {
-        _terminalView.activate();
-    }
     if (tabName === 'map' && _mapView) {
         _mapView.activate();
     }
@@ -35,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     new LogViewer();
-    _terminalView = new TerminalView();
     _mapView = new MapView();
 
     const initial = window.location.hash.replace('#', '') || 'logs';

@@ -25,8 +25,7 @@ deploy_error() {
 }
 
 install_runtime_requirements() {
-    uv sync --locked --no-dev --managed-python || return $?
-    "$PYTHON_BIN" -m web_app.jswipe.install_career_ops
+    uv sync --locked --no-dev --managed-python
 }
 
 LOCK_PATH=$("$PYTHON_BIN" -c 'from web_app.config import ConfigManager; print(ConfigManager().deployment_lock_path)')

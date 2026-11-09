@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 
 
 from web_app.app import _add_static_version
-from web_app.config import ConfigManager
 from web_app.users import User
 from web_app.errors import APIError
 from web_app.auth import (
@@ -25,29 +24,6 @@ def app_context(app):
 
 
 class TestHelpers:
-    def test_jswipe_multipart_requests_use_the_host_cap(self, app_context, monkeypatch):
-        config = ConfigManager()
-        monkeypatch.setattr(config, "jswipe_multipart_request_max_bytes", 1234)
-        with app_context.test_request_context(
-            "/jswipe/api/import",
-            method="POST",
-            content_type="multipart/form-data",
-            environ_base={"CONTENT_LENGTH": "5000"},
-        ):
-            assert flask_login.current_user is not None
-            from flask import request
-
-            assert request.max_content_length == 1234
-
-    def test_jswipe_post_without_content_type_uses_the_default_cap(self, app_context):
-        with app_context.test_request_context(
-            "/jswipe/api/resume",
-            method="POST",
-        ):
-            from flask import request
-
-            assert request.max_content_length is None
-
     @patch('web_app.app.STATIC_VERSION', 'fresh-build')
     def test_static_version_uses_value_loaded_at_server_start(self, app_context):
         with app_context.test_request_context():
@@ -128,6 +104,25 @@ class TestCanonicalRoutes:
 
 
 class TestHome:
+    def test_removed_apps_are_unavailable_and_dev_keeps_logs_and_map(self, client, auth_loader):
+        admin = User(username="admin", password="pw", folder="admin", is_admin=True)
+        auth_loader(admin)
+        with client.session_transaction() as session:
+            session["_user_id"] = admin.id
+
+        home = client.get("/")
+        assert home.status_code == 200
+        assert b"JSwipe" not in home.data
+        dev = client.get("/dev/")
+        assert dev.status_code == 200
+        assert b'data-dev-tab="logs"' in dev.data
+        assert b'data-dev-tab="map"' in dev.data
+        assert b"terminal" not in dev.data.lower()
+        assert client.get("/jswipe/").status_code == 404
+        for action in ("start", "input", "resize", "close"):
+            assert client.post(f"/dev/terminal/{action}").status_code == 404
+        assert client.get("/dev/terminal/output").status_code == 404
+
     def test_loft_card_uses_custom_icon(self, client):
         import web_app.__main__  # noqa: F401
 
@@ -158,7 +153,7 @@ class TestHome:
 
         assert response.status_code == 200
         assert b'<span class="section-label">Admin</span>' not in response.data
-        for app_id in ("proxy", "dev", "jswipe"):
+        for app_id in ("proxy", "dev"):
             assert f'app-icon-{app_id}'.encode() not in response.data
 
 
@@ -249,7 +244,6 @@ class TestRequestLogging:
             scanner_path_segment_names=frozenset(),
             scanner_path_segment_prefixes=(),
             debug_mode=False,
-            request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
         )
         with app_context.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
              patch("web_app.web_routes.ConfigManager", return_value=config), \
@@ -273,7 +267,6 @@ class TestRequestLogging:
             scanner_path_segment_names=frozenset(),
             scanner_path_segment_prefixes=(),
             debug_mode=False,
-            request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
         )
         user = User(username="alice", password="password", folder="alice", is_admin=False)
         with app_context.test_request_context("/example", method="GET", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
@@ -287,23 +280,6 @@ class TestRequestLogging:
         assert payload["app"] == "web"
         assert payload["ip"] == "127.0.0.1"
         assert payload["user"] == "alice"
-
-    def test_before_request_skips_dev_terminal_input_logs(self, app_context, caplog):
-        from web_app import web_routes as main_module
-
-        config = Mock(
-            scanner_methods=frozenset(),
-            scanner_path_segment_names=frozenset(),
-            scanner_path_segment_prefixes=(),
-            debug_mode=False,
-            request_log_suppressed_paths={"/dev/terminal/input", "/dev/terminal/output"},
-        )
-        with app_context.test_request_context("/dev/terminal/input", method="POST", environ_base={"REMOTE_ADDR": "127.0.0.1"}), \
-             patch("web_app.web_routes.ConfigManager", return_value=config), \
-             caplog.at_level(logging.INFO):
-            main_module.before_request()
-
-        assert not caplog.records
 
 
 if __name__ == '__main__':

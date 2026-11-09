@@ -13,7 +13,7 @@ from web_app.config import ConfigManager
 def test_nginx_forwards_original_https_scheme():
     nginx_config = Path("nabicat.conf").read_text()
 
-    assert nginx_config.count("proxy_set_header X-Forwarded-Proto $scheme;") == 2
+    assert nginx_config.count("proxy_set_header X-Forwarded-Proto $scheme;") == 1
 
 
 def test_synchronous_app_requests_have_aligned_proxy_and_worker_timeouts():
@@ -27,7 +27,7 @@ def test_synchronous_app_requests_have_aligned_proxy_and_worker_timeouts():
         "proxy_send_timeout 720;",
         "proxy_read_timeout 720;",
     ):
-        assert nginx_config.count(directive) == 2
+        assert nginx_config.count(directive) == 1
 
 
 def test_apps_are_local_without_package_dependencies():
@@ -38,7 +38,6 @@ def test_apps_are_local_without_package_dependencies():
 def test_deployment_uses_isolated_locked_runtime():
     script = Path("update_server.sh").read_text()
     assert 'uv sync --locked --no-dev --managed-python' in script
-    assert '"$PYTHON_BIN" -m web_app.jswipe.install_career_ops' in script
     assert 'miniforge' not in script
     assert 'pip install' not in script
     assert 'PYTHON_BIN="${PROJECT_DIR}/.venv/bin/python"' in script
@@ -67,7 +66,7 @@ def test_local_apps_share_build_version_and_static_cache(client):
     import web_app.__main__
     from web_app.app import _add_static_version, STATIC_VERSION
 
-    for app_id in ("jswipe", "sentinel"):
+    for app_id in ("sentinel",):
         assert app_id in web_app.__main__.app.blueprints
         assert f'"/{app_id}/static/"' in client.get("/service-worker.js").text
         values = {}
