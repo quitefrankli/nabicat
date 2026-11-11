@@ -79,6 +79,68 @@ def test_rename_route_updates_listing_and_download(client, auth_mock, data_inter
     assert f'"event": "{event}"' in caplog.text
 
 
+@pytest.mark.parametrize('filename,mimetype,content', [
+    ('reports/NOTES.TXT', 'text/plain', b'<script>alert(1)</script>'),
+    ('report.pdf', 'application/pdf', b'%PDF-1.7\npreview'),
+    ('photo.webp', 'image/webp', b'image preview'),
+    ('song.mp3', 'audio/mpeg', b'audio preview'),
+    ('clip.mp4', 'video/mp4', b'video preview'),
+])
+def test_list_previews_and_inline_content(client, auth_mock, data_interface, filename, mimetype, content):
+    from bs4 import BeautifulSoup
+
+    data_interface.save_file(FileStorage(io.BytesIO(content), filename), auth_mock, relative_path=filename)
+    with client.session_transaction() as session:
+        session['_user_id'] = auth_mock.id
+    parent = filename.rpartition('/')[0]
+    with patch('web_app.file_store.DataInterface', return_value=data_interface):
+        listing = BeautifulSoup(client.get('/file_store/', query_string={'path': parent}).text, 'html.parser')
+        preview = listing.select_one('.file-preview-button')
+        assert preview['aria-label'] == f'Preview {filename.rsplit("/", 1)[-1]}'
+        response = client.get(preview['href'])
+        assert response.status_code == 200
+        assert response.mimetype == mimetype
+        assert response.data == content
+        assert response.headers['Content-Disposition'].startswith('inline;')
+        assert response.headers['X-Content-Type-Options'] == 'nosniff'
+        assert response.cache_control.private and response.cache_control.no_store
+        download = client.get(preview['data-download-url'])
+        assert download.headers['Content-Disposition'].startswith('attachment;')
+        if mimetype.startswith(('audio/', 'video/')):
+            partial = client.get(preview['href'], headers={'Range': 'bytes=0-3'})
+            assert partial.status_code == 206
+            assert partial.data == content[:4]
+        grid = client.get('/file_store/', query_string={'path': parent, 'mode': 'grid'})
+        assert 'file-preview-button' not in grid.text
+        assert 'id="filePreviewModal"' not in grid.text
+
+
+def test_preview_limits_allowlist_and_user_isolation(client, auth_mock, data_interface, test_user2, monkeypatch):
+    from bs4 import BeautifulSoup
+
+    monkeypatch.setattr(ConfigManager().file_store, 'text_preview_max_bytes', 12)
+    for filename in ('data.json', 'page.html', 'vector.svg', 'archive.zip'):
+        data_interface.save_file(
+            FileStorage(io.BytesIO(b'<script>unsafe</script>'), filename), auth_mock, relative_path=filename,
+        )
+    data_interface.save_file(FileStorage(io.BytesIO(b'private'), 'private.txt'), test_user2)
+    with patch('web_app.file_store.DataInterface', return_value=data_interface):
+        assert client.get('/file_store/preview/data.json').status_code == 302
+        with client.session_transaction() as session:
+            session['_user_id'] = auth_mock.id
+        listing = BeautifulSoup(client.get('/file_store/').text, 'html.parser')
+        assert [button['data-preview-name'] for button in listing.select('.file-preview-button')] == ['data.json']
+        response = client.get('/file_store/preview/data.json')
+        assert response.mimetype == 'text/plain'
+        assert response.data == b'<script>unsa'
+        assert response.headers['X-Preview-Truncated'] == 'true'
+        assert 'sandbox' in response.headers['Content-Security-Policy']
+        for filename in ('page.html', 'vector.svg', 'archive.zip'):
+            assert client.get(f'/file_store/preview/{filename}').status_code == 415
+        for filename in ('private.txt', 'missing.txt', '../outside.txt'):
+            assert client.get(f'/file_store/preview/{filename}').status_code == 404
+
+
 class TestDataInterface:
     """Tests for FileStoreDataInterface with metadata-based storage"""
 

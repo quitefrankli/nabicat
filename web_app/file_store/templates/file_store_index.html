@@ -122,6 +122,10 @@
         <label class="file-select-item"><input class="form-check-input file-selection-checkbox" type="checkbox" value="{{ item.path }}" aria-label="Select {{ item.name }}"></label>
         <div class="directory-link"><i class="bi bi-file-earmark"></i><span>{{ item.name }}</span><small>{{ item.size_formatted }}</small></div>
         <div class="directory-actions">
+          {% set kind = preview_kind(item.name) %}
+          {% if kind %}
+          <a class="btn btn-outline-success btn-sm file-preview-button" href="{{ url_for('.preview_file', filename=item.path) }}" target="_blank" rel="noopener" data-preview-kind="{{ kind }}" data-preview-name="{{ item.name }}" data-download-url="{{ url_for('.download_file', filename=item.path) }}" aria-label="Preview {{ item.name }}" title="Preview{% if kind == 'pdf' %} in new tab{% endif %}"><i class="bi bi-eye" aria-hidden="true"></i></a>
+          {% endif %}
           <a class="btn btn-outline-success btn-sm" href="{{ url_for('.download_file', filename=item.path) }}" title="Download"><i class="bi bi-download"></i></a>
           <button type="button" class="btn btn-outline-success btn-sm file-rename-button" data-bs-toggle="modal" data-bs-target="#renameModal" data-rename-source="{{ item.path }}" data-rename-name="{{ item.name }}" aria-label="Rename {{ item.name }}" title="Rename"><i class="bi bi-pencil" aria-hidden="true"></i></button>
         </div>
@@ -134,6 +138,19 @@
     {% endif %}
   </section>
 </div>
+
+{% if mode == 'list' %}
+<div class="modal fade" id="filePreviewModal" tabindex="-1" aria-labelledby="filePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down"><div class="modal-content">
+    <div class="modal-header"><h2 class="modal-title fs-5" id="filePreviewTitle">File preview</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body">
+      <p id="filePreviewStatus" role="status" aria-live="polite"></p>
+      <div id="filePreviewContent"></div>
+    </div>
+    <div class="modal-footer"><a class="btn btn-outline-success" id="filePreviewDownload">Download</a><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button></div>
+  </div></div>
+</div>
+{% endif %}
 
 <div class="modal fade" id="imageModal" tabindex="-1" aria-label="Image preview" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down"><div class="modal-content">
@@ -200,4 +217,5 @@
   <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
   <script src="{{ url_for('.static', filename='image-cache.js') }}"></script>
   <script src="{{ url_for('.static', filename='script.js') }}"></script>
+  {% if mode == 'list' %}<script src="{{ url_for('.static', filename='preview.js') }}"></script>{% endif %}
 {% endblock %}

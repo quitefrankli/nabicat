@@ -531,6 +531,17 @@ class LoftConfig:
 
 @dataclass
 class FileStoreConfig:
+    text_preview_max_bytes: int = 512 * 1024
+    preview_extensions: dict[str, tuple[str, ...]] = field(default_factory=lambda: {
+        'pdf': ('.pdf',),
+        'text': (
+            '.txt', '.log', '.md', '.csv', '.tsv', '.json', '.yaml', '.yml',
+            '.toml', '.ini', '.xml', '.py', '.js', '.ts', '.css', '.sh', '.sql',
+        ),
+        'image': ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif'),
+        'audio': ('.mp3', '.wav', '.m4a', '.ogg', '.flac'),
+        'video': ('.mp4', '.webm', '.mov'),
+    })
     non_admin_quota_bytes: int = 30 * 1024 * 1024
     admin_quota_bytes: int = 10 * 1024 * 1024 * 1024
     upload_stream_chunk_bytes: int = 1024 * 1024

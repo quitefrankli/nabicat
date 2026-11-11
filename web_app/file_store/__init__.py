@@ -57,6 +57,14 @@ def _file_size(file: FileStorage) -> int:
     return size
 
 
+def _preview_kind(filename: str) -> str | None:
+    extension = PurePosixPath(filename).suffix.lower()
+    return next((
+        kind for kind, extensions in ConfigManager().file_store.preview_extensions.items()
+        if extension in extensions
+    ), None)
+
+
 @file_store_api.route('/')
 def index():
     user = cur_user()
@@ -93,6 +101,7 @@ def index():
         storage_info=storage_info, mode=mode, thumbnail_config=ConfigManager().file_store,
         image_cache_scope=hashlib.sha256(user.id.encode()).hexdigest(),
         image_cache_name=ConfigManager().cache_service_worker_prefix + ConfigManager().cache_service_worker_version,
+        preview_kind=_preview_kind,
     )
 
 
@@ -214,6 +223,44 @@ def download_file(filename: str):
     response.cache_control.private = True
     response.cache_control.no_store = True
 
+    return response
+
+
+@file_store_api.route('/preview/<path:filename>')
+def preview_file(filename: str):
+    user = cur_user()
+    try:
+        file_path = DataInterface().get_file_path(filename, user)
+    except (FileNotFoundError, ValueError) as error:
+        log_event(
+            'file_store', 'file_store.preview_rejected', user=user,
+            reason='file_unavailable', error_type=type(error).__name__, exc_info=True,
+        )
+        abort(404)
+    kind = _preview_kind(filename)
+    if kind is None:
+        abort(415)
+    if not file_path.is_file():
+        abort(404)
+
+    if kind == 'text':
+        limit = ConfigManager().file_store.text_preview_max_bytes
+        with file_path.open('rb') as source:
+            content = source.read(limit + 1)
+        truncated = len(content) > limit
+        response = Response(content[:limit].decode('utf-8-sig', errors='replace'), mimetype='text/plain')
+        response.headers['X-Preview-Truncated'] = str(truncated).lower()
+        response.headers.set('Content-Disposition', 'inline', filename=PurePosixPath(filename).name)
+        response.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    else:
+        mimetype = 'application/pdf' if kind == 'pdf' else mimetypes.guess_type(filename)[0]
+        response = send_file(
+            file_path, mimetype=mimetype, as_attachment=False,
+            download_name=PurePosixPath(filename).name, conditional=True,
+        )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.cache_control.private = True
+    response.cache_control.no_store = True
     return response
 
 
