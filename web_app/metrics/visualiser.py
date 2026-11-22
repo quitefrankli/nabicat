@@ -1,6 +1,8 @@
 from typing import * # type: ignore
 from plotly import express, graph_objects
-from pandas import DataFrame
+from pandas import DataFrame, DateOffset, Timestamp
+
+from web_app.config import ConfigManager
 
 from web_app.metrics.app_data import Metric
 
@@ -18,7 +20,9 @@ def plot_metric(metric: Metric) -> str:
     trace = graph_objects.Scatter(x=dates, y=values, mode='lines+markers', name=metric.name)
     fig = express.line(df, x='date', y='value', title=metric.name)
     fig.add_trace(trace)
-    fig.update_xaxes(title_text='Date')
+    end = Timestamp.now().normalize() + DateOffset(days=1)
+    start = end - DateOffset(months=ConfigManager().metrics_chart_default_months)
+    fig.update_xaxes(title_text="Date", range=[start, end])
     fig.update_yaxes(title_text=metric.unit)
     fig.update_layout(showlegend=False)
     

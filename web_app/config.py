@@ -615,6 +615,7 @@ class ConfigManager:
         self._initialized = True
         self.use_offline_syncer = True
         self.deno_version = "v2.3.3"
+        self.metrics_chart_default_months = 3
         self.debug_mode = False
         self.production_data_root = Path.home() / ".nabicat" / "data"
         self.youtube_direct_timeout_s = 15
