@@ -109,3 +109,34 @@ def test_clipboard_image_can_be_pasted_with_button(page, qread_url):
     page.evaluate("() => { navigator.clipboard.read = async () => { throw new Error('Denied'); }; }")
     page.get_by_role("button", name="Paste image").click()
     expect(page.locator("#scan-status")).to_contain_text("paste")
+
+
+def test_file_streams_through_animated_qr_from_sender_to_camera(page, qread_url, tmp_path):
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.add_init_script("navigator.mediaDevices.enumerateDevices = async () => [{kind: 'videoinput'}];")
+    page.goto(qread_url)
+    payload = bytes((i * 37) % 256 for i in range(3000))
+    page.get_by_label("File to send").set_input_files({
+        "name": "tiny.png", "mimeType": "image/png", "buffer": payload,
+    })
+    page.get_by_role("button", name="Start sending").click()
+    expect(page.locator("#send-qr")).to_be_visible()
+    expect(page.locator("#send-status")).to_contain_text("7 pieces")
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.evaluate("""() => {
+        navigator.mediaDevices.getUserMedia = async () => {
+            window.testStream = document.querySelector('#send-qr').captureStream();
+            return window.testStream;
+        };
+    }""")
+    page.get_by_role("button", name="Open camera", exact=True).click()
+    with page.expect_download(timeout=20_000) as download:
+        page.get_by_role("link", name="Save received file").click(timeout=20_000)
+    assert download.value.suggested_filename == "tiny.png"
+    received = tmp_path / "received.png"
+    download.value.save_as(received)
+    assert received.read_bytes() == payload
+    expect(page.get_by_label("Decoded text")).to_have_value("Received tiny.png (2.9 KB).")
+    assert page.evaluate("window.testStream.getTracks().every(track => track.readyState === 'ended')")
+    page.get_by_role("button", name="Stop").click()
+    expect(page.locator("#send-qr")).to_be_hidden()

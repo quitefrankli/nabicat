@@ -21,4 +21,13 @@ def index():
         scan_interval_ms=config.qread_scan_interval_ms,
         qr_quiet_modules=config.qread_qr_quiet_modules,
         qr_module_pixels=config.qread_qr_module_pixels,
+        stream_qr_version=config.qread_stream_qr_version,
+        stream_qr_level=config.qread_stream_qr_level,
+        stream_chunk_bytes=config.qread_stream_chunk_bytes,
+        stream_frame_ms=config.qread_stream_frame_ms,
+        stream_scan_interval_ms=config.qread_stream_scan_interval_ms,
+        stream_scan_max_dimension=config.qread_stream_scan_max_dimension,
+        stream_max_file_bytes=config.qread_stream_max_file_bytes,
+        stream_soliton_c=config.qread_stream_soliton_c,
+        stream_soliton_delta=config.qread_stream_soliton_delta,
     )

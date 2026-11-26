@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('.static', filename='style.css') }}">
 <script defer src="{{ url_for('.static', filename='vendor/jsQR.js') }}"></script>
 <script defer src="{{ url_for('.static', filename='vendor/qrcode.js') }}"></script>
+<script defer src="{{ url_for('.static', filename='qstream.js') }}"></script>
 <script defer src="{{ url_for('.static', filename='qread.js') }}"></script>
 {% endblock %}
 {% block page_content %}
@@ -15,7 +16,16 @@
       data-scan-max-dimension="{{ scan_max_dimension }}"
       data-scan-interval-ms="{{ scan_interval_ms }}"
       data-qr-quiet-modules="{{ qr_quiet_modules }}"
-      data-qr-module-pixels="{{ qr_module_pixels }}">
+      data-qr-module-pixels="{{ qr_module_pixels }}"
+      data-stream-qr-version="{{ stream_qr_version }}"
+      data-stream-qr-level="{{ stream_qr_level }}"
+      data-stream-chunk-bytes="{{ stream_chunk_bytes }}"
+      data-stream-frame-ms="{{ stream_frame_ms }}"
+      data-stream-scan-interval-ms="{{ stream_scan_interval_ms }}"
+      data-stream-scan-max-dimension="{{ stream_scan_max_dimension }}"
+      data-stream-max-file-bytes="{{ stream_max_file_bytes }}"
+      data-stream-soliton-c="{{ stream_soliton_c }}"
+      data-stream-soliton-delta="{{ stream_soliton_delta }}">
   <header class="text-center mb-4">
     <i class="bi bi-qr-code-scan qread-icon" aria-hidden="true"></i>
     <h1>QR code to text</h1>
@@ -33,6 +43,8 @@
     <button type="button" class="btn btn-outline-secondary mt-2 align-self-start" id="paste-image">Paste image</button>
     <p id="photo-help" class="small text-muted mt-2">Choose an image up to {{ max_image_bytes // (1024 * 1024) }} MB, or paste one from your clipboard.</p>
     <p id="scan-status" role="status" aria-live="polite" class="mb-0">Ready to scan.</p>
+    <progress id="receive-progress" class="mt-2" max="1" value="0" hidden></progress>
+    <a id="received-file" class="btn btn-primary mt-3 align-self-start" hidden>Save received file</a>
   </section>
   <section class="card p-3 p-md-4 mb-4" aria-label="Decoded result">
     <label for="qr-result" class="form-label fw-bold">Decoded text</label>
@@ -50,6 +62,19 @@
     <p id="encode-status" class="small mt-2" role="status" aria-live="polite"></p>
     <canvas id="generated-qr" hidden role="img" aria-label="Generated QR code"></canvas>
     <a id="download-qr" class="btn btn-outline-secondary mt-3 align-self-start" download="qread.png" hidden>Download PNG</a>
+  </section>
+  <section class="card p-3 p-md-4 mt-4" aria-labelledby="send-heading">
+    <h2 id="send-heading">Send a file</h2>
+    <p class="small text-muted">Plays a looping sequence of QR codes. On the other device, open this page and tap Open camera. Frames can be missed: the file arrives once enough are seen.</p>
+    <label for="send-file" class="form-label fw-bold">File to send</label>
+    <input id="send-file" type="file" class="form-control" aria-describedby="send-help">
+    <p id="send-help" class="small text-muted mt-2">Up to {{ stream_max_file_bytes // 1024 }} KB. Smaller files arrive much faster.</p>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-primary" id="start-send" disabled>Start sending</button>
+      <button type="button" class="btn btn-outline-secondary" id="stop-send" hidden>Stop</button>
+    </div>
+    <p id="send-status" class="small mt-2" role="status" aria-live="polite"></p>
+    <canvas id="send-qr" hidden role="img" aria-label="Animated QR code sending the file"></canvas>
   </section>
 </main>
 {% endblock %}

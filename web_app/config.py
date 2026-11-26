@@ -779,6 +779,17 @@ class ConfigManager:
         self.qread_scan_interval_ms = 200
         self.qread_qr_quiet_modules = 4
         self.qread_qr_module_pixels = 8
+        # Animated QR file stream: fixed version 15 / level L holds 520 bytes,
+        # minus the 17-byte frame header.
+        self.qread_stream_qr_version = 15
+        self.qread_stream_qr_level = "L"
+        self.qread_stream_chunk_bytes = 500
+        self.qread_stream_frame_ms = 120
+        self.qread_stream_scan_interval_ms = 15
+        self.qread_stream_scan_max_dimension = 960
+        self.qread_stream_max_file_bytes = 256 * 1024
+        self.qread_stream_soliton_c = 0.1
+        self.qread_stream_soliton_delta = 0.5
         self.production_sync_excluded_paths = (
             "backups/",
             "data/logs/",
